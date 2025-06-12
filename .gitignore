@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# dotenv environment variables file
+.env*
+
+# build output
+dist/
+
+# npm cache directory
+.npm
+
+# logs
+logs
+*.log
+npm-debug.log*
