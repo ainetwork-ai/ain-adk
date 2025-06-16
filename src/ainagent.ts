@@ -24,6 +24,10 @@ export class AINAgent {
   public addModelConn(id: string, model: BaseModel): void {
     this.modelConns[id] = model;
   }
+  
+  public addIntentAnalyzer(intentAnalyzer: IntentAnalyzer): void {
+    this.intentAnalyzer = intentAnalyzer;
+  }
 
   public start(port: number): void {
     if (this.authScheme) {

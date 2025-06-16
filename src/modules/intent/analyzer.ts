@@ -1,6 +1,10 @@
-export abstract class IntentAnalyzer {
+export class IntentAnalyzer {
   constructor() {
   }
 
-  abstract handleQuery(query: any): Promise<any>;
+  public async handleQuery(query: any): Promise<any> {
+    return new Promise((resolve) => {
+      resolve("response");
+    });
+  };
 }
