@@ -22,9 +22,12 @@ export default class OpenAIPTU extends BaseModel {
     const systemPrompt = `
     ${this.basePrompt}
 
-    <추가정보>
-    ${intentPrompt}
-    </추가정보>
+    <Knowledge>
+    ${
+      // NOTE(yoojin): Temporary add intent.
+      intentPrompt
+    }
+    </Knowledge>
     `;
 
     const messages: ChatCompletionMessageParam[] = [
