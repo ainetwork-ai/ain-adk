@@ -1,8 +1,22 @@
+import { BaseModel } from "../models/base.js";
+
 export class IntentAnalyzer {
-  constructor() {
+  private model: BaseModel;
+
+  constructor(model: BaseModel) {
+    this.model = model;
   }
 
   public async handleQuery(query: any): Promise<any> {
+    // TODO
+    // 1. Get intent prompt for MCP tools
+    // 2. Check if the query can be handled by own tool
+    //    - If yes, use the tool to handle the query
+    //    - If no, go to the next step 
+    // 3. Search the Agent Gallery to see if there is an agent capable of handling the query
+    //    - If yes, request the agent to perform the task for handling the query
+    //    - If no, go to the next step
+    // 4. Return the default inference result
     return new Promise((resolve) => {
       resolve("response");
     });
