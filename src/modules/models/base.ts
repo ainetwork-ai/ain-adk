@@ -1,5 +1,3 @@
-import { ChatCompletionMessageParam } from "openai/resources";
-
 export abstract class BaseModel {
   constructor() {
   }
