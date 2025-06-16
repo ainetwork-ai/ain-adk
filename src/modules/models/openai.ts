@@ -2,7 +2,7 @@ import { ChatCompletionMessageParam } from "openai/resources";
 import { BaseModel } from "./base.js";
 import { AzureOpenAI } from "openai";
 
-class OpenAIPTU extends BaseModel {
+export default class OpenAIPTU extends BaseModel {
   private client: AzureOpenAI;
   private modelName: string;
   private systemPrompt: string;
@@ -10,7 +10,7 @@ class OpenAIPTU extends BaseModel {
   constructor(baseUrl: string, apiKey: string, apiVersion: string, modelName: string, systemPrompt: string) {
     super();
     this.client = new AzureOpenAI({
-      baseURL: baseUrl, // ptu는 baseURL을 사용 (왜 이렇게 되어있는지는 모르겠음)
+      baseURL: baseUrl,
       apiKey: apiKey,
       apiVersion: apiVersion,
     });
