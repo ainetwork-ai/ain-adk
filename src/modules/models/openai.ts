@@ -5,9 +5,9 @@ import { AzureOpenAI } from "openai";
 export default class OpenAIPTU extends BaseModel {
   private client: AzureOpenAI;
   private modelName: string;
-  private systemPrompt: string;
+  private basePrompt: string;
 
-  constructor(baseUrl: string, apiKey: string, apiVersion: string, modelName: string, systemPrompt: string) {
+  constructor(baseUrl: string, apiKey: string, apiVersion: string, modelName: string, basePrompt: string) {
     super();
     this.client = new AzureOpenAI({
       baseURL: baseUrl,
@@ -15,33 +15,27 @@ export default class OpenAIPTU extends BaseModel {
       apiVersion: apiVersion,
     });
     this.modelName = modelName;
-    this.systemPrompt = systemPrompt;
+    this.basePrompt = basePrompt;
   }
 
-  async fetch() {
+  async fetch(userMessage: string, intentPrompt?: string, ) {
+    const systemPrompt = `
+    ${this.basePrompt}
 
-  }
+    <추가정보>
+    ${intentPrompt}
+    </추가정보>
+    `;
 
-  async chat(userMessage: string) {
     const messages: ChatCompletionMessageParam[] = [
-      { role: "system", content: this.systemPrompt.trim() },
+      { role: "system", content: systemPrompt.trim()},
       { role: "user", content: userMessage },
     ];
-
-    const response = await this.client.chat.completions.create({
-      model: this.modelName,
-      messages,
-    });
-  
-    return response.choices?.[0]?.message;
+    const response = await this.chat(messages);
+    return response;
   }
 
-  async chatWithHistory(userMessages: ChatCompletionMessageParam[]) {
-    const messages: ChatCompletionMessageParam[] = [
-      { role: "system", content: this.systemPrompt.trim() },
-      ...userMessages
-    ];
-
+  async chat(messages: ChatCompletionMessageParam[]) {
     const response = await this.client.chat.completions.create({
       model: this.modelName,
       messages,

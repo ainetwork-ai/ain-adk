@@ -4,7 +4,5 @@ export abstract class BaseModel {
   constructor() {
   }
 
-  abstract fetch(): Promise<any>;
-
-  abstract chat(userMessage: string): Promise<ChatCompletionMessageParam>;
+  abstract fetch(userMessage: string, intentPrompt?: string): Promise<any>;
 }
