@@ -44,12 +44,17 @@ export class AINAgent {
       res.send('Welcome to AINAgent!');
     });
 
-    if (!this.intentAnalyzer) {
-      throw new Error('IntentAnalyzer is not set. Please set it before starting the server.');
-    }
-    this.app.get('/query', async (req, res) => {
+    // FIXME(yoojin): comment out until add intentAnalyzer
+    // if (!this.intentAnalyzer) {
+    //   throw new Error('IntentAnalyzer is not set. Please set it before starting the server.');
+    // }
+
+    this.app.post('/query', async (req, res) => {
+      const { model, message } = req.body;
+
       // TODO: Handle query type
-      const response = await this.intentAnalyzer?.handleQuery(req.body);
+      const intentPrompt = await this.intentAnalyzer?.handleQuery(req.body) || "";
+      const response = await this.modelConns[model].fetch(message, intentPrompt);
       res.json(response);
     });
 
