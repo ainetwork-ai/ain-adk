@@ -37,9 +37,12 @@ export class AINAgent {
     if (!this.intentAnalyzer) {
       throw new Error('IntentAnalyzer is not set. Please set it before starting the server.');
     }
-    this.app.get('/query', async (req, res) => {
+    this.app.post('/query', async (req, res) => {
+      const { model, message } = req.body;
+
       // TODO: Handle query type
-      const response = await this.intentAnalyzer?.handleQuery(req.body);
+      const intentPrompt = await this.intentAnalyzer?.handleQuery(req.body) || "";
+      const response = this.modelConns[model].chat(message);
       res.json(response);
     });
 
