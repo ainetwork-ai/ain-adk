@@ -17,8 +17,8 @@ export class IntentAnalyzer {
     //    - If yes, request the agent to perform the task for handling the query
     //    - If no, go to the next step
     // 4. Return the default inference result
-    return new Promise((resolve) => {
-      resolve("response");
-    });
+    const response = await this.model.fetch(query);
+
+    return response;
   };
 }

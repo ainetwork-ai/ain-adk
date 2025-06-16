@@ -12,7 +12,6 @@ export class AINAgent {
 
   // Modules
   private authScheme?: BaseAuth;
-  private modelConns: {[key: string]: BaseModel};
   private mcpToolset: MCPToolset;
   private a2aServer: A2AServer;
   private intentAnalyzer?: IntentAnalyzer;
@@ -22,13 +21,8 @@ export class AINAgent {
     this.app.use(cors());
     this.app.use(express.json());
 
-    this.modelConns = {};
     this.mcpToolset = new MCPToolset();
     this.a2aServer = new A2AServer();
-  }
-
-  public addModelConn(id: string, model: BaseModel): void {
-    this.modelConns[id] = model;
   }
   
   public addIntentAnalyzer(intentAnalyzer: IntentAnalyzer): void {
@@ -44,17 +38,14 @@ export class AINAgent {
       res.send('Welcome to AINAgent!');
     });
 
-    // FIXME(yoojin): comment out until add intentAnalyzer
-    // if (!this.intentAnalyzer) {
-    //   throw new Error('IntentAnalyzer is not set. Please set it before starting the server.');
-    // }
-
+    if (!this.intentAnalyzer) {
+      throw new Error('IntentAnalyzer is not set. Please set it before starting the server.');
+    }
     this.app.post('/query', async (req, res) => {
-      const { model, message } = req.body;
+      const { message } = req.body;
 
       // TODO: Handle query type
-      const intentPrompt = await this.intentAnalyzer?.handleQuery(req.body) || "";
-      const response = await this.modelConns[model].fetch(message, intentPrompt);
+      const response = await this.intentAnalyzer?.handleQuery(message);
       res.json(response);
     });
 
