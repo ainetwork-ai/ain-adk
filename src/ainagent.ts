@@ -1,8 +1,8 @@
 import express from 'express';
-import { BaseAuth } from './auth/base.js';
-import { A2AServer } from './a2a/a2aServer.js';
-import { BaseModel } from './models/base.js';
-import { IntentAnalyzer } from './intent/analyzer.js';
+import { BaseAuth } from './modules/auth/base.js';
+import { A2AServer } from './modules/a2a/a2aServer.js';
+import { BaseModel } from './modules/models/base.js';
+import { IntentAnalyzer } from './modules/intent/analyzer.js';
 
 export class AINAgent {
   public app: express.Application;
