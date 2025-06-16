@@ -4,7 +4,8 @@ export class A2AServer {
   constructor() {
   }
 
-  getAgentCard(): AgentCard {
+  getAgentCard(): AgentCard | null {
     // TODO: Build agent card from agent data
+    return null;
   };
 }
