@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-import AzureOpenAI from "src/models/openai.js";
+import AzureOpenAI from "../src/models/openai.js";
 import { AINAgent } from "../src/ainagent.js";
 import { IntentAnalyzer } from "../src/intent/analyzer.js";
 
