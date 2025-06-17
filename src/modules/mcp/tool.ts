@@ -1,14 +1,11 @@
+import { Tool } from "@modelcontextprotocol/sdk/types.js";
+
 export class MCPTool {
-  public name: string;
-  public description: string;
+  public params: Tool;
   public enabled: boolean;
 
-  constructor(
-    name: string,
-    description: string,
-  ) {
-    this.name = name;
-    this.description = description;
+  constructor(params: Tool) {
+    this.params = params;
     this.enabled = true;
   }
 
