@@ -86,7 +86,13 @@ export class MCPClient {
             | undefined;
   
           console.log(toolName, toolArgs);
+          const mcpName = this.tools.filter(tool => tool.params.name === toolName)[0].mcpName;
+          const transport = this.transport.get(mcpName);
 
+          // FIXME(yoojin): throw error
+          if (!transport) continue;
+
+          this.mcp.connect(transport)
           // 실제 툴 호출
           const result = await this.mcp.callTool({
             name: toolName,
