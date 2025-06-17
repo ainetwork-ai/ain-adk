@@ -3,7 +3,6 @@ import cors from 'cors';
 
 import { BaseAuth } from './modules/auth/base.js';
 import { A2AServer } from './modules/a2a/a2aServer.js';
-import { BaseModel } from './modules/models/base.js';
 import { IntentAnalyzer } from './modules/intent/analyzer.js';
 import { MCPToolset } from './modules/mcp/toolset.js';
 
@@ -27,7 +26,7 @@ export class AINAgent {
   
   public addIntentAnalyzer(intentAnalyzer: IntentAnalyzer): void {
     this.intentAnalyzer = intentAnalyzer;
-  } 
+  }
 
   public start(port: number): void {
     if (this.authScheme) {
