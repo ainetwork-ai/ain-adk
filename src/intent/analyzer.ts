@@ -7,7 +7,7 @@ export class IntentAnalyzer {
     this.model = model;
   }
 
-  public async handleQuery(query: any): Promise<any> {
+  public async handleQuery(query: string): Promise<any> {
     // TODO
     // 1. Get intent prompt for MCP tools
     // 2. Check if the query can be handled by own tool
