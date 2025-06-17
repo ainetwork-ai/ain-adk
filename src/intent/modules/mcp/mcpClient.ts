@@ -3,6 +3,7 @@ import { StdioClientTransport, StdioServerParameters } from '@modelcontextprotoc
 import dotenv from 'dotenv';
 import { BaseModel } from "@/models/base.js";
 import { MCPTool } from "./tool.js";
+import { MCPConfig } from '@/types/mcp.js';
 dotenv.config();
 
 /* ex)
@@ -16,9 +17,6 @@ dotenv.config();
     }
   }
  */
-type MCPConfig = {
-  [name: string]: StdioServerParameters,
-}
 
 export class MCPClient {
   private mcp: Client;
