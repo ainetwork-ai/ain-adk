@@ -15,4 +15,4 @@ const model = new OpenAIPTU(
 const intentAnalyzer = new IntentAnalyzer(model);
 
 agent.addIntentAnalyzer(intentAnalyzer);
-agent.start(3010);
+agent.start(Number(process.env.PORT) || 3100);
