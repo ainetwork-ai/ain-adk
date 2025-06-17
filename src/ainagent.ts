@@ -46,8 +46,10 @@ export class AINAgent {
     });
 
     if (this.a2aServer.getAgentCard()) {
-      this.app.post('/a2a', (req, res) => { /* FIXME */ })
-      this.app.get('/agent-card', (req, res) => {
+      this.app.post('/a2a', (_, res) => {
+        res.json({ message: 'A2A functionality is not implemented yet.' });
+      })
+      this.app.get('/agent-card', (_, res) => {
         res.json(this.a2aServer.getAgentCard());
       });
     }
