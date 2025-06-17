@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport, StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
 import dotenv from 'dotenv';
-import { BaseModel } from "../models/base.js";
+import { BaseModel } from "@/models/base.js";
 import { MCPTool } from "./tool.js";
 dotenv.config();
 

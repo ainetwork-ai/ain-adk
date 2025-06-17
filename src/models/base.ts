@@ -1,4 +1,4 @@
-import { MCPTool } from "../mcp/tool.js";
+import { MCPTool } from "../intent/modules/mcp/tool.js";
 
 export abstract class BaseModel {
   constructor() {
