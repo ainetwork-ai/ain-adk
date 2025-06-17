@@ -9,5 +9,5 @@
 
 ## Examples
 ```bash
-npx tsx src/examples/simpleAgent.ts
+npx tsx examples/simpleAgent.ts
 ```

@@ -1,17 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 
-import { BaseAuth } from './modules/auth/base.js';
-import { A2AServer } from './modules/a2a/a2aServer.js';
-import { IntentAnalyzer } from './modules/intent/analyzer.js';
-import { MCPToolset } from './modules/mcp/toolset.js';
+import { BaseAuth } from '@/server/auth/base.js';
+import { A2AServer } from '@/server/a2aServer.js';
+import { IntentAnalyzer } from '@/intent/analyzer.js';
 
 export class AINAgent {
   public app: express.Application;
 
   // Modules
   private authScheme?: BaseAuth;
-  private mcpToolset: MCPToolset;
   private a2aServer: A2AServer;
   private intentAnalyzer?: IntentAnalyzer;
 
@@ -20,7 +18,6 @@ export class AINAgent {
     this.app.use(cors());
     this.app.use(express.json());
 
-    this.mcpToolset = new MCPToolset();
     this.a2aServer = new A2AServer();
   }
   
