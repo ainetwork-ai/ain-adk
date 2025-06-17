@@ -1,15 +1,15 @@
 import { ChatCompletionMessageParam } from "openai/resources";
 import { BaseModel } from "./base.js";
-import { AzureOpenAI } from "openai";
+import { AzureOpenAI as AzuerOpenAIClient } from "openai";
 
-export default class OpenAIPTU extends BaseModel {
-  private client: AzureOpenAI;
+export default class AzureOpenAI extends BaseModel {
+  private client: AzuerOpenAIClient;
   private modelName: string;
   private basePrompt: string;
 
   constructor(baseUrl: string, apiKey: string, apiVersion: string, modelName: string, basePrompt: string) {
     super();
-    this.client = new AzureOpenAI({
+    this.client = new AzuerOpenAIClient({
       baseURL: baseUrl,
       apiKey: apiKey,
       apiVersion: apiVersion,
@@ -18,7 +18,7 @@ export default class OpenAIPTU extends BaseModel {
     this.basePrompt = basePrompt;
   }
 
-  async fetch(userMessage: string, intentPrompt?: string, ) {
+  async fetch(userMessage: string, intentPrompt?: string) {
     const systemPrompt = `
     ${this.basePrompt}
 

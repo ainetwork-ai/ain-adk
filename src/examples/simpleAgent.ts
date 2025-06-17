@@ -1,11 +1,11 @@
 import "dotenv/config";
 
-import OpenAIPTU from "src/modules/models/openai.js";
+import AzureOpenAI from "src/modules/models/openai.js";
 import { AINAgent } from "../ainagent.js";
 import { IntentAnalyzer } from "../modules/intent/analyzer.js";
 
 const agent = new AINAgent();
-const model = new OpenAIPTU(
+const model = new AzureOpenAI(
   process.env.AZURE_OPENAI_PTU_BASE_URL!,
   process.env.AZURE_OPENAI_PTU_API_KEY!,
   process.env.AZURE_OPENAI_PTU_API_VERSION!,
