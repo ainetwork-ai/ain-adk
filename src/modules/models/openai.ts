@@ -18,7 +18,7 @@ export default class AzureOpenAI extends BaseModel {
     this.basePrompt = basePrompt;
   }
 
-  async fetch(userMessage: string, intentPrompt?: string, ) {
+  async fetch(userMessage: string, intentPrompt?: string) {
     const systemPrompt = `
     ${this.basePrompt}
 
