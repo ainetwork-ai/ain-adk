@@ -15,10 +15,13 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "allowSyntheticDefaultImports": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
   "ts-node": {
     "esm": true,
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "examples"],
   "exclude": ["node_modules", "dist"]
 }

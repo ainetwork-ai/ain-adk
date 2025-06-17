@@ -1,8 +1,8 @@
 import "dotenv/config";
 
-import AzureOpenAI from "src/modules/models/openai.js";
-import { AINAgent } from "../ainagent.js";
-import { IntentAnalyzer } from "../modules/intent/analyzer.js";
+import AzureOpenAI from "src/models/openai.js";
+import { AINAgent } from "../src/ainagent.js";
+import { IntentAnalyzer } from "../src/intent/analyzer.js";
 
 const agent = new AINAgent();
 const model = new AzureOpenAI(
