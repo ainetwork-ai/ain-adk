@@ -27,11 +27,7 @@ export class AINAgent {
   
   public addIntentAnalyzer(intentAnalyzer: IntentAnalyzer): void {
     this.intentAnalyzer = intentAnalyzer;
-  }
-  
-  public addIntentAnalyzer(intentAnalyzer: IntentAnalyzer): void {
-    this.intentAnalyzer = intentAnalyzer;
-  }
+  } 
 
   public start(port: number): void {
     if (this.authScheme) {
