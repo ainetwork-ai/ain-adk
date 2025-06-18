@@ -23,9 +23,10 @@ const dir = dirname(filePath);
 const mcpBuildFilePath = join(dir, "scripts", "notion-mcp-server.mjs");
 await mcp.addMCPConfig({
   notionApi: {
-    command: process.execPath,
-    args: [mcpBuildFilePath],
+    command: "npx",
+    args: ["-y", "@notionhq/notion-mcp-server"],
     env: {
+      ...process.env,
       "OPENAPI_MCP_HEADERS": `{\"Authorization\": \"Bearer ntn_${process.env.NOTION_API_KEY}\", \"Notion-Version\": \"2022-06-28\" }`
     }
   }
