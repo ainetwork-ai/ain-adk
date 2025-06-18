@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 export class AINAgentExecutor implements AgentExecutor {
   private intentAnalyzer: IntentAnalyzer;
-  private cancelledTasks: Set<string> = new Set<string>();
+  private canceledTasks: Set<string> = new Set<string>();
 
   constructor(intentAnalyzer: IntentAnalyzer) {
     this.intentAnalyzer = intentAnalyzer;
@@ -16,14 +16,14 @@ export class AINAgentExecutor implements AgentExecutor {
     taskId: string,
     _eventBus: ExecutionEventBus
   ): Promise<void> => {
-    this.cancelledTasks.add(taskId);
+    this.canceledTasks.add(taskId);
   }
 
   private createTaskStatusUpdateEvent = (
     taskId: string,
     contextId: string,
     state: 'working' | 'failed' | 'canceled' | 'completed',
-    message: string,
+    message?: string,
   ): TaskStatusUpdateEvent => {
     return {
       kind: 'status-update',
@@ -31,14 +31,14 @@ export class AINAgentExecutor implements AgentExecutor {
       contextId: contextId,
       status: {
         state: state,
-        message: {
+        message: message ? {
           kind: 'message',
           role: 'agent',
           messageId: uuidv4(),
           parts: [{ kind: 'text', text: message }],
           taskId: taskId,
           contextId: contextId,
-        },
+        } : undefined,
         timestamp: new Date().toISOString(),
       },
       final: state !== 'working',
@@ -101,6 +101,17 @@ export class AINAgentExecutor implements AgentExecutor {
     // 4. Handle query using intent analyzer
     try {
       const response = await this.intentAnalyzer.handleQuery(message);
+
+      if (this.canceledTasks.has(taskId)) {
+        console.log(`Task ${taskId} was canceled.`);
+        const canceledUpdate = this.createTaskStatusUpdateEvent(
+          taskId,
+          contextId,
+          'canceled'
+        );
+        eventBus.publish(canceledUpdate);
+        return;
+      }
 
       const finalUpdate = this.createTaskStatusUpdateEvent(
         taskId,
