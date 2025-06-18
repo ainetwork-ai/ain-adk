@@ -65,7 +65,7 @@ export class MCPClient {
     let didCallTool = false;
 
     while (true) {
-      let response = await this.model.fetchWithContextMessage(
+      const response = await this.model.fetchWithContextMessage(
         messages,
         this.tools
       );
