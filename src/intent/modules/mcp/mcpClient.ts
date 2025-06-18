@@ -19,23 +19,28 @@ dotenv.config();
  */
 
 export class MCPClient {
-  private mcp: Client;
+  private mcpMap: Map<string, Client>;
   private model: BaseModel;
-  private transport: Map<string, StdioClientTransport> = new Map();
+  private transportMap: Map<string, StdioClientTransport> = new Map();
   private tools: MCPTool[] = [];
 
   constructor(model: BaseModel) {
     this.model = model;
-    this.mcp = new Client({ name: 'mcp-client-cli', version: '1.0.0' });
+    this.mcpMap = new Map();
   }
 
   async addMCPConfig(mcpConfig: MCPConfig) {
     try {
       for (const [name, conf] of Object.entries(mcpConfig)) {
-        this.transport.set(name, new StdioClientTransport(conf));
-        const tempMcp = new Client({ name: 'mcp-client-cli', version: '1.0.0' });
-        tempMcp.connect(this.transport.get(name)!);
-        const toolsResult = await tempMcp.listTools();
+        // FIXME(yoojin): Need strict duplication check.
+        if (this.mcpMap.get(name) && this.transportMap.get(name)) continue; // Duplicated mcp: skip
+
+        this.transportMap.set(name, new StdioClientTransport(conf));
+        const mcp = new Client({ name: 'mcp-client-cli', version: '1.0.0' });
+        await mcp.connect(this.transportMap.get(name)!);
+        this.mcpMap.set(name, mcp);
+
+        const toolsResult = await mcp.listTools();
         this.tools.push(...toolsResult.tools.map(tool => {
           return new MCPTool(name, tool);
         }));
@@ -52,7 +57,7 @@ export class MCPClient {
 
   async processQuery(userMessage: string) {
     // FIXME(yoojin): Need general system prompt for MCP tool search
-    const systemMessage = ``;
+    const systemMessage = `tool 사용에 실패하면 더이상 fucntion을 호출하지 않는다.`;
 
     const messages = [
       { role: "system", content: systemMessage.trim() },
@@ -69,7 +74,7 @@ export class MCPClient {
       );
       didCallTool = false;
       
-      console.log('messages: ', userMessage);
+      console.log('messages: ', messages);
       console.log('response: ', JSON.stringify(response));
 
       const { content, tool_calls } = response;
@@ -85,14 +90,13 @@ export class MCPClient {
   
           console.log(toolName, toolArgs);
           const mcpName = this.tools.filter(tool => tool.params.name === toolName)[0].mcpName;
-          const transport = this.transport.get(mcpName);
+          const transport = this.transportMap.get(mcpName);
 
           // FIXME(yoojin): throw error
           if (!transport) continue;
 
-          this.mcp.connect(transport)
           // 실제 툴 호출
-          const result = await this.mcp.callTool({
+          const result = await this.mcpMap.get(mcpName)!.callTool({
             name: toolName,
             arguments: toolArgs,
           });
@@ -130,6 +134,8 @@ export class MCPClient {
   }
 
   async cleanup() {
-    await this.mcp.close();
+    this.mcpMap.forEach((mcp: Client) => {
+      mcp.close();
+    });
   }
 }
