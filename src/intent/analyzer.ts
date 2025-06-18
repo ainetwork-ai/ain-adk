@@ -23,7 +23,16 @@ export class IntentAnalyzer {
     //    - If yes, request the agent to perform the task for handling the query
     //    - If no, go to the next step
     // 4. Return the default inference result
-    const response = await this.model.fetch(query);
+    let intentPromptResult = ''
+
+    if (this.mcp) {
+      const { response } = await this.mcp.processQuery(query);
+      intentPromptResult += `
+      ${response}
+      `;
+    }
+
+    const response = await this.model.fetch(query, intentPromptResult);
 
     return response;
   };
