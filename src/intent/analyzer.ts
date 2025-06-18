@@ -1,10 +1,16 @@
 import { BaseModel } from "@/models/base.js";
-
+import { MCPClient } from "./modules/mcp/mcpClient.js";
+import { MCPConfig } from "@/types/mcp.js";
 export class IntentAnalyzer {
   private model: BaseModel;
+  private mcp?: MCPClient;
 
   constructor(model: BaseModel) {
     this.model = model;
+  }
+
+  public async addMCPModule(mcp: MCPClient): Promise<void> {
+    this.mcp = mcp;
   }
 
   public async handleQuery(query: any): Promise<any> {
