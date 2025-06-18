@@ -1,4 +1,4 @@
-import { AgentCard } from "../types/a2a.js";
+import { AgentCard } from "@a2a-js/sdk";
 
 export class A2AServer {
   constructor() {
