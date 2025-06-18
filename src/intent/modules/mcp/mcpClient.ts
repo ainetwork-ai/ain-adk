@@ -1,5 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport, StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import dotenv from 'dotenv';
 import { BaseModel } from "@/models/base.js";
 import { MCPTool } from "./tool.js";
@@ -29,7 +29,7 @@ export class MCPClient {
     this.mcp = new Client({ name: 'mcp-client-cli', version: '1.0.0' });
   }
 
-  async addMCPs(mcpConfig: MCPConfig) {
+  async addMCPConfig(mcpConfig: MCPConfig) {
     try {
       for (const [name, conf] of Object.entries(mcpConfig)) {
         this.transport.set(name, new StdioClientTransport(conf));
