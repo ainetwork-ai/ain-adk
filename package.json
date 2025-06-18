@@ -21,7 +21,8 @@
     "build": "npm run build:esm && npm run build:cjs",
     "build:esm": "tsc -p tsconfig.esm.json && echo '{\"type\": \"module\"}' > dist/esm/package.json",
     "build:cjs": "tsc -p tsconfig.cjs.json && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "jest --passWithNoTests"
   },
   "keywords": [],
   "license": "MIT",
@@ -29,8 +30,11 @@
     "@eslint/js": "^9.29.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
     "@types/node": "^24.0.1",
     "eslint": "^9.29.0",
+    "jest": "^30.0.0",
+    "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",
