@@ -19,6 +19,32 @@ export class AINAgentExecutor implements AgentExecutor {
     this.cancelledTasks.add(taskId);
   }
 
+  private createTaskStatusUpdateEvent = (
+    taskId: string,
+    contextId: string,
+    state: 'working' | 'failed' | 'canceled' | 'completed',
+    message: string,
+  ): TaskStatusUpdateEvent => {
+    return {
+      kind: 'status-update',
+      taskId: taskId,
+      contextId: contextId,
+      status: {
+        state: state,
+        message: {
+          kind: 'message',
+          role: 'agent',
+          messageId: uuidv4(),
+          parts: [{ kind: 'text', text: message }],
+          taskId: taskId,
+          contextId: contextId,
+        },
+        timestamp: new Date().toISOString(),
+      },
+      final: state !== 'working',
+    };
+  }
+
   async execute(
     requestContext: RequestContext,
     eventBus: ExecutionEventBus
@@ -47,24 +73,53 @@ export class AINAgentExecutor implements AgentExecutor {
     }
 
     // 2. Publish "working" status update
-    const workingStatusUpdate: TaskStatusUpdateEvent = {
-      kind: 'status-update',
-      taskId: taskId,
-      contextId: contextId,
-      status: {
-        state: "working",
-        message: {
-          kind: 'message',
-          role: 'agent',
-          messageId: uuidv4(),
-          parts: [{ kind: 'text', text: 'Processing your question, hang tight!' }],
-          taskId: taskId,
-          contextId: contextId,
-        },
-        timestamp: new Date().toISOString(),
-      },
-      final: false,
-    };
+    const workingStatusUpdate = this.createTaskStatusUpdateEvent(
+      taskId,
+      contextId,
+      'working',
+      'Processing your question, hang tight!'
+    );
     eventBus.publish(workingStatusUpdate);
+
+    // 3. Prepare message for intent analyzer
+    // TODO: Multi-modal (part.kind === 'file' || part.kind === 'data')
+    // TODO: Context history management
+    // TODO: anything else?
+    const message: string = userMessage.parts.filter(part => part.kind === 'text').map(part => part.text).join('\n');
+    if (message.length === 0) {
+      console.warn(`Empty message received for task ${taskId}.`);
+      const failureUpdate = this.createTaskStatusUpdateEvent(
+        taskId,
+        contextId,
+        'failed',
+        'No message found to process.'
+      );
+      eventBus.publish(failureUpdate);
+      return;
+    }
+
+    // 4. Handle query using intent analyzer
+    try {
+      const response = await this.intentAnalyzer.handleQuery(message);
+
+      const finalUpdate = this.createTaskStatusUpdateEvent(
+        taskId,
+        contextId,
+        'completed',
+        response.content    // FIXME: only for Azure OpenAI fetch
+      );
+      eventBus.publish(finalUpdate);
+      console.log(`Task ${taskId} completed successfully.`);
+    } catch (error: any) {
+      console.error(`Error processing task ${taskId}:`, error);
+      const errorUpdate = this.createTaskStatusUpdateEvent(
+        taskId,
+        contextId,
+        'failed',
+        `Agent error: ${error.message}`
+      );
+      eventBus.publish(errorUpdate);
+      return;
+    }
   }
 }

@@ -23,8 +23,14 @@ export class A2AServer {
   }
 
   public setupRoutes(app: Application) {
-    app.get('/agent-card', (_, res: Response) => {
-      res.json(this.requestHandler.getAgentCard());
+    app.get('/agent-card', async (_, res: Response) => {
+      const agentCard = await this.requestHandler.getAgentCard();
+      res.json(agentCard);
+    });
+
+    app.get('/.well-known/agent.json', async (_, res: Response) => {
+      const agentCard = await this.requestHandler.getAgentCard();
+      res.json(agentCard);
     });
 
     app.post('/a2a', async (req: Request, res: Response) => {

@@ -16,7 +16,7 @@ export class IntentAnalyzer {
     return {
       name: 'ComCom Agent',
       description: 'An agent that can answer questions about ComCom using notion.',
-      url: 'http://localhost:3100/',
+      url: 'http://localhost:3100/a2a',
       version: '0.0.2', // Incremented version
       capabilities: {
         streaming: true, // The new framework supports streaming
