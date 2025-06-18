@@ -7,7 +7,6 @@ import { MCPClient } from "../src/intent/modules/mcp/mcpClient.js";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
-const agent = new AINAgent();
 const model = new AzureOpenAI(
   process.env.AZURE_OPENAI_PTU_BASE_URL!,
   process.env.AZURE_OPENAI_PTU_API_KEY!,
@@ -33,5 +32,6 @@ await mcp.addMCPConfig({
 
 intentAnalyzer.addMCPModule(mcp);
 
-agent.addIntentAnalyzer(intentAnalyzer);
+const agent = new AINAgent(intentAnalyzer, true);
+
 agent.start(Number(process.env.PORT) || 3100);
