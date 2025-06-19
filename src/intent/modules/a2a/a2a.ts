@@ -32,6 +32,7 @@ export class A2AModule {
   }
 
   async processQuery(userMessage: string, threadId: string) {
+    // TODO: add system message
     const messages = [
       { role: "user", content: userMessage }
     ];
@@ -51,7 +52,7 @@ export class A2AModule {
       const messagePayload: Message = {
         messageId: randomUUID(),
         kind: "message",
-        role: "user",
+        role: "user",   // FIXME: it could be 'agent'
         parts: [
           {
             kind: "text",
