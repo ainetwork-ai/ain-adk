@@ -2,27 +2,16 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import dotenv from 'dotenv';
 import { BaseModel } from "@/models/base.js";
-import { MCPTool } from "./tool.js";
+import { AgentTool } from "../common/tool.js";
 import { MCPConfig } from '@/types/mcp.js';
+import { PROTOCOL_TYPE } from '../common/types.js';
 dotenv.config();
-
-/* ex)
-  {
-    "notionApi": {
-      "command": "npx",
-      "args": ["-y", "@notionhq/notion-mcp-server"],
-      "env": {
-        "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer ntn_****\", \"Notion-Version\": \"2022-06-28\" }"
-      }
-    }
-  }
- */
 
 export class MCPClient {
   private mcpMap: Map<string, Client>;
   private model: BaseModel;
   private transportMap: Map<string, StdioClientTransport> = new Map();
-  private tools: MCPTool[] = [];
+  private tools: AgentTool[] = [];
 
   constructor(model: BaseModel) {
     this.model = model;
@@ -42,12 +31,13 @@ export class MCPClient {
 
         const toolsResult = await mcp.listTools();
         this.tools.push(...toolsResult.tools.map(tool => {
-          return new MCPTool(name, tool);
+          const id = `${name}_${tool.name}`;
+          return new AgentTool(name, tool, id, PROTOCOL_TYPE.MCP);
         }));
       }
       console.log(
         'Connected to server with tools:',
-        this.tools.map((tool) => tool.params.name)
+        this.tools.map((tool) => tool.id)
       );
     } catch (e) {
       console.log('Failed to connect to MCP server: ', e);
@@ -89,15 +79,13 @@ export class MCPClient {
             | undefined;
   
           console.log(toolName, toolArgs);
-          const mcpName = this.tools.filter(tool => tool.params.name === toolName)[0].mcpName;
-          const transport = this.transportMap.get(mcpName);
-
-          // FIXME(yoojin): throw error
-          if (!transport) continue;
+          const { parentName: mcpName, params } = this.tools.filter(
+            tool => tool.id === toolName
+          )[0];
 
           // 실제 툴 호출
           const result = await this.mcpMap.get(mcpName)!.callTool({
-            name: toolName,
+            name: params.name,
             arguments: toolArgs,
           });
   
