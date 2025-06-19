@@ -1,7 +1,7 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { PROTOCOL_TYPE } from "./types.js";
 
-export class ExtTool {
+export class AgentTool {
   public id: string;  // MCP: `${parentName}_${params.name}` ex) notionApi_API-post-search
   public params: Tool;
   public protocol: PROTOCOL_TYPE;

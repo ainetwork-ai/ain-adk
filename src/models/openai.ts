@@ -1,7 +1,7 @@
 import { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources";
 import { BaseModel } from "./base.js";
 import { AzureOpenAI as AzuerOpenAIClient } from "openai";
-import { ExtTool } from "../intent/modules/common/tool.js";
+import { AgentTool } from "../intent/modules/common/tool.js";
 
 export default class AzureOpenAI extends BaseModel {
   private client: AzuerOpenAIClient;
@@ -39,7 +39,7 @@ export default class AzureOpenAI extends BaseModel {
     return await this.chat(messages);
   }
 
-  async fetchWithContextMessage(messages: ChatCompletionMessageParam[], tools?: ExtTool[]) {
+  async fetchWithContextMessage(messages: ChatCompletionMessageParam[], tools?: AgentTool[]) {
     let functions: ChatCompletionTool[] = [];
 
     if (tools && tools.length > 0) {
@@ -72,7 +72,7 @@ export default class AzureOpenAI extends BaseModel {
     return response.choices?.[0]?.message;
   }
 
-  convertToolsToFunctions(tools: ExtTool[]): ChatCompletionTool[] {
+  convertToolsToFunctions(tools: AgentTool[]): ChatCompletionTool[] {
     return tools.map((tool) => {
       const { params, id } = tool;
       return {
