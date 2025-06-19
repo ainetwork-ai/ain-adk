@@ -60,6 +60,13 @@ export class IntentAnalyzer {
       `;
     }
 
+    if (this.a2a) {
+      const { response } = await this.a2a.processQuery(query, "aaaa-bbbb-cccc-dddd" /* FIXME */);
+      intentPromptResult += `
+      ${response}
+      `;
+    }
+
     const response = await this.model.fetch(query, intentPromptResult);
 
     return response;
