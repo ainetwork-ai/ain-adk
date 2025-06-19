@@ -26,7 +26,7 @@ export class A2AModule {
 
       this.a2aServers.set(toolName, a2aTool);
     } catch (error: any) {
-      console.log("Error fetching or parsing agent card");
+      console.error("Error fetching or parsing agent card");
       throw error;
     }
   }
@@ -44,6 +44,9 @@ export class A2AModule {
     );
 
     const { content, tool_calls } = response;
+
+    console.log('a2aContent:>> ', content);
+    console.log('a2aToolCalls:>> ', tool_calls);
     if (tool_calls) {
       const messagePayload: Message = {
         messageId: randomUUID(),
