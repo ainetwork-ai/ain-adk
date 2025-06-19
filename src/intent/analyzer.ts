@@ -2,9 +2,11 @@ import { BaseModel } from "@/models/base.js";
 import { AgentCard } from "@a2a-js/sdk";
 
 import { MCPClient } from "./modules/mcp/mcpClient.js";
+import { A2AModule } from "./modules/a2a/a2a.js";
 
 export class IntentAnalyzer {
   private model: BaseModel;
+  private a2a?: A2AModule;
   private mcp?: MCPClient;
 
   constructor(model: BaseModel) {
@@ -31,8 +33,12 @@ export class IntentAnalyzer {
     }
   }
 
-  public async addMCPModule(mcp: MCPClient): Promise<void> {
+  public addMCPModule(mcp: MCPClient): void {
     this.mcp = mcp;
+  }
+
+  public addA2AModule(a2a: A2AModule): void {
+    this.a2a = a2a;
   }
 
   public async handleQuery(query: string): Promise<any> {
