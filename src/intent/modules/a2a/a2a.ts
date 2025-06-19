@@ -98,6 +98,7 @@ export class A2AModule {
                 finalText.push(texts);
               }
             } else if (event.kind === "message") {
+              // FIXME: handling text in 'message'?
               const msg = event as Message;
               if (msg.taskId && msg.taskId !== thread.taskId) {
                 thread.taskId = msg.taskId;
@@ -106,6 +107,7 @@ export class A2AModule {
                 thread.contextId = msg.contextId;
               }
             } else if (event.kind === "task") {
+              // FIXME: handling text in 'task'?
               const task = event as Task;
               if (task.id !== thread.taskId) {
                 thread.taskId = task.id;
