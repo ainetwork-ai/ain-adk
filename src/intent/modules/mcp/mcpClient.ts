@@ -2,8 +2,9 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import dotenv from 'dotenv';
 import { BaseModel } from "@/models/base.js";
-import { ExtTool } from "./tool.js";
+import { ExtTool } from "../common/tool.js";
 import { MCPConfig } from '@/types/mcp.js';
+import { PROTOCOL_TYPE } from '../common/types.js';
 dotenv.config();
 
 export class MCPClient {
@@ -31,7 +32,7 @@ export class MCPClient {
         const toolsResult = await mcp.listTools();
         this.tools.push(...toolsResult.tools.map(tool => {
           const id = `${name}_${tool.name}`;
-          return new ExtTool(name, tool, id, 'MCP');
+          return new ExtTool(name, tool, id, PROTOCOL_TYPE.MCP);
         }));
       }
       console.log(
