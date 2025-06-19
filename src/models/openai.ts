@@ -2,6 +2,9 @@ import { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources
 import { BaseModel } from "./base.js";
 import { AzureOpenAI as AzuerOpenAIClient } from "openai";
 import { AgentTool } from "../intent/modules/common/tool.js";
+import { PROTOCOL_TYPE } from "@/intent/modules/common/types.js";
+import { MCPTool } from "@/intent/modules/mcp/mcpTool.js";
+import { A2ATool } from "@/intent/modules/a2a/a2aTool.js";
 
 export default class AzureOpenAI extends BaseModel {
   private client: AzuerOpenAIClient;
@@ -73,16 +76,27 @@ export default class AzureOpenAI extends BaseModel {
   }
 
   convertToolsToFunctions(tools: AgentTool[]): ChatCompletionTool[] {
-    return tools.map((tool) => {
-      const { params, id } = tool;
-      return {
-        type: "function",
-        function: {
-          name: id,
-          description: params.description,
-          parameters: params.inputSchema,
+    return tools.map((tool: AgentTool) => {
+      if (tool.protocol === PROTOCOL_TYPE.MCP) {
+        const { mcpTool, id } = tool as MCPTool;
+        return {
+          type: "function",
+          function: {
+            name: id,
+            description: mcpTool.description,
+            parameters: mcpTool.inputSchema,
+          }
         }
+      } else { // PROTOCOL_TYPE.A2A
+        const { agentCard, id } = tool as A2ATool;
+        return {
+          type: "function",
+          function: {
+            name: id,
+            description: agentCard.description,
+          }
+        };
       }
-    });;
+    });
   }
 }
