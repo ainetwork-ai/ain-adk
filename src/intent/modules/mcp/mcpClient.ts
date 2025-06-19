@@ -36,7 +36,7 @@ export class MCPClient {
       }
       console.log(
         'Connected to server with tools:',
-        this.tools.map((tool) => tool.params.name)
+        this.tools.map((tool) => tool.id)
       );
     } catch (e) {
       console.log('Failed to connect to MCP server: ', e);
