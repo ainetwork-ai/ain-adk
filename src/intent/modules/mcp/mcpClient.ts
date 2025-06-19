@@ -62,10 +62,12 @@ export class MCPClient {
       );
       didCallTool = false;
       
-      console.log('messages: ', messages);
       console.log('response: ', JSON.stringify(response));
 
       const { content, tool_calls } = response;
+
+      console.log(content);
+      console.log(tool_calls);
 
       if (tool_calls) {
         for (const tool of tool_calls) {

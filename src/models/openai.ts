@@ -1,4 +1,4 @@
-import { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources";
+import { ChatCompletionMessage, ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources";
 import { BaseModel } from "./base.js";
 import { AzureOpenAI as AzuerOpenAIClient } from "openai";
 import { AgentTool } from "../intent/modules/common/tool.js";
@@ -42,11 +42,14 @@ export default class AzureOpenAI extends BaseModel {
     return await this.chat(messages);
   }
 
-  async fetchWithContextMessage(messages: ChatCompletionMessageParam[], tools?: AgentTool[]) {
+  async fetchWithContextMessage (
+    messages: ChatCompletionMessageParam[],
+    tools?: AgentTool[]
+  ): Promise<ChatCompletionMessage> {
     let functions: ChatCompletionTool[] = [];
 
     if (tools && tools.length > 0) {
-      functions = this.convertToolsToFunctions(tools);
+      functions = await this.convertToolsToFunctions(tools);
     }
 
     if (Object.keys(functions).length > 0) {
@@ -75,28 +78,40 @@ export default class AzureOpenAI extends BaseModel {
     return response.choices?.[0]?.message;
   }
 
-  convertToolsToFunctions(tools: AgentTool[]): ChatCompletionTool[] {
-    return tools.map((tool: AgentTool) => {
+  async convertToolsToFunctions(tools: AgentTool[]): Promise<ChatCompletionTool[]> {
+    const newTools: ChatCompletionTool[] = [];
+    for (const tool of tools) {
+      if (!tool.enabled) {
+        continue;
+      }
       if (tool.protocol === PROTOCOL_TYPE.MCP) {
         const { mcpTool, id } = tool as MCPTool;
-        return {
+        newTools.push({
           type: "function",
           function: {
             name: id,
             description: mcpTool.description,
             parameters: mcpTool.inputSchema,
           }
-        }
+        });
       } else { // PROTOCOL_TYPE.A2A
-        const { agentCard, id } = tool as A2ATool;
-        return {
-          type: "function",
-          function: {
-            name: id,
-            description: agentCard.description,
-          }
-        };
+        const { client, id } = tool as A2ATool;
+        try {
+          // FIXME: inefficient
+          const card = await client.getAgentCard();
+          newTools.push({
+            type: "function",
+            function: {
+              name: id,
+              description: card.description,
+            }
+          });
+        } catch (_error) {
+          console.warn(`No response from Agent ${id}. Ignoring...`);
+          tool.disable();
+        }
       }
-    });
+    }
+    return newTools;
   }
 }
