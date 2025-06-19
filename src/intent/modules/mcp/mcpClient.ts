@@ -2,16 +2,15 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import dotenv from 'dotenv';
 import { BaseModel } from "@/models/base.js";
-import { AgentTool } from "../common/tool.js";
 import { MCPConfig } from '@/types/mcp.js';
-import { PROTOCOL_TYPE } from '../common/types.js';
+import { MCPTool } from './mcpTool.js';
 dotenv.config();
 
 export class MCPClient {
   private mcpMap: Map<string, Client>;
   private model: BaseModel;
   private transportMap: Map<string, StdioClientTransport> = new Map();
-  private tools: AgentTool[] = [];
+  private tools: MCPTool[] = [];
 
   constructor(model: BaseModel) {
     this.model = model;
@@ -31,8 +30,7 @@ export class MCPClient {
 
         const toolsResult = await mcp.listTools();
         this.tools.push(...toolsResult.tools.map(tool => {
-          const id = `${name}_${tool.name}`;
-          return new AgentTool(name, tool, id, PROTOCOL_TYPE.MCP);
+          return new MCPTool(name, tool);
         }));
       }
       console.log(
@@ -47,7 +45,7 @@ export class MCPClient {
 
   async processQuery(userMessage: string) {
     // FIXME(yoojin): Need general system prompt for MCP tool search
-    const systemMessage = `tool 사용에 실패하면 더이상 fucntion을 호출하지 않는다.`;
+    const systemMessage = `tool 사용에 실패하면 더이상 function을 호출하지 않는다.`;
 
     const messages = [
       { role: "system", content: systemMessage.trim() },
@@ -79,13 +77,13 @@ export class MCPClient {
             | undefined;
   
           console.log(toolName, toolArgs);
-          const { parentName: mcpName, params } = this.tools.filter(
+          const { serverName: mcpName, mcpTool } = this.tools.filter(
             tool => tool.id === toolName
           )[0];
 
           // 실제 툴 호출
           const result = await this.mcpMap.get(mcpName)!.callTool({
-            name: params.name,
+            name: mcpTool.name,
             arguments: toolArgs,
           });
   
@@ -119,6 +117,31 @@ export class MCPClient {
     };
 
     return botResponse;
+  }
+
+  getTools() {
+    return this.tools;
+  }
+
+  async useTool(tool: MCPTool, _args?: any): Promise<any> {
+    const { serverName, mcpTool } = tool;
+    const toolName = mcpTool.name
+    const mcp = this.mcpMap.get(serverName);
+
+    if (!mcp) {
+      throw new Error(`Invalid MCP Tool ${serverName}-${mcpTool.name}`)
+    }
+
+    const result = await mcp.callTool({
+      name: toolName,
+      arguments: _args,
+    });
+    const toolResult =
+      `[Bot Called Tool ${toolName} with args ${JSON.stringify(_args)}]\n` +
+      JSON.stringify(result.content, null, 2);
+  
+    console.log('toolResult :>> ', toolResult);
+    return result;
   }
 
   async cleanup() {
