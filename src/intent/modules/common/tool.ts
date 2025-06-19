@@ -1,19 +1,13 @@
-import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { PROTOCOL_TYPE } from "./types.js";
 
 export class AgentTool {
-  public id: string;  // MCP: `${parentName}_${params.name}` ex) notionApi_API-post-search
-  public params: Tool;
+  public id: string;  // MCP: `<serverName>_<toolName>` ex) notionApi_API-post-search
   public protocol: PROTOCOL_TYPE;
-  public parentName: string;
   public enabled: boolean;
 
-  constructor(parentName: string, params: Tool, id: string, protocol: PROTOCOL_TYPE) {
+  constructor(id: string, protocol: PROTOCOL_TYPE) {
     this.id = id;
-    // NOTE(yoojin): Parent Toolset name. ex) notionApi
-    this.parentName = parentName;
     this.protocol = protocol;
-    this.params = params;
     this.enabled = true;
   }
 
