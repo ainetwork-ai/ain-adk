@@ -57,7 +57,7 @@ export class MCPClient {
 
   async processQuery(userMessage: string) {
     // FIXME(yoojin): Need general system prompt for MCP tool search
-    const systemMessage = `tool 사용에 실패하면 더이상 fucntion을 호출하지 않는다.`;
+    const systemMessage = `tool 사용에 실패하면 더이상 function을 호출하지 않는다.`;
 
     const messages = [
       { role: "system", content: systemMessage.trim() },
