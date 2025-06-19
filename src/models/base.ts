@@ -1,4 +1,4 @@
-import { ExtTool } from "../intent/modules/mcp/tool.js";
+import { ExtTool } from "../intent/modules/common/tool.js";
 
 export abstract class BaseModel {
   constructor() {

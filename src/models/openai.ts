@@ -1,7 +1,7 @@
 import { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources";
 import { BaseModel } from "./base.js";
 import { AzureOpenAI as AzuerOpenAIClient } from "openai";
-import { ExtTool } from "../intent/modules/mcp/tool.js";
+import { ExtTool } from "../intent/modules/common/tool.js";
 
 export default class AzureOpenAI extends BaseModel {
   private client: AzuerOpenAIClient;
