@@ -30,7 +30,7 @@ export class MCPClient {
 
         const toolsResult = await mcp.listTools();
         this.tools.push(...toolsResult.tools.map(tool => {
-          const id = `${name}_${tool.name};`
+          const id = `${name}_${tool.name}`;
           return new ExtTool(name, tool, id, 'MCP');
         }));
       }
@@ -78,17 +78,13 @@ export class MCPClient {
             | undefined;
   
           console.log(toolName, toolArgs);
-          const mcpName = this.tools.filter(
+          const { parentName: mcpName, params } = this.tools.filter(
             tool => tool.id === toolName
-          )[0].parentName;
-          const transport = this.transportMap.get(mcpName);
-
-          // FIXME(yoojin): throw error
-          if (!transport) continue;
+          )[0];
 
           // 실제 툴 호출
           const result = await this.mcpMap.get(mcpName)!.callTool({
-            name: toolName,
+            name: params.name,
             arguments: toolArgs,
           });
   
