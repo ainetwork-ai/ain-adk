@@ -2,27 +2,15 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import dotenv from 'dotenv';
 import { BaseModel } from "@/models/base.js";
-import { MCPTool } from "./tool.js";
+import { ExtTool } from "./tool.js";
 import { MCPConfig } from '@/types/mcp.js';
 dotenv.config();
-
-/* ex)
-  {
-    "notionApi": {
-      "command": "npx",
-      "args": ["-y", "@notionhq/notion-mcp-server"],
-      "env": {
-        "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer ntn_****\", \"Notion-Version\": \"2022-06-28\" }"
-      }
-    }
-  }
- */
 
 export class MCPClient {
   private mcpMap: Map<string, Client>;
   private model: BaseModel;
   private transportMap: Map<string, StdioClientTransport> = new Map();
-  private tools: MCPTool[] = [];
+  private tools: ExtTool[] = [];
 
   constructor(model: BaseModel) {
     this.model = model;
@@ -42,7 +30,8 @@ export class MCPClient {
 
         const toolsResult = await mcp.listTools();
         this.tools.push(...toolsResult.tools.map(tool => {
-          return new MCPTool(name, tool);
+          const id = `${name}_${tool.name};`
+          return new ExtTool(name, tool, id, 'MCP');
         }));
       }
       console.log(
@@ -89,7 +78,9 @@ export class MCPClient {
             | undefined;
   
           console.log(toolName, toolArgs);
-          const mcpName = this.tools.filter(tool => tool.params.name === toolName)[0].mcpName;
+          const mcpName = this.tools.filter(
+            tool => tool.id === toolName
+          )[0].parentName;
           const transport = this.transportMap.get(mcpName);
 
           // FIXME(yoojin): throw error

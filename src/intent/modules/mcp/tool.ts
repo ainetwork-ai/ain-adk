@@ -1,12 +1,17 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
 
-export class MCPTool {
+export class ExtTool {
+  public id: string;  // `${parentName}_${params.name}` ex) notionApi_API-post-search
   public params: Tool;
-  public mcpName: string;
+  public protocol: "MCP" | "A2A";
+  public parentName: string;
   public enabled: boolean;
 
-  constructor(mcpName: string, params: Tool) {
-    this.mcpName = mcpName;
+  constructor(parentName: string, params: Tool, id: string, protocol: "MCP" | "A2A") {
+    this.id = id;
+    // NOTE(yoojin): Parent Toolset name. ex) notionApi
+    this.parentName = parentName;
+    this.protocol = protocol;
     this.params = params;
     this.enabled = true;
   }
