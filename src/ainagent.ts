@@ -2,27 +2,26 @@ import express from 'express';
 import cors from 'cors';
 
 import { BaseAuth } from '@/server/auth/base.js';
-import { A2AServer } from '@/server/a2aServer.js';
 import { IntentAnalyzer } from '@/intent/analyzer.js';
+import { A2AServer } from './server/a2a/server.js';
 
 export class AINAgent {
   public app: express.Application;
 
   // Modules
   private authScheme?: BaseAuth;
-  private a2aServer: A2AServer;
-  private intentAnalyzer?: IntentAnalyzer;
+  private intentAnalyzer: IntentAnalyzer;
+  private a2aServer?: A2AServer;
 
-  constructor() {
+  constructor(intentAnalyzer: IntentAnalyzer, isA2AServer: boolean = false) {
     this.app = express();
     this.app.use(cors());
     this.app.use(express.json());
 
-    this.a2aServer = new A2AServer();
-  }
-  
-  public addIntentAnalyzer(intentAnalyzer: IntentAnalyzer): void {
     this.intentAnalyzer = intentAnalyzer;
+    if (isA2AServer) {
+      this.a2aServer = new A2AServer(intentAnalyzer);
+    }
   }
 
   public start(port: number): void {
@@ -34,9 +33,6 @@ export class AINAgent {
       res.send('Welcome to AINAgent!');
     });
 
-    if (!this.intentAnalyzer) {
-      throw new Error('IntentAnalyzer is not set. Please set it before starting the server.');
-    }
     this.app.post('/query', async (req, res) => {
       const { message } = req.body;
 
@@ -45,14 +41,7 @@ export class AINAgent {
       res.json(response);
     });
 
-    if (this.a2aServer.getAgentCard()) {
-      this.app.post('/a2a', (_, res) => {
-        res.json({ message: 'A2A functionality is not implemented yet.' });
-      })
-      this.app.get('/agent-card', (_, res) => {
-        res.json(this.a2aServer.getAgentCard());
-      });
-    }
+    this.a2aServer?.setupRoutes(this.app);
 
     this.app.listen(port, () => {
       console.log(`AINAgent is running on port ${port}`);

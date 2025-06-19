@@ -41,10 +41,12 @@
     "typescript-eslint": "^8.34.1"
   },
   "dependencies": {
+    "@a2a-js/sdk": "^0.2.1",
     "@modelcontextprotocol/sdk": "^1.12.3",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
-    "openai": "^5.3.0"
+    "openai": "^5.3.0",
+    "uuid": "^11.1.0"
   }
 }
