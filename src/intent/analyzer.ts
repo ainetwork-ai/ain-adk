@@ -109,41 +109,34 @@ export class IntentAnalyzer {
             tool => tool.id === toolName
           )[0];
 
+          let toolResult: string = '';
           if (selectedTool.protocol === PROTOCOL_TYPE.MCP) {
             const toolArgs = JSON.parse(calledFunction.arguments) as
               | { [x: string]: unknown }
               | undefined;
             loggers.intent.debug('MCP tool call:', { toolName, toolArgs });
             const result = await this.mcp!.useTool(selectedTool as MCPTool, toolArgs);
-    
-            const toolResult =
+            toolResult =
               `[Bot Called Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
               JSON.stringify(result.content, null, 2);
-            loggers.intent.debug('MCP tool result:', toolResult);
-            finalText.push(toolResult);
-
-            // 툴 결과를 메시지로 추가
-            messages.push({
-              role: 'user',
-              content: toolResult,
-            });
           } else if (selectedTool.protocol === PROTOCOL_TYPE.A2A) {
             const result = await this.a2a!.useTool(
               selectedTool as A2ATool, messagePayload!, threadId
             );
-
-            const toolResult =
-              `[Bot Called Tool ${toolName}]\n` +
-              result.join('\n');
-            loggers.intent.debug('A2A tool result:', toolResult);
-            
-            finalText.push(toolResult);
-
-            messages.push({
-              role: 'user',
-              content: toolResult,
-            });
+            toolResult = `[Bot Called Tool ${toolName}]\n` + result.join('\n');
+          } else {
+            // Unrecognized tool type. It cannot be happened...
+            console.warn(`Unrecognized tool type: ${selectedTool.protocol}`);
+            continue;
           }
+
+          loggers.intent.debug('toolResult :>> ', toolResult);
+
+          finalText.push(toolResult);
+          messages.push({
+            role: 'user',
+            content: toolResult,
+          });
         }
       }
       else if (content) {
