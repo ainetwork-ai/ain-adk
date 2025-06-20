@@ -125,7 +125,7 @@ export class IntentAnalyzer {
             toolResult = `[Bot Called Tool ${toolName}]\n` + result.join('\n');
           } else {
             // Unrecognized tool type. It cannot be happened...
-            console.warn(`Unrecognized tool type: ${selectedTool.protocol}`);
+            loggers.intent.warn(`Unrecognized tool type: ${selectedTool.protocol}`);
             continue;
           }
 
