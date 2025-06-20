@@ -3,6 +3,7 @@ import { A2AClient, AgentCard, Message, MessageSendParams, Task, TaskStatusUpdat
 import { A2ATool } from "./a2aTool.js";
 import { ChatCompletionMessage } from "openai/resources";
 import { randomUUID } from "node:crypto";
+import { loggers } from "@/utils/logger.js";
 
 interface A2AThread {
   taskId: string | undefined;
@@ -26,7 +27,7 @@ export class A2AModule {
 
       this.a2aServers.set(toolName, a2aTool);
     } catch (error: any) {
-      console.error("Error fetching or parsing agent card");
+      loggers.a2a.error("Error fetching or parsing agent card:", error);
       throw error;
     }
   }
@@ -107,11 +108,11 @@ export class A2AModule {
             thread.contextId = task.contextId;
           }
         } else {
-          console.warn("Received unknown event structure from stream: ", event);
+          loggers.a2a.warn("Received unknown event structure from stream:", event);
         }
       }
     } catch (error: any) {
-      console.error("Error communicating with agent: ", error.message || error);
+      loggers.a2a.error("Error communicating with agent:", error.message || error);
     }
 
     return finalText;
@@ -132,8 +133,8 @@ export class A2AModule {
 
     const { content, tool_calls } = response;
 
-    console.log('a2aContent:>> ', content);
-    console.log('a2aToolCalls:>> ', tool_calls);
+    loggers.a2a.debug('A2A content:', content);
+    loggers.a2a.debug('A2A tool calls:', tool_calls);
     if (tool_calls) {
       const messagePayload = this.getMessagePayload(userMessage, threadId);
 

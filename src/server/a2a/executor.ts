@@ -1,6 +1,7 @@
 import { IntentAnalyzer } from "@/intent/analyzer.js";
 import { AgentExecutor, ExecutionEventBus, RequestContext, TaskStatusUpdateEvent } from "@a2a-js/sdk";
 import { AgentExecutionEvent } from "@a2a-js/sdk/build/src/server/events/execution_event_bus.js";
+import { loggers } from "@/utils/logger.js";
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -87,7 +88,7 @@ export class AINAgentExecutor implements AgentExecutor {
     // TODO: anything else?
     const message: string = userMessage.parts.filter(part => part.kind === 'text').map(part => part.text).join('\n');
     if (message.length === 0) {
-      console.warn(`Empty message received for task ${taskId}.`);
+      loggers.server.warn(`Empty message received for task ${taskId}.`);
       const failureUpdate = this.createTaskStatusUpdateEvent(
         taskId,
         contextId,
@@ -103,7 +104,7 @@ export class AINAgentExecutor implements AgentExecutor {
       const response = await this.intentAnalyzer.handleQuery(message);
 
       if (this.canceledTasks.has(taskId)) {
-        console.log(`Task ${taskId} was canceled.`);
+        loggers.server.info(`Task ${taskId} was canceled.`);
         const canceledUpdate = this.createTaskStatusUpdateEvent(
           taskId,
           contextId,
@@ -120,9 +121,9 @@ export class AINAgentExecutor implements AgentExecutor {
         response.content    // FIXME: only for Azure OpenAI fetch
       );
       eventBus.publish(finalUpdate);
-      console.log(`Task ${taskId} completed successfully.`);
+      loggers.server.info(`Task ${taskId} completed successfully.`);
     } catch (error: any) {
-      console.error(`Error processing task ${taskId}:`, error);
+      loggers.server.error(`Error processing task ${taskId}:`, error);
       const errorUpdate = this.createTaskStatusUpdateEvent(
         taskId,
         contextId,

@@ -7,6 +7,7 @@ import { AgentTool } from "./modules/common/tool.js";
 import { PROTOCOL_TYPE } from "./modules/common/types.js";
 import { MCPTool } from "./modules/mcp/mcpTool.js";
 import { A2ATool } from "./modules/a2a/a2aTool.js";
+import { loggers } from "@/utils/logger.js";
 
 export class IntentAnalyzer {
   private model: BaseModel;
@@ -89,13 +90,13 @@ export class IntentAnalyzer {
       );
       didCallTool = false;
       
-      console.log('messages: ', messages);
-      console.log('response: ', JSON.stringify(response));
+      loggers.intent.debug('messages:', messages);
+      loggers.intent.debug('response:', JSON.stringify(response));
 
       const { content, tool_calls } = response;
 
-      console.log('content: ', content);
-      console.log('tool_calls: ', tool_calls);
+      loggers.intent.debug('content:', content);
+      loggers.intent.debug('tool_calls:', tool_calls);
 
       if (tool_calls) {
         const messagePayload = this.a2a && this.a2a.getMessagePayload(query, threadId);
@@ -112,13 +113,13 @@ export class IntentAnalyzer {
             const toolArgs = JSON.parse(calledFunction.arguments) as
               | { [x: string]: unknown }
               | undefined;
-            console.log(toolName, toolArgs);
+            loggers.intent.debug('MCP tool call:', { toolName, toolArgs });
             const result = await this.mcp!.useTool(selectedTool as MCPTool, toolArgs);
     
             const toolResult =
               `[Bot Called Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
               JSON.stringify(result.content, null, 2);
-            console.log('toolResult :>> ', toolResult);
+            loggers.intent.debug('MCP tool result:', toolResult);
             finalText.push(toolResult);
 
             // 툴 결과를 메시지로 추가
@@ -134,7 +135,7 @@ export class IntentAnalyzer {
             const toolResult =
               `[Bot Called Tool ${toolName}]\n` +
               result.join('\n');
-            console.log('toolResult :>> ', toolResult);
+            loggers.intent.debug('A2A tool result:', toolResult);
             
             finalText.push(toolResult);
 
