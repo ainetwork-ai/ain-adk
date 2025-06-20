@@ -90,13 +90,12 @@ export class IntentAnalyzer {
       );
       didCallTool = false;
       
-      loggers.intent.debug('messages:', messages);
-      loggers.intent.debug('response:', JSON.stringify(response));
+      loggers.intent.debug('messages', { messages });
 
       const { content, tool_calls } = response;
 
-      loggers.intent.debug('content:', content);
-      loggers.intent.debug('tool_calls:', tool_calls);
+      loggers.intent.debug('content', { content });
+      loggers.intent.debug('tool_calls', { ...tool_calls });
 
       if (tool_calls) {
         const messagePayload = this.a2a && this.a2a.getMessagePayload(query, threadId);
@@ -114,7 +113,7 @@ export class IntentAnalyzer {
             const toolArgs = JSON.parse(calledFunction.arguments) as
               | { [x: string]: unknown }
               | undefined;
-            loggers.intent.debug('MCP tool call:', { toolName, toolArgs });
+            loggers.intent.debug('MCP tool call', { toolName, toolArgs });
             const result = await this.mcp!.useTool(selectedTool as MCPTool, toolArgs);
             toolResult =
               `[Bot Called Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
@@ -130,7 +129,7 @@ export class IntentAnalyzer {
             continue;
           }
 
-          loggers.intent.debug('toolResult :>> ', toolResult);
+          loggers.intent.debug('toolResult', { toolResult });
 
           finalText.push(toolResult);
           messages.push({
