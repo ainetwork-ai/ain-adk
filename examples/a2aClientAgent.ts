@@ -14,7 +14,7 @@ async function main() {
     ""
   );
   const intentAnalyzer = new IntentAnalyzer(model);
-  const a2aModule = new A2AModule(model);
+  const a2aModule = new A2AModule();
 
   await a2aModule.addA2AServer("http://localhost:3100");
   intentAnalyzer.addA2AModule(a2aModule);

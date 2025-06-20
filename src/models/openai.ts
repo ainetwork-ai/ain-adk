@@ -1,6 +1,6 @@
 import { ChatCompletionMessage, ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources";
 import { BaseModel } from "./base.js";
-import { AzureOpenAI as AzuerOpenAIClient } from "openai";
+import { AzureOpenAI as AzureOpenAIClient } from "openai";
 import { AgentTool } from "../intent/modules/common/tool.js";
 import { PROTOCOL_TYPE } from "@/intent/modules/common/types.js";
 import { MCPTool } from "@/intent/modules/mcp/mcpTool.js";
@@ -8,13 +8,13 @@ import { A2ATool } from "@/intent/modules/a2a/a2aTool.js";
 import { loggers } from "@/utils/logger.js";
 
 export default class AzureOpenAI extends BaseModel {
-  private client: AzuerOpenAIClient;
+  private client: AzureOpenAIClient;
   private modelName: string;
   private basePrompt: string;
 
   constructor(baseUrl: string, apiKey: string, apiVersion: string, modelName: string, basePrompt: string) {
     super();
-    this.client = new AzuerOpenAIClient({
+    this.client = new AzureOpenAIClient({
       baseURL: baseUrl,
       apiKey: apiKey,
       apiVersion: apiVersion,

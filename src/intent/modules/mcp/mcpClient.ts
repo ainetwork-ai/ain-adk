@@ -1,22 +1,13 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import dotenv from 'dotenv';
-import { BaseModel } from "@/models/base.js";
 import { MCPConfig } from '@/types/mcp.js';
 import { MCPTool } from './mcpTool.js';
 import { loggers } from '@/utils/logger.js';
-dotenv.config();
 
 export class MCPClient {
-  private mcpMap: Map<string, Client>;
-  private model: BaseModel;
+  private mcpMap: Map<string, Client> = new Map();
   private transportMap: Map<string, StdioClientTransport> = new Map();
   private tools: MCPTool[] = [];
-
-  constructor(model: BaseModel) {
-    this.model = model;
-    this.mcpMap = new Map();
-  }
 
   async addMCPConfig(mcpConfig: MCPConfig) {
     try {

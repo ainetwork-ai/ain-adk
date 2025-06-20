@@ -14,7 +14,7 @@ const model = new AzureOpenAI(
   ""
 );
 const intentAnalyzer = new IntentAnalyzer(model);
-const mcp = new MCPClient(model);
+const mcp = new MCPClient();
 
 await mcp.addMCPConfig({
   notionApi: {

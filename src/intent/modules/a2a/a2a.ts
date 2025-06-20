@@ -1,4 +1,3 @@
-import { BaseModel } from "@/models/base.js";
 import { A2AClient, AgentCard, Message, MessageSendParams, Task, TaskStatusUpdateEvent, TextPart } from "@a2a-js/sdk";
 import { A2ATool } from "./a2aTool.js";
 import { randomUUID } from "node:crypto";
@@ -9,13 +8,8 @@ interface A2AThread {
   contextId: string | undefined;
 }
 export class A2AModule {
-  private model: BaseModel;
   private a2aServers: Map<string, A2ATool> = new Map();
   private threads: Map<string, A2AThread> = new Map();
-
-  constructor(model: BaseModel) {
-    this.model = model;
-  }
 
   public async addA2AServer(url: string): Promise<void> {
     try {
