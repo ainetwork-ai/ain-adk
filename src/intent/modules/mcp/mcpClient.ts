@@ -62,10 +62,10 @@ export class MCPClient {
       );
       didCallTool = false;
       
-      console.log('messages: ', messages);
-      console.log('response: ', JSON.stringify(response));
-
       const { content, tool_calls } = response;
+
+      console.log('mcpContent:>> ', content);
+      console.log('mcpToolCalls:>> ', tool_calls);
 
       if (tool_calls) {
         for (const tool of tool_calls) {
@@ -76,7 +76,7 @@ export class MCPClient {
             | { [x: string]: unknown }
             | undefined;
   
-          console.log(toolName, toolArgs);
+          console.log('mcpTool:>> ', toolName, toolArgs);
           const { serverName: mcpName, mcpTool } = this.tools.filter(
             tool => tool.id === toolName
           )[0];
@@ -87,13 +87,13 @@ export class MCPClient {
             arguments: toolArgs,
           });
   
+          // 로그용 텍스트
           const toolResult =
             `[Bot Called Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
             JSON.stringify(result.content, null, 2);
   
-          console.log('toolResult :>> ', toolResult);
+          console.log('mcpToolResult :>> ', toolResult);
   
-          // 로그용 텍스트
           finalText.push(toolResult);
   
           // 툴 결과를 메시지로 추가
