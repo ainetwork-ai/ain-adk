@@ -48,18 +48,6 @@ This is the AI Network Agent Development Kit (AIN-ADK), a TypeScript library for
 - **Intent-Driven Processing**: Queries flow through intent analysis → tool selection → response generation
 - **A2A Server Mode**: Can function as both client and server in agent-to-agent communication
 
-### Environment Setup
-
-Required environment variables for Azure OpenAI:
-- `AZURE_OPENAI_PTU_BASE_URL`
-- `AZURE_OPENAI_PTU_API_KEY` 
-- `AZURE_OPENAI_PTU_API_VERSION`
-- `AZURE_OPENAI_DEPLOYMENT_NAME`
-- `PORT` (optional, defaults to 3100/5050)
-
-For MCP integration with Notion:
-- `NOTION_API_KEY`
-
 ### Development Notes
 
 - Uses TypeScript with strict configuration
