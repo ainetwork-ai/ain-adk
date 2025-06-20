@@ -4,6 +4,7 @@ import { A2AError, A2AResponse, DefaultRequestHandler, InMemoryTaskStore, JSONRP
 import { AINAgentExecutor } from "./executor.js";
 import { Request, Response } from "express";
 import { IntentAnalyzer } from "@/intent/analyzer.js";
+import { loggers } from "@/utils/logger.js";
 
 export class A2AServer {
   private taskStore: TaskStore;
@@ -52,7 +53,7 @@ export class A2AServer {
               res.write(`data: ${JSON.stringify(event)}\n\n`);
             }
           } catch (streamError: any) {
-            console.error(`Error during SSE streaming (request ${req.body?.id}):`, streamError);
+            loggers.server.error(`Error during SSE streaming (request ${req.body?.id}):`, streamError);
             // If the stream itself throws an error, send a final JSONRPCErrorResponse
             const a2aError = streamError instanceof A2AError ? streamError : A2AError.internalError(streamError.message || 'Streaming error.');
             const errorResponse: JSONRPCErrorResponse = {
@@ -78,7 +79,7 @@ export class A2AServer {
           res.status(200).json(rpcResponse);
         }
       } catch (error: any) { // Catch errors from jsonRpcTransportHandler.handle itself (e.g., initial parse error)
-        console.error("Unhandled error in AINAgent A2A POST handler:", error);
+        loggers.server.error("Unhandled error in AINAgent A2A POST handler:", error);
         const a2aError = error instanceof A2AError ? error : A2AError.internalError('General processing error.');
         const errorResponse: JSONRPCErrorResponse = {
           jsonrpc: '2.0',

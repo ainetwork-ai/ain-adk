@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { BaseModel } from "@/models/base.js";
 import { MCPConfig } from '@/types/mcp.js';
 import { MCPTool } from './mcpTool.js';
+import { loggers } from '@/utils/logger.js';
 dotenv.config();
 
 export class MCPClient {
@@ -33,12 +34,11 @@ export class MCPClient {
           return new MCPTool(name, tool);
         }));
       }
-      console.log(
-        'Connected to server with tools:',
-        this.tools.map((tool) => tool.id)
-      );
+      loggers.mcp.info('Connected to MCP server with tools:', {
+        tools: this.tools.map((tool) => tool.id)
+      });
     } catch (e) {
-      console.log('Failed to connect to MCP server: ', e);
+      loggers.mcp.error('Failed to connect to MCP server:', e);
       throw e;
     }
   }
@@ -64,8 +64,8 @@ export class MCPClient {
       
       const { content, tool_calls } = response;
 
-      console.log('mcpContent:>> ', content);
-      console.log('mcpToolCalls:>> ', tool_calls);
+      loggers.mcp.debug('MCP content:', content);
+      loggers.mcp.debug('MCP tool calls:', tool_calls);
 
       if (tool_calls) {
         for (const tool of tool_calls) {
@@ -76,7 +76,7 @@ export class MCPClient {
             | { [x: string]: unknown }
             | undefined;
   
-          console.log('mcpTool:>> ', toolName, toolArgs);
+          loggers.mcp.debug('MCP tool execution:', { toolName, toolArgs });
           const { serverName: mcpName, mcpTool } = this.tools.filter(
             tool => tool.id === toolName
           )[0];
@@ -92,7 +92,7 @@ export class MCPClient {
             `[Bot Called Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
             JSON.stringify(result.content, null, 2);
   
-          console.log('mcpToolResult :>> ', toolResult);
+          loggers.mcp.debug('MCP tool result:', toolResult);
   
           finalText.push(toolResult);
   
@@ -140,7 +140,7 @@ export class MCPClient {
       `[Bot Called Tool ${toolName} with args ${JSON.stringify(_args)}]\n` +
       JSON.stringify(result.content, null, 2);
   
-    console.log('toolResult :>> ', toolResult);
+    loggers.mcp.debug('MCP useTool result:', toolResult);
     return result;
   }
 
