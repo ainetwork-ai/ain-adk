@@ -4,6 +4,7 @@ import cors from 'cors';
 import { BaseAuth } from '@/server/auth/base.js';
 import { IntentAnalyzer } from '@/intent/analyzer.js';
 import { A2AServer } from './server/a2a/server.js';
+import { loggers } from '@/utils/logger.js';
 
 export class AINAgent {
   public app: express.Application;
@@ -44,7 +45,7 @@ export class AINAgent {
     this.a2aServer?.setupRoutes(this.app);
 
     this.app.listen(port, () => {
-      console.log(`AINAgent is running on port ${port}`);
+      loggers.agent.info(`AINAgent is running on port ${port}`);
     });
   }
 }
