@@ -87,13 +87,13 @@ export class MCPClient {
             arguments: toolArgs,
           });
   
+          // 로그용 텍스트
           const toolResult =
             `[Bot Called Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
             JSON.stringify(result.content, null, 2);
   
           console.log('mcpToolResult :>> ', toolResult);
   
-          // 로그용 텍스트
           finalText.push(toolResult);
   
           // 툴 결과를 메시지로 추가
