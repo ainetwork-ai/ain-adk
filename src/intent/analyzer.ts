@@ -72,8 +72,6 @@ export class IntentAnalyzer {
 
     const tools: AgentTool[] = [];
     
-    // FIXME: Need to push a2a into tools
-    
     if (this.mcp) {
       tools.push(...this.mcp.getTools());
     }
