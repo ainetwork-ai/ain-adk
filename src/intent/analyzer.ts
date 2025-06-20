@@ -130,11 +130,17 @@ export class IntentAnalyzer {
             const result = await this.a2a!.useTool(
               selectedTool as A2ATool, messagePayload!, threadId
             );
-            finalText.push(...result);
+
+            const toolResult =
+              `[Bot Called Tool ${toolName}]\n` +
+              result.join('\n');
+            console.log('toolResult :>> ', toolResult);
+            
+            finalText.push(toolResult);
 
             messages.push({
               role: 'user',
-              content: result.join('\n'),
+              content: toolResult,
             });
           }
         }
