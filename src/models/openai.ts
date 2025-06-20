@@ -5,6 +5,7 @@ import { AgentTool } from "../intent/modules/common/tool.js";
 import { PROTOCOL_TYPE } from "@/intent/modules/common/types.js";
 import { MCPTool } from "@/intent/modules/mcp/mcpTool.js";
 import { A2ATool } from "@/intent/modules/a2a/a2aTool.js";
+import { loggers } from "@/utils/logger.js";
 
 export default class AzureOpenAI extends BaseModel {
   private client: AzuerOpenAIClient;
@@ -107,7 +108,7 @@ export default class AzureOpenAI extends BaseModel {
             }
           });
         } catch (_error) {
-          console.warn(`No response from Agent ${id}. Ignoring...`);
+          loggers.model.warn(`No response from Agent ${id}. Ignoring...`);
           tool.disable();
         }
       }

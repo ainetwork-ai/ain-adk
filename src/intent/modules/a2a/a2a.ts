@@ -1,8 +1,8 @@
 import { BaseModel } from "@/models/base.js";
 import { A2AClient, AgentCard, Message, MessageSendParams, Task, TaskStatusUpdateEvent, TextPart } from "@a2a-js/sdk";
 import { A2ATool } from "./a2aTool.js";
-import { ChatCompletionMessage } from "openai/resources";
 import { randomUUID } from "node:crypto";
+import { loggers } from "@/utils/logger.js";
 
 interface A2AThread {
   taskId: string | undefined;
@@ -26,7 +26,7 @@ export class A2AModule {
 
       this.a2aServers.set(toolName, a2aTool);
     } catch (error: any) {
-      console.error("Error fetching or parsing agent card");
+      loggers.a2a.error("Error fetching or parsing agent card", { error });
       throw error;
     }
   }
@@ -107,54 +107,13 @@ export class A2AModule {
             thread.contextId = task.contextId;
           }
         } else {
-          console.warn("Received unknown event structure from stream: ", event);
+          loggers.a2a.warn("Received unknown event structure from stream:", { event });
         }
       }
     } catch (error: any) {
-      console.error("Error communicating with agent: ", error.message || error);
+      loggers.a2a.error("Error communicating with agent:", { error });
     }
 
     return finalText;
-  }
-
-  async processQuery(userMessage: string, threadId: string) {
-    // TODO: add system message
-    const messages = [
-      { role: "user", content: userMessage }
-    ];
-    const finalText: string[] = [];
-
-    const tools = Array.from(this.a2aServers.values());
-    const response: ChatCompletionMessage = await this.model.fetchWithContextMessage(
-      messages,
-      tools
-    );
-
-    const { content, tool_calls } = response;
-
-    console.log('a2aContent:>> ', content);
-    console.log('a2aToolCalls:>> ', tool_calls);
-    if (tool_calls) {
-      const messagePayload = this.getMessagePayload(userMessage, threadId);
-
-      for (const tool of tool_calls) {
-        const a2aTool = this.a2aServers.get(tool.function.name);
-        if (!a2aTool) {
-          continue;
-        }
-
-        const texts = await this.useTool(a2aTool, messagePayload, threadId);
-        finalText.push(...texts);
-      }
-    } else if (content) {
-      finalText.push(content);
-    }
-
-    const botResponse = {
-      process: finalText.join('\n'),
-      response: finalText[finalText.length - 1],
-    };
-
-    return botResponse;
   }
 }
