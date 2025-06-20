@@ -37,86 +37,10 @@ export class MCPClient {
       loggers.mcp.info('Connected to MCP server with tools:', {
         tools: this.tools.map((tool) => tool.id)
       });
-    } catch (e) {
-      loggers.mcp.error('Failed to connect to MCP server:', e);
-      throw e;
+    } catch (error: any) {
+      loggers.mcp.error('Failed to connect to MCP server:', { error });
+      throw error;
     }
-  }
-
-  async processQuery(userMessage: string) {
-    // FIXME(yoojin): Need general system prompt for MCP tool search
-    const systemMessage = `tool 사용에 실패하면 더이상 function을 호출하지 않는다.`;
-
-    const messages = [
-      { role: "system", content: systemMessage.trim() },
-      { role: "user", content: userMessage },
-    ]
-
-    const finalText: string[] = [];
-    let didCallTool = false;
-
-    while (true) {
-      const response = await this.model.fetchWithContextMessage(
-        messages,
-        this.tools
-      );
-      didCallTool = false;
-      
-      const { content, tool_calls } = response;
-
-      loggers.mcp.debug('MCP content:', content);
-      loggers.mcp.debug('MCP tool calls:', tool_calls);
-
-      if (tool_calls) {
-        for (const tool of tool_calls) {
-          const calledFunction = tool.function;
-          didCallTool = true;
-          const toolName = calledFunction.name;
-          const toolArgs = JSON.parse(calledFunction.arguments) as
-            | { [x: string]: unknown }
-            | undefined;
-  
-          loggers.mcp.debug('MCP tool execution:', { toolName, toolArgs });
-          const { serverName: mcpName, mcpTool } = this.tools.filter(
-            tool => tool.id === toolName
-          )[0];
-
-          // 실제 툴 호출
-          const result = await this.mcpMap.get(mcpName)!.callTool({
-            name: mcpTool.name,
-            arguments: toolArgs,
-          });
-  
-          // 로그용 텍스트
-          const toolResult =
-            `[Bot Called Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
-            JSON.stringify(result.content, null, 2);
-  
-          loggers.mcp.debug('MCP tool result:', toolResult);
-  
-          finalText.push(toolResult);
-  
-          // 툴 결과를 메시지로 추가
-          messages.push({
-            role: 'user',
-            content: toolResult,
-          });
-        }
-      }
-      else if (content) {
-        finalText.push(content);
-      }
-
-      // 더 이상 도구 호출이 없으면 종료
-      if (!didCallTool) break;
-    }
-
-    const botResponse = {
-      process: finalText.join('\n'),
-      response: finalText[finalText.length - 1],
-    };
-
-    return botResponse;
   }
 
   getTools() {
