@@ -7,8 +7,6 @@ A TypeScript library for building AI agents with multi-protocol support includin
 - **Multi-Protocol Support**: Integrate with MCP servers and A2A agents
 - **Intent-Driven Processing**: Automatic query analysis and tool selection
 - **Dual Build System**: Supports both ESM and CJS formats
-- **Structured Logging**: Winston-based logging with configurable levels
-- **Express.js Server**: Built-in HTTP server with A2A endpoint support
 
 ## Installation
 
