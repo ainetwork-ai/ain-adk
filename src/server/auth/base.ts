@@ -1,13 +1,10 @@
-import { NextFunction, Request, Response } from "express";
+import type { NextFunction, Request, RequestHandler, Response } from "express";
 
 export class BaseAuth {
-  constructor() {
-  }
-
-  public middleware(): any {
-    return (req: Request, res: Response, next: NextFunction) => {
-      // Default middleware does nothing
-      next();
-    };
-  }
+	public middleware(): RequestHandler {
+		return (_req: Request, _res: Response, next: NextFunction) => {
+			// Default middleware does nothing
+			next();
+		};
+	}
 }
