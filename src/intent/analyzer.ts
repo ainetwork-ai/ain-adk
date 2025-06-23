@@ -5,6 +5,7 @@ import type { A2AModule } from "./modules/a2a/index.js";
 import type { A2ATool } from "./modules/a2a/tool.js";
 import type { AgentTool } from "./modules/common/tool.js";
 import { PROTOCOL_TYPE } from "./modules/common/types.js";
+import type { FOLClient } from "./modules/fol/index.js";
 import type { MCPModule } from "./modules/mcp/index.js";
 import type { MCPTool } from "./modules/mcp/tool.js";
 
@@ -17,7 +18,7 @@ export class IntentAnalyzer {
 	private model: BaseModel;
 	private a2a?: A2AModule;
 	private mcp?: MCPModule;
-  private fol?: Client;
+	private fol?: FOLClient;
 
 	constructor(model: BaseModel) {
 		this.model = model;
@@ -54,9 +55,9 @@ export class IntentAnalyzer {
 		return "unknown";
 	}
 
-  public addFOLModule(fol: FOLClient): void {
-    this.fol = fol;
-  }
+	public addFOLModule(fol: FOLClient): void {
+		this.fol = fol;
+	}
 
 	public async handleQuery(query: string): Promise<any> {
 		const threadId = "aaaa-bbbb-cccc-dddd"; // FIXME

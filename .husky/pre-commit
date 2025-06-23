@@ -1,3 +1,24 @@
-npm run check
-npm run build
-npm test
+#!/bin/sh
+
+echo "🔍 Running pre-commit checks..."
+
+echo "📋 Checking code formatting and linting..."
+if ! npm run check; then
+  echo "❌ Code formatting/linting failed!"
+  echo "PLEASE RUN: npm run check:write"
+  exit 1
+fi
+
+echo "🔨 Building project..."
+if ! npm run build; then
+  echo "❌ Build failed! Please fix the build errors and try again."
+  exit 1
+fi
+
+echo "🧪 Running tests..."
+if ! npm test; then
+  echo "❌ Tests failed! Please fix the failing tests and try again."
+  exit 1
+fi
+
+echo "✅ All pre-commit checks passed!"
