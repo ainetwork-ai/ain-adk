@@ -4,6 +4,7 @@ import { AINAgent } from "../src/ainagent.js";
 import { IntentAnalyzer } from "../src/intent/analyzer.js";
 import { A2AModule } from "../src/intent/modules/a2a/index.js";
 import AzureOpenAI from "../src/models/openai.js";
+import { AgentInfo } from "../src/types/index.js";
 
 async function main() {
 	const model = new AzureOpenAI(
@@ -19,7 +20,13 @@ async function main() {
 	await a2aModule.addA2AServer("http://localhost:3100");
 	intentAnalyzer.addA2AModule(a2aModule);
 
-	const agent = new AINAgent(intentAnalyzer, true);
+  const info: AgentInfo = {
+    name: "Client Agent",
+    description: "A client agent for test",
+    version: "0.0.3", // Incremented version
+  };
+
+	const agent = new AINAgent(intentAnalyzer, info);
 
 	agent.start(Number(process.env.PORT) || 5050);
 }
