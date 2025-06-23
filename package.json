@@ -25,7 +25,8 @@
 		"lint": "npx @biomejs/biome lint --write",
 		"check": "npx @biomejs/biome check",
 		"check:write": "npx @biomejs/biome check --write",
-		"test": "jest --passWithNoTests"
+		"test": "jest --passWithNoTests",
+		"prepare": "husky"
 	},
 	"keywords": [],
 	"license": "MIT",
@@ -37,6 +38,7 @@
 		"@types/jest": "^30.0.0",
 		"@types/node": "^24.0.1",
 		"eslint": "^9.29.0",
+		"husky": "^9.1.7",
 		"jest": "^30.0.0",
 		"ts-jest": "^29.4.0",
 		"ts-node": "^10.9.2",

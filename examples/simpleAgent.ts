@@ -30,7 +30,7 @@ await mcp.addMCPConfig({
 
 intentAnalyzer.addMCPModule(mcp);
 
-const info: AgentInfo = {
+const info: AINAgentInfo = {
   name: "ComCom Agent",
   description: "An agent that can provide answers by referencing the contents of ComCom Notion.",
   version: "0.0.2", // Incremented version
