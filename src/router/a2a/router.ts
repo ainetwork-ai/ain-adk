@@ -1,7 +1,7 @@
+import type { AgentCard } from "@a2a-js/sdk";
 import {
 	A2AError,
 	type A2AResponse,
-	DefaultRequestHandler,
 	InMemoryTaskStore,
 	type JSONRPCErrorResponse,
 	type JSONRPCSuccessResponse,
@@ -12,18 +12,19 @@ import type { Application, Request, Response } from "express";
 import type { IntentAnalyzer } from "@/intent/analyzer.js";
 import { loggers } from "@/utils/logger.js";
 import { AINAgentExecutor } from "./executor.js";
+import { AINRequestHandler } from "./requestHandler.js";
 
-export class A2AServer {
+export class A2ARouter {
 	private taskStore: TaskStore;
 	private agentExecutor: AINAgentExecutor;
-	private requestHandler: DefaultRequestHandler;
+	private requestHandler: AINRequestHandler;
 	private jsonRpcTransportHandler: JsonRpcTransportHandler;
 
-	constructor(intentAnalyzer: IntentAnalyzer) {
+	constructor(intentAnalyzer: IntentAnalyzer, card: AgentCard) {
 		this.taskStore = new InMemoryTaskStore();
 		this.agentExecutor = new AINAgentExecutor(intentAnalyzer);
-		this.requestHandler = new DefaultRequestHandler(
-			intentAnalyzer.buildAgentCard(),
+		this.requestHandler = new AINRequestHandler(
+			card,
 			this.taskStore,
 			this.agentExecutor,
 		);
@@ -32,20 +33,24 @@ export class A2AServer {
 		);
 	}
 
+	public async getAgentCard() {
+		return await this.requestHandler.getAgentCard();
+	}
+
 	public setupRoutes(app: Application) {
 		app.get("/agent-card", async (_, res: Response) => {
-			const agentCard = await this.requestHandler.getAgentCard();
+			const agentCard = await this.getAgentCard();
 			res.json(agentCard);
 		});
 
 		app.get("/.well-known/agent.json", async (_, res: Response) => {
-			const agentCard = await this.requestHandler.getAgentCard();
+			const agentCard = await this.getAgentCard();
 			res.json(agentCard);
 		});
 
 		app.post("/a2a", async (req: Request, res: Response) => {
 			try {
-				const rpcResponseOrStream = await this.jsonRpcTransportHandler.handle(
+				const rpcResponseOrStream = await this.jsonRpcTransportHandler?.handle(
 					req.body,
 				);
 				// Check if it's an AsyncGenerator (stream)
