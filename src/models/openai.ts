@@ -4,9 +4,9 @@ import type {
 	ChatCompletionMessageParam,
 	ChatCompletionTool,
 } from "openai/resources";
-import type { A2ATool } from "@/intent/modules/a2a/a2aTool.js";
+import type { A2ATool } from "@/intent/modules/a2a/tool.js";
 import { PROTOCOL_TYPE } from "@/intent/modules/common/types.js";
-import type { MCPTool } from "@/intent/modules/mcp/mcpTool.js";
+import type { MCPTool } from "@/intent/modules/mcp/tool.js";
 import { loggers } from "@/utils/logger.js";
 import type { AgentTool } from "../intent/modules/common/tool.js";
 import { BaseModel } from "./base.js";

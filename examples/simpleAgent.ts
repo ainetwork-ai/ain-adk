@@ -3,7 +3,7 @@ import "dotenv/config";
 import { getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { AINAgent } from "../src/ainagent.js";
 import { IntentAnalyzer } from "../src/intent/analyzer.js";
-import { MCPClient } from "../src/intent/modules/mcp/mcpClient.js";
+import { MCPModule } from "../src/intent/modules/mcp/index.js";
 import AzureOpenAI from "../src/models/openai.js";
 
 const model = new AzureOpenAI(
@@ -14,7 +14,7 @@ const model = new AzureOpenAI(
 	"",
 );
 const intentAnalyzer = new IntentAnalyzer(model);
-const mcp = new MCPClient();
+const mcp = new MCPModule();
 
 await mcp.addMCPConfig({
 	notionApi: {

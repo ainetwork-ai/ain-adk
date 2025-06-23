@@ -9,12 +9,13 @@ import {
 	type TextPart,
 } from "@a2a-js/sdk";
 import { loggers } from "@/utils/logger.js";
-import { A2ATool } from "./a2aTool.js";
+import { A2ATool } from "./tool.js";
 
 interface A2AThread {
 	taskId: string | undefined;
 	contextId: string | undefined;
 }
+
 export class A2AModule {
 	private a2aServers: Map<string, A2ATool> = new Map();
 	private threads: Map<string, A2AThread> = new Map();
