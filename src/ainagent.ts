@@ -5,18 +5,22 @@ import type { IntentAnalyzer } from "@/intent/analyzer.js";
 import type { BaseAuth } from "@/middleware/auth/base.js";
 import { loggers } from "@/utils/logger.js";
 import { A2ARouter } from "./router/a2a/router.js";
-import type { AgentInfo } from "./types/index.js";
+import type { AINAgentInfo } from "./types/index.js";
 
 export class AINAgent {
 	public app: express.Application;
-	public info: AgentInfo;
+	public info: AINAgentInfo;
 
 	// Modules
 	private authScheme?: BaseAuth;
 	private intentAnalyzer: IntentAnalyzer;
 	private a2aRouter?: A2ARouter;
 
-	constructor(intentAnalyzer: IntentAnalyzer, info: AgentInfo, url?: string) {
+	constructor(
+		intentAnalyzer: IntentAnalyzer,
+		info: AINAgentInfo,
+		url?: string,
+	) {
 		this.app = express();
 		this.app.use(cors());
 		this.app.use(express.json());
@@ -30,7 +34,7 @@ export class AINAgent {
 		}
 	}
 
-	private infoToCard(info: AgentInfo, url: string): AgentCard {
+	private infoToCard(info: AINAgentInfo, url: string): AgentCard {
 		const _url = new URL(url);
 		_url.pathname = "a2a";
 		return {

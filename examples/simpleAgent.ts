@@ -5,7 +5,7 @@ import { AINAgent } from "../src/ainagent.js";
 import { IntentAnalyzer } from "../src/intent/analyzer.js";
 import { MCPModule } from "../src/intent/modules/mcp/index.js";
 import AzureOpenAI from "../src/models/openai.js";
-import { AgentInfo } from "../src/types/index.js";
+import { AINAgentInfo } from "../src/types/index.js";
 
 const model = new AzureOpenAI(
 	process.env.AZURE_OPENAI_PTU_BASE_URL!,
