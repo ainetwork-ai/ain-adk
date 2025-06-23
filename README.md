@@ -70,7 +70,7 @@ import { A2AModule } from 'ain-adk/intent/modules/a2a/a2a';
 
 // Create A2A module and add servers
 const a2aModule = new A2AModule();
-await a2aModule.addA2AServer('http://localhost:3100/a2a');
+await a2aModule.addA2AServer('http://localhost:3100');
 intentAnalyzer.addA2AModule(a2aModule);
 
 // Enable A2A server mode
