@@ -7,6 +7,11 @@ import { PROTOCOL_TYPE } from "./modules/common/types.js";
 import type { MCPModule } from "./modules/mcp/index.js";
 import type { MCPTool } from "./modules/mcp/tool.js";
 
+export interface Chat {
+	user: string;
+	assistant?: string;
+}
+
 export class IntentAnalyzer {
 	private model: BaseModel;
 	private a2a?: A2AModule;
@@ -22,6 +27,31 @@ export class IntentAnalyzer {
 
 	public addA2AModule(a2a: A2AModule): void {
 		this.a2a = a2a;
+	}
+
+	public async classifyIntent(history: Chat[]): Promise<string> {
+		// TODO(haechan): Implement more sophisticated intent classification logic
+		// 1. db연결해서 intent trigger sentence 가져오기
+		// 2. vector search 또는 LLM 사용해서 intent 찾기
+		// 3. 찾은 intent 반환
+		// db에 쓰는 건 어디에? adk안에 구현?
+		// if) agent space에서 쓰는 db(관리자용)를 하나로 정한다. (ex. mongo, postgres, etc)
+		// agent init할때 url 받아서 연결.
+		// 다른 router(ex. POST /intent/sentence)에서 this.db를 주입받아서 쓴다?
+		// 이 classifyIntent도 주입받아서 쓴다?
+		const lastTurn = history[history.length - 1];
+		if (lastTurn) {
+			const userMessage = lastTurn.user.toLowerCase();
+			if (userMessage.includes("hello")) {
+				// just an example
+				return "hello";
+			}
+			if (userMessage.includes("notion")) {
+				// just an example
+				return "notion";
+			}
+		}
+		return "unknown";
 	}
 
 	public async handleQuery(query: string): Promise<any> {
