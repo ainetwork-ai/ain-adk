@@ -29,7 +29,7 @@ export class IntentAnalyzer {
 		this.a2a = a2a;
 	}
 
-	public async classifyIntent(history: Chat[]): Promise<string> {
+	public async classifyIntent(query: string, history: Chat[]): Promise<string> {
 		// TODO(haechan): Implement more sophisticated intent classification logic
 		// 1. db연결해서 intent trigger sentence 가져오기
 		// 2. vector search 또는 LLM 사용해서 intent 찾기
@@ -38,15 +38,13 @@ export class IntentAnalyzer {
 		// if) agent space에서 쓰는 db(관리자용)를 하나로 정한다. (ex. mongo, postgres, etc)
 		// agent init할때 url 받아서 연결.
 		// 다른 router(ex. POST /intent/sentence)에서 this.db를 주입받아서 쓴다?
-		// 이 classifyIntent도 주입받아서 쓴다?
-		const lastTurn = history[history.length - 1];
-		if (lastTurn) {
-			const userMessage = lastTurn.user.toLowerCase();
-			if (userMessage.includes("hello")) {
+		// 이 classifyIntent도 db 주입받아서 쓴다? -> 이건 unit test가 힘들어져서 history받아서 쓰는게 맞는듯
+		if (query) {
+			if (query.includes("hello")) {
 				// just an example
 				return "hello";
 			}
-			if (userMessage.includes("notion")) {
+			if (query.includes("notion")) {
 				// just an example
 				return "notion";
 			}
@@ -58,11 +56,13 @@ export class IntentAnalyzer {
 		const threadId = "aaaa-bbbb-cccc-dddd"; // FIXME
 		// 1. intent triggering
 		// TODO: Extract the user's intent using query, context, and FOL
-		const intent = query; // FIXME
+		const intent = await this.classifyIntent(query, []); // FIXME
+		// fulfillmentInfo = await this.getFulfillmentInfo(intent)???
+		// fulfillmentInfo.prompt, fulfillmentInfo.tools, fulfillmentInfo.a2a ...
 
 		// 2. intent fulfillment
 		// Using the extracted intent, generate a prompt for inference
-		const prompt = (await this.generatePrompt(intent, threadId)).response;
+		const prompt = (await this.generatePrompt(query, threadId)).response;
 
 		// 3. Generate response using prompt
 		const response = await this.model.fetch(query, prompt);
