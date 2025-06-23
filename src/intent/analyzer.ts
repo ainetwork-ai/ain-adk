@@ -1,3 +1,12 @@
+import { BaseModel } from "@/models/base.js";
+import { AgentCard } from "@a2a-js/sdk";
+
+import { MCPClient } from "./modules/mcp/mcpClient.js";
+import { A2AModule } from "./modules/a2a/a2a.js";
+import { FOLClient } from "./modules/fol/folClient.js";
+import { AgentTool } from "./modules/common/tool.js";
+
+import type { AgentCard } from "@a2a-js/sdk";
 import type { BaseModel } from "@/models/base.js";
 import { loggers } from "@/utils/logger.js";
 import type { A2AModule } from "./modules/a2a/index.js";
@@ -11,6 +20,7 @@ export class IntentAnalyzer {
 	private model: BaseModel;
 	private a2a?: A2AModule;
 	private mcp?: MCPModule;
+  private fol?: Client;
 
 	constructor(model: BaseModel) {
 		this.model = model;
@@ -23,6 +33,10 @@ export class IntentAnalyzer {
 	public addA2AModule(a2a: A2AModule): void {
 		this.a2a = a2a;
 	}
+
+  public addFOLModule(fol: FOLClient): void {
+    this.fol = fol;
+  }
 
 	public async handleQuery(query: string): Promise<any> {
 		const threadId = "aaaa-bbbb-cccc-dddd"; // FIXME
