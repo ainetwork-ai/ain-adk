@@ -70,7 +70,7 @@ export class A2AServer {
 							res.write(`id: ${Date.now()}\n`);
 							res.write(`data: ${JSON.stringify(event)}\n\n`);
 						}
-					} catch (streamError: any) {
+					} catch (streamError: unknown) {
 						loggers.server.error(
 							`Error during SSE streaming (request ${req.body?.id}):`,
 							streamError,
@@ -79,9 +79,7 @@ export class A2AServer {
 						const a2aError =
 							streamError instanceof A2AError
 								? streamError
-								: A2AError.internalError(
-										streamError.message || "Streaming error.",
-									);
+								: A2AError.internalError("Streaming error");
 						const errorResponse: JSONRPCErrorResponse = {
 							jsonrpc: "2.0",
 							id: req.body?.id || null, // Use original request ID if available
@@ -106,7 +104,7 @@ export class A2AServer {
 					const rpcResponse = rpcResponseOrStream as A2AResponse;
 					res.status(200).json(rpcResponse);
 				}
-			} catch (error: any) {
+			} catch (error: unknown) {
 				// Catch errors from jsonRpcTransportHandler.handle itself (e.g., initial parse error)
 				loggers.server.error(
 					"Unhandled error in AINAgent A2A POST handler:",
@@ -115,7 +113,7 @@ export class A2AServer {
 				const a2aError =
 					error instanceof A2AError
 						? error
-						: A2AError.internalError("General processing error.");
+						: A2AError.internalError("General processing error");
 				const errorResponse: JSONRPCErrorResponse = {
 					jsonrpc: "2.0",
 					id: req.body?.id || null,

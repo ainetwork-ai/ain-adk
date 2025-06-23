@@ -31,7 +31,7 @@ export class MCPClient {
 			loggers.mcp.info("Connected to MCP server with tools:", {
 				tools: this.tools.map((tool) => tool.id),
 			});
-		} catch (error: any) {
+		} catch (error: unknown) {
 			loggers.mcp.error("Failed to connect to MCP server:", { error });
 			throw error;
 		}

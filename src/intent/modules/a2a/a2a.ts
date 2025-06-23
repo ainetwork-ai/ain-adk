@@ -27,7 +27,7 @@ export class A2AModule {
 			const a2aTool = new A2ATool(toolName, client);
 
 			this.a2aServers.set(toolName, a2aTool);
-		} catch (error: any) {
+		} catch (error: unknown) {
 			loggers.a2a.error("Error fetching or parsing agent card", { error });
 			throw error;
 		}
@@ -128,7 +128,7 @@ export class A2AModule {
 					});
 				}
 			}
-		} catch (error: any) {
+		} catch (error: unknown) {
 			loggers.a2a.error("Error communicating with agent:", { error });
 		}
 
