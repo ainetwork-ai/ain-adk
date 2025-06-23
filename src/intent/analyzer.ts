@@ -1,17 +1,17 @@
 import type { AgentCard } from "@a2a-js/sdk";
 import type { BaseModel } from "@/models/base.js";
 import { loggers } from "@/utils/logger.js";
-import type { A2AModule } from "./modules/a2a/a2a.js";
-import type { A2ATool } from "./modules/a2a/a2aTool.js";
+import type { A2AModule } from "./modules/a2a/index.js";
+import type { A2ATool } from "./modules/a2a/tool.js";
 import type { AgentTool } from "./modules/common/tool.js";
 import { PROTOCOL_TYPE } from "./modules/common/types.js";
-import type { MCPClient } from "./modules/mcp/mcpClient.js";
-import type { MCPTool } from "./modules/mcp/mcpTool.js";
+import type { MCPModule } from "./modules/mcp/index.js";
+import type { MCPTool } from "./modules/mcp/tool.js";
 
 export class IntentAnalyzer {
 	private model: BaseModel;
 	private a2a?: A2AModule;
-	private mcp?: MCPClient;
+	private mcp?: MCPModule;
 
 	constructor(model: BaseModel) {
 		this.model = model;
@@ -38,7 +38,7 @@ export class IntentAnalyzer {
 		};
 	}
 
-	public addMCPModule(mcp: MCPClient): void {
+	public addMCPModule(mcp: MCPModule): void {
 		this.mcp = mcp;
 	}
 

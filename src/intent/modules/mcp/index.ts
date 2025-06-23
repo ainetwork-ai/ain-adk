@@ -2,9 +2,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { MCPConfig } from "@/types/mcp.js";
 import { loggers } from "@/utils/logger.js";
-import { MCPTool } from "./mcpTool.js";
+import { MCPTool } from "./tool.js";
 
-export class MCPClient {
+export class MCPModule {
 	private mcpMap: Map<string, Client> = new Map();
 	private transportMap: Map<string, StdioClientTransport> = new Map();
 	private tools: MCPTool[] = [];

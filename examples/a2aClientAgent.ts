@@ -2,7 +2,7 @@ import "dotenv/config";
 
 import { AINAgent } from "../src/ainagent.js";
 import { IntentAnalyzer } from "../src/intent/analyzer.js";
-import { A2AModule } from "../src/intent/modules/a2a/a2a.js";
+import { A2AModule } from "../src/intent/modules/a2a/module.js";
 import AzureOpenAI from "../src/models/openai.js";
 
 async function main() {

@@ -1,12 +1,14 @@
-# AI Network Agent Development Kit
+# AI Network Agent Development Kit (AIN-ADK)
 
 A TypeScript library for building AI agents with multi-protocol support including MCP (Model Context Protocol) and A2A (Agent-to-Agent) communication.
 
 ## Features
 
 - **Multi-Protocol Support**: Integrate with MCP servers and A2A agents
-- **Intent-Driven Processing**: Automatic query analysis and tool selection
-- **Dual Build System**: Supports both ESM and CJS formats
+- **Intent-Driven Processing**: Automatic query analysis and tool execution  
+- **Dual Build System**: Supports both ESM and CJS formats for maximum compatibility
+- **Structured Logging**: Winston-based logging system with multiple loggers
+- **TypeScript First**: Built with strict TypeScript configuration
 
 ## Installation
 
@@ -14,145 +16,182 @@ A TypeScript library for building AI agents with multi-protocol support includin
 npm install ain-adk
 ```
 
+## Requirements
+
+- Node.js >= 20
+- TypeScript >= 5.8
+
 ## Quick Start
 
 ### Basic Agent Setup
 
-#### Example: Using Azure OpenAI
 ```typescript
 import { AINAgent } from 'ain-adk/ainagent';
 import { IntentAnalyzer } from 'ain-adk/intent/analyzer';
 import AzureOpenAI from 'ain-adk/models/openai';
 
-const model = new AzureOpenAI(
-  process.env.AZURE_OPENAI_PTU_BASE_URL!,
-  process.env.AZURE_OPENAI_PTU_API_KEY!,
-  process.env.AZURE_OPENAI_PTU_API_VERSION!,
-  process.env.AZURE_OPENAI_DEPLOYMENT_NAME!,
-  process.env.AZURE_OPENAI_BASE_PROMPT!,
-);
+// Initialize the model
+const model = new AzureOpenAI(...);
 
+// Create intent analyzer and agent
 const intentAnalyzer = new IntentAnalyzer(model);
 const agent = new AINAgent(intentAnalyzer);
 
-agent.start(process.env.PORT);
+// Start the server
+agent.start(3000);
 ```
 
-### Adding MCP Integration
+### (Optional) Adding MCP tools
 
-#### Example: Notion MCP
 ```typescript
 import { MCPClient } from 'ain-adk/intent/modules/mcp/mcpClient';
-import { getDefaultEnvironment } from '@modelcontextprotocol/sdk/client/stdio';
 
-...
+const mcpClient = new MCPClient();
 
-const mcp = new MCPClient(model);
-
-await mcp.addMCPConfig({
+// Add MCP server configuration
+await mcpClient.addMCPConfig({
   notionApi: {
-    command: "npx",
-    args: ["-y", "@notionhq/notion-mcp-server"],
+    command: 'npx',
+    args: ['-y', '@notionhq/notion-mcp-server'],
     env: {
-      ...getDefaultEnvironment(),
-      "OPENAPI_MCP_HEADERS": `{"Authorization": "Bearer ${process.env.NOTION_API_KEY}"}`
+      NOTION_API_KEY: process.env.NOTION_API_KEY!
     }
   }
 });
 
-intentAnalyzer.addMCPModule(mcp);
-
-...
+// Add to intent analyzer
+intentAnalyzer.addMCPModule(mcpClient);
 ```
 
-### Adding A2A Communication
+### (Optional) Adding A2A 
 
 ```typescript
 import { A2AModule } from 'ain-adk/intent/modules/a2a/a2a';
 
-...
-
-const a2aModule = new A2AModule(model);
-await a2aModule.addA2AServer("http://localhost:3100");
+// Create A2A module and add servers
+const a2aModule = new A2AModule();
+await a2aModule.addA2AServer('http://localhost:3100/a2a');
 intentAnalyzer.addA2AModule(a2aModule);
 
-// Enable A2A server endpoints
+// Enable A2A server mode
 const agent = new AINAgent(intentAnalyzer, true);
-
-...
 ```
 
 ## Architecture
 
 ### Core Components
 
-- **AINAgent**: Main Express.js server orchestrating agent functionality
-- **IntentAnalyzer**: Processes queries through intent analysis and tool execution
-- **MCPClient**: Connects to MCP servers for external tool access
-- **A2AModule**: Enables agent-to-agent communication
-- **Models**: Abstraction layer for AI models
+- **AINAgent** (`src/ainagent.ts`): Main Express.js server class that orchestrates agent functionality
+- **IntentAnalyzer** (`src/intent/analyzer.ts`): Central orchestrator for query processing and tool execution
+- **MCPClient** (`src/intent/modules/mcp/mcpClient.ts`): Manages connections to MCP servers
+- **A2AModule** (`src/intent/modules/a2a/a2a.ts`): Handles agent-to-agent communication
+- **BaseModel** (`src/models/base.ts`): Abstract base class for AI model implementations
 
 ### Protocol Modules
 
-- **MCP (Model Context Protocol)**: Access external tools and data sources
-- **A2A (Agent-to-Agent)**: Multi-agent workflows and communication
+#### MCP (Model Context Protocol)
+- Connects to external MCP servers
+- Provides tool discovery and execution
+- Supports stdio-based communication
 
-## Environment Variables
+#### A2A (Agent-to-Agent)  
+- Enables multi-agent workflows
+- Supports streaming communication
+- Handles task management and context
 
-For logging:
-```bash
-LOG_LEVEL=info  # Options: error, warn, info, debug
-```
+### Key Features
+
+- **Modular Design**: Protocol-agnostic tool system through `AgentTool` interface
+- **Type Safety**: Comprehensive TypeScript types throughout
+- **Error Handling**: Robust error handling with structured logging
+- **Streaming Support**: Built-in support for streaming responses
 
 ## Development
 
-### Build
+### Scripts
 
 ```bash
-npm run build          # Build both ESM and CJS
-npm run build:esm      # Build ESM only
-npm run build:cjs      # Build CJS only
-```
+# Build commands
+npm run build          # Build both ESM and CJS distributions
+npm run build:esm      # Build ESM format only  
+npm run build:cjs      # Build CJS format only
 
-### Testing & Linting
+# Code quality
+npm run lint           # Run linting with Biome
+npm run format         # Format code with Biome
+npm run check          # Check code with Biome
+npm run check:write    # Check and auto-fix with Biome
 
-```bash
-npm test               # Run tests
-npm run lint           # Run ESLint
+# Testing
+npm run test           # Run Jest tests
 ```
 
 ### Examples
 
 ```bash
-# Simple agent with MCP integration
+# Run example applications
 npx tsx examples/simpleAgent.ts
-
-# A2A client agent
 npx tsx examples/a2aClientAgent.ts
 ```
 
-## Logging
+## Logging System
 
-The library uses Winston for structured logging:
+The library uses Winston for structured logging with multiple service-specific loggers:
 
 ```typescript
 import { loggers } from 'ain-adk/utils/logger';
 
-loggers.agent.info('Agent started');
+// Available loggers
+loggers.agent.info('AINAgent started');
 loggers.intent.debug('Processing query');
-loggers.mcp.error('MCP connection failed');
+loggers.mcp.info('Connected to MCP server');
+loggers.a2a.warn('A2A connection timeout');
+loggers.model.error('Model API error');
+loggers.server.info('A2A server started');
 ```
 
-Available loggers: `agent`, `intent`, `mcp`, `a2a`, `model`, `server`
+### Log Levels
+- `error`: Error conditions
+- `warn`: Warning conditions  
+- `info`: Informational messages (default)
+- `debug`: Debug-level messages
 
 ## API Endpoints
 
-When running as an A2A server, the following endpoints are available:
+### Standard Endpoints
+- `GET /` - Welcome message
+- `POST /query` - Process queries through intent analyzer
 
-- `POST /query` - Process queries through intent analyzer  
+### A2A Server Endpoints (when enabled)
 - `GET /agent-card` - Get agent card information
-- `GET /.well-known/agent.json` - Agent discovery endpoint
-- `POST /a2a` - A2A communication endpoint
+- `GET /.well-known/agent.json` - Agent discovery endpoint  
+- `POST /a2a` - A2A communication endpoint with streaming support
+
+## Build System
+
+The project supports dual build output:
+
+- **ESM** (`dist/esm/`): ES Module format with `{"type": "module"}`
+- **CJS** (`dist/cjs/`): CommonJS format with `{"type": "commonjs"}`
+
+Import paths use `@/` alias for `src/` directory.
+
+## Error Handling
+
+Comprehensive error handling throughout:
+- MCP connection failures
+- A2A communication errors  
+- Model API errors
+- Tool execution failures
+
+All errors are logged with appropriate context and error details.
+
+## Contributing
+
+1. Follow the established code conventions
+2. Use TypeScript strict mode
+3. Add appropriate logging
+4. Run linting and tests before submitting
 
 ## License
 
