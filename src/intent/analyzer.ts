@@ -26,27 +26,6 @@ export class IntentAnalyzer {
 		this.model = model;
 	}
 
-	public buildAgentCard(): AgentCard {
-		// FIXME: build agent card from agent's capabilities from intent
-		return {
-			name: "ComCom Agent",
-			description:
-				"An agent that can answer questions about ComCom using notion.",
-			url: "http://localhost:3100/a2a",
-			version: "0.0.2", // Incremented version
-			capabilities: {
-				streaming: true, // The new framework supports streaming
-				pushNotifications: false, // Assuming not implemented for this agent yet
-				stateTransitionHistory: true, // Agent uses history
-			},
-			// authentication: null, // Property 'authentication' does not exist on type 'AgentCard'.
-			defaultInputModes: ["text"],
-			defaultOutputModes: ["text", "task-status"], // task-status is a common output mode
-			skills: [],
-			supportsAuthenticatedExtendedCard: false,
-		};
-	}
-
 	public addMCPModule(mcp: MCPModule): void {
 		this.mcp = mcp;
 	}
