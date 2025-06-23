@@ -33,18 +33,14 @@ export class A2ARouter {
 		);
 	}
 
-	public async getAgentCard() {
-		return await this.requestHandler.getAgentCard();
-	}
-
 	public setupRoutes(app: Application) {
 		app.get("/agent-card", async (_, res: Response) => {
-			const agentCard = await this.getAgentCard();
+			const agentCard = await this.requestHandler.getAgentCard();
 			res.json(agentCard);
 		});
 
 		app.get("/.well-known/agent.json", async (_, res: Response) => {
-			const agentCard = await this.getAgentCard();
+			const agentCard = await this.requestHandler.getAgentCard();
 			res.json(agentCard);
 		});
 
