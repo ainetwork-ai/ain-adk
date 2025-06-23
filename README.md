@@ -1,74 +1,198 @@
-# AI Network Agent Development Kit
+# AI Network Agent Development Kit (AIN-ADK)
 
-AI Network Agent Development Kit은 자연어를 First-Order Logic(FOL)으로 변환하고 관리하는 시스템을 포함한 AI 에이전트 개발 키트입니다.
+A TypeScript library for building AI agents with multi-protocol support including MCP (Model Context Protocol) and A2A (Agent-to-Agent) communication.
 
-## 주요 기능
+## Features
 
-### FOL (First-Order Logic) 시스템
+- **Multi-Protocol Support**: Integrate with MCP servers and A2A agents
+- **Intent-Driven Processing**: Automatic query analysis and tool execution  
+- **Dual Build System**: Supports both ESM and CJS formats for maximum compatibility
+- **Structured Logging**: Winston-based logging system with multiple loggers
+- **TypeScript First**: Built with strict TypeScript configuration
 
-자연어 텍스트를 First-Order Logic 형식으로 변환하고 저장, 쿼리할 수 있는 시스템입니다.
+## Installation
 
-#### 주요 구성 요소
+```bash
+npm install ain-adk
+```
 
-- **FOLClient**: 자연어 ↔ FOL 변환 및 쿼리 인터페이스
-- **FOLStore**: Facts 저장소 (Local, MongoDB, PostgreSQL 지원)
-- **Facts**: Constants, Predicates, Facts로 구성된 FOL 데이터 구조
+## Requirements
 
-#### FOL 데이터 구조
+- Node.js >= 20
+- TypeScript >= 5.8
+
+## Quick Start
+
+### Basic Agent Setup
 
 ```typescript
-interface Facts {
-  constants: { name: string; description: string }[]; // 상수들과 설명
-  predicates: { name: string; description: string }[]; // 술어들과 설명
-  facts: { name: string; description: string }[]; // 사실들과 설명
-}
+import { AINAgent } from 'ain-adk/ainagent';
+import { IntentAnalyzer } from 'ain-adk/intent/analyzer';
+import AzureOpenAI from 'ain-adk/models/openai';
+
+// Initialize the model
+const model = new AzureOpenAI(...);
+
+// Create intent analyzer and agent
+const intentAnalyzer = new IntentAnalyzer(model);
+const agent = new AINAgent(intentAnalyzer);
+
+// Start the server
+agent.start(3000);
 ```
 
-#### JSON 파일 구조
+### (Optional) Adding MCP tools
 
-- **constants.json**: `{name: description}` 형태
-- **predicates.json**: `{name: description}` 형태
-- **facts.json**: `{name: description}` 형태
-- **intent.json**: `{intent: facts[]}` 형태
+```typescript
+import { MCPClient } from 'ain-adk/intent/modules/mcp/mcpClient';
 
-#### 지원하는 Store 타입
+const mcpClient = new MCPClient();
 
-- **FOLLocalStore**: 로컬 파일 시스템 기반 저장소
-- **FOLMongoStore**: MongoDB 기반 저장소
-- **FOLPostgreSqlStore**: PostgreSQL 기반 저장소
+// Add MCP server configuration
+await mcpClient.addMCPConfig({
+  notionApi: {
+    command: 'npx',
+    args: ['-y', '@notionhq/notion-mcp-server'],
+    env: {
+      NOTION_API_KEY: process.env.NOTION_API_KEY!
+    }
+  }
+});
 
-### 파일 구조
-
-FOL 데이터는 다음과 같은 구조로 저장됩니다:
-
-```
-fol-store/
-├── constants.json    # {name: description} 형태의 상수들
-├── predicates.json   # {name: description} 형태의 술어들
-├── facts.json        # {name: description} 형태의 사실들
-└── intent.json       # {intent: facts[]} 형태의 매핑
+// Add to intent analyzer
+intentAnalyzer.addMCPModule(mcpClient);
 ```
 
-## API 참조
+### (Optional) Adding A2A 
 
-### FOLClient 메소드
+```typescript
+import { A2AModule } from 'ain-adk/intent/modules/a2a/a2a';
 
-- `updateFacts(intent: string, text: string)`: 자연어를 FOL로 변환하여 저장
-- `retrieveFacts(intent: string)`: 특정 intent의 Facts 조회
-- `getFactsList()`: 모든 Facts 목록 조회
-- `getFactsMap()`: Intent별 Facts 맵 조회
-- `queryFacts(intent: string, query: string)`: FOL 기반 쿼리 실행
+// Create A2A module and add servers
+const a2aModule = new A2AModule();
+await a2aModule.addA2AServer('http://localhost:3100');
+intentAnalyzer.addA2AModule(a2aModule);
 
-### FOLStore 인터페이스
+// Enable A2A server mode
+const agent = new AINAgent(intentAnalyzer, true);
+```
 
-- `saveFacts(intent: string, facts: Facts)`: Facts 저장
-- `retrieveFacts(intent: string)`: Facts 조회
-- `getAllFacts()`: 모든 Facts 조회
+## Architecture
 
-### 기타 모듈
+### Core Components
 
-- **Models**: OpenAI, Azure OpenAI 등 AI 모델 인터페이스
-- **Intent**: 의도 분석 시스템
-- **MCP**: Model Context Protocol 지원
-- **A2A**: Agent-to-Agent 통신
-- **Auth**: 인증 시스템
+- **AINAgent** (`src/ainagent.ts`): Main Express.js server class that orchestrates agent functionality
+- **IntentAnalyzer** (`src/intent/analyzer.ts`): Central orchestrator for query processing and tool execution
+- **MCPClient** (`src/intent/modules/mcp/mcpClient.ts`): Manages connections to MCP servers
+- **A2AModule** (`src/intent/modules/a2a/a2a.ts`): Handles agent-to-agent communication
+- **BaseModel** (`src/models/base.ts`): Abstract base class for AI model implementations
+
+### Protocol Modules
+
+#### MCP (Model Context Protocol)
+- Connects to external MCP servers
+- Provides tool discovery and execution
+- Supports stdio-based communication
+
+#### A2A (Agent-to-Agent)  
+- Enables multi-agent workflows
+- Supports streaming communication
+- Handles task management and context
+
+### Key Features
+
+- **Modular Design**: Protocol-agnostic tool system through `AgentTool` interface
+- **Type Safety**: Comprehensive TypeScript types throughout
+- **Error Handling**: Robust error handling with structured logging
+- **Streaming Support**: Built-in support for streaming responses
+
+## Development
+
+### Scripts
+
+```bash
+# Build commands
+npm run build          # Build both ESM and CJS distributions
+npm run build:esm      # Build ESM format only  
+npm run build:cjs      # Build CJS format only
+
+# Code quality
+npm run lint           # Run linting with Biome
+npm run format         # Format code with Biome
+npm run check          # Check code with Biome
+npm run check:write    # Check and auto-fix with Biome
+
+# Testing
+npm run test           # Run Jest tests
+```
+
+### Examples
+
+```bash
+# Run example applications
+npx tsx examples/simpleAgent.ts
+npx tsx examples/a2aClientAgent.ts
+```
+
+## Logging System
+
+The library uses Winston for structured logging with multiple service-specific loggers:
+
+```typescript
+import { loggers } from 'ain-adk/utils/logger';
+
+// Available loggers
+loggers.agent.info('AINAgent started');
+loggers.intent.debug('Processing query');
+loggers.mcp.info('Connected to MCP server');
+loggers.a2a.warn('A2A connection timeout');
+loggers.model.error('Model API error');
+loggers.server.info('A2A server started');
+```
+
+### Log Levels
+- `error`: Error conditions
+- `warn`: Warning conditions  
+- `info`: Informational messages (default)
+- `debug`: Debug-level messages
+
+## API Endpoints
+
+### Standard Endpoints
+- `GET /` - Welcome message
+- `POST /query` - Process queries through intent analyzer
+
+### A2A Server Endpoints (when enabled)
+- `GET /agent-card` - Get agent card information
+- `GET /.well-known/agent.json` - Agent discovery endpoint  
+- `POST /a2a` - A2A communication endpoint with streaming support
+
+## Build System
+
+The project supports dual build output:
+
+- **ESM** (`dist/esm/`): ES Module format with `{"type": "module"}`
+- **CJS** (`dist/cjs/`): CommonJS format with `{"type": "commonjs"}`
+
+Import paths use `@/` alias for `src/` directory.
+
+## Error Handling
+
+Comprehensive error handling throughout:
+- MCP connection failures
+- A2A communication errors  
+- Model API errors
+- Tool execution failures
+
+All errors are logged with appropriate context and error details.
+
+## Contributing
+
+1. Follow the established code conventions
+2. Use TypeScript strict mode
+3. Add appropriate logging
+4. Run linting and tests before submitting
+
+## License
+
+MIT
