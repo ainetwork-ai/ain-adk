@@ -1,53 +1,57 @@
 {
-  "name": "ain-adk",
-  "version": "1.0.0",
-  "description": "AI Network Agent Development Kit",
-  "repository": "git@github.com:ainetwork-ai/ain-adk.git",
-  "author": "AI Network (https://ainetwork.ai)",
-  "type": "module",
-  "engines": {
-    "node": ">=20"
-  },
-  "exports": {
-    "./*": {
-      "import": "./dist/esm/*",
-      "require": "./dist/cjs/*"
-    }
-  },
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "npm run build:esm && npm run build:cjs",
-    "build:esm": "tsc -p tsconfig.esm.json && echo '{\"type\": \"module\"}' > dist/esm/package.json",
-    "build:cjs": "tsc -p tsconfig.cjs.json && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json",
-    "lint": "eslint .",
-    "test": "jest --passWithNoTests"
-  },
-  "keywords": [],
-  "license": "MIT",
-  "devDependencies": {
-    "@eslint/js": "^9.29.0",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.3",
-    "@types/jest": "^30.0.0",
-    "@types/node": "^24.0.1",
-    "eslint": "^9.29.0",
-    "jest": "^30.0.0",
-    "ts-jest": "^29.4.0",
-    "ts-node": "^10.9.2",
-    "tsx": "^4.20.3",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.34.1"
-  },
-  "dependencies": {
-    "@a2a-js/sdk": "^0.2.1",
-    "@modelcontextprotocol/sdk": "^1.12.3",
-    "cors": "^2.8.5",
-    "dotenv": "^16.5.0",
-    "express": "^5.1.0",
-    "openai": "^5.3.0",
-    "uuid": "^11.1.0",
-    "winston": "^3.17.0"
-  }
+	"name": "ain-adk",
+	"version": "1.0.0",
+	"description": "AI Network Agent Development Kit",
+	"repository": "git@github.com:ainetwork-ai/ain-adk.git",
+	"author": "AI Network (https://ainetwork.ai)",
+	"type": "module",
+	"engines": {
+		"node": ">=20"
+	},
+	"exports": {
+		"./*": {
+			"import": "./dist/esm/*",
+			"require": "./dist/cjs/*"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "npm run build:esm && npm run build:cjs",
+		"build:esm": "tsc -p tsconfig.esm.json && echo '{\"type\": \"module\"}' > dist/esm/package.json",
+		"build:cjs": "tsc -p tsconfig.cjs.json && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json",
+		"format": "npx @biomejs/biome format --write",
+		"lint": "npx @biomejs/biome lint --write",
+		"check": "npx @biomejs/biome check",
+		"check:write": "npx @biomejs/biome check --write",
+		"test": "jest --passWithNoTests"
+	},
+	"keywords": [],
+	"license": "MIT",
+	"devDependencies": {
+		"@biomejs/biome": "2.0.4",
+		"@eslint/js": "^9.29.0",
+		"@types/cors": "^2.8.19",
+		"@types/express": "^5.0.3",
+		"@types/jest": "^30.0.0",
+		"@types/node": "^24.0.1",
+		"eslint": "^9.29.0",
+		"jest": "^30.0.0",
+		"ts-jest": "^29.4.0",
+		"ts-node": "^10.9.2",
+		"tsx": "^4.20.3",
+		"typescript": "^5.8.3",
+		"typescript-eslint": "^8.34.1"
+	},
+	"dependencies": {
+		"@a2a-js/sdk": "^0.2.1",
+		"@modelcontextprotocol/sdk": "^1.12.3",
+		"cors": "^2.8.5",
+		"dotenv": "^16.5.0",
+		"express": "^5.1.0",
+		"openai": "^5.3.0",
+		"uuid": "^11.1.0",
+		"winston": "^3.17.0"
+	}
 }
