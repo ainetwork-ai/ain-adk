@@ -13,14 +13,22 @@ export interface Chat {
 	assistant?: string;
 }
 
+export interface Intent {
+	name: string;
+	description: string;
+	triggerSentences: string[];
+}
+
 export class IntentAnalyzer {
 	private model: BaseModel;
 	private a2a?: A2AModule;
 	private mcp?: MCPModule;
 	private fol?: FOLClient;
+	private intents: Intent[];
 
-	constructor(model: BaseModel) {
+	constructor(model: BaseModel, intents: Intent[] = []) {
 		this.model = model;
+		this.intents = intents;
 	}
 
 	public addMCPModule(mcp: MCPModule): void {
@@ -31,27 +39,40 @@ export class IntentAnalyzer {
 		this.a2a = a2a;
 	}
 
-	public async classifyIntent(query: string, history: Chat[]): Promise<string> {
-		// TODO(haechan): Implement more sophisticated intent classification logic
-		// 1. db연결해서 intent trigger sentence 가져오기
-		// 2. vector search 또는 LLM 사용해서 intent 찾기
-		// 3. 찾은 intent 반환
-		// db에 쓰는 건 어디에? adk안에 구현?
-		// if) agent space에서 쓰는 db(관리자용)를 하나로 정한다. (ex. mongo, postgres, etc)
-		// agent init할때 url 받아서 연결.
-		// 다른 router(ex. POST /intent/sentence)에서 this.db를 주입받아서 쓴다?
-		// 이 classifyIntent도 db 주입받아서 쓴다? -> 이건 unit test가 힘들어져서 history받아서 쓰는게 맞는듯
-		if (query) {
-			if (query.includes("hello")) {
-				// just an example
-				return "hello";
-			}
-			if (query.includes("notion")) {
-				// just an example
-				return "notion";
-			}
+	private async inferenceIntentName(query: string): Promise<string> {
+		const result = await this.model.fetchWithContextMessage([
+			{
+				role: "system",
+				content: `
+				당신은 인텐트 분류기이다. 주어진 인텐트 설명에 따라 유저 쿼리에 대해 적절한 인텐트 선택하여 반환해야한다.
+				반환가능한 인텐트 리스트와 설명은 다음과 같다. 
+				${this.intents
+					.map(
+						(intent) =>
+							`
+						name: ${intent.description}
+						desc: ${intent.description}
+						triggerSentences: ${intent.triggerSentences.map((sentence) => `- ${sentence}`).join("\n")}`,
+					)
+					.join("\n")}
+				
+				반드시 주어진 "인텐트 이름" 만 반환해야한다.
+				예: 
+				query: "오늘 날씨 어때?"
+				response: "find_weather"
+				`,
+			},
+			{ role: "user", content: `${query}\n\n` },
+		]);
+		const intentName = result.content;
+		if (!intentName) {
+			throw new Error("Intent not found");
 		}
-		return "unknown";
+		return intentName;
+	}
+
+	public async classifyIntent(query: string, history: Chat[]): Promise<string> {
+		return this.inferenceIntentName(query);
 	}
 
 	public addFOLModule(fol: FOLClient): void {
@@ -62,7 +83,7 @@ export class IntentAnalyzer {
 		const threadId = "aaaa-bbbb-cccc-dddd"; // FIXME
 		// 1. intent triggering
 		// TODO: Extract the user's intent using query, context, and FOL
-		const intent = await this.classifyIntent(query, []); // FIXME
+		const intentName = await this.classifyIntent(query, []); // FIXME
 		// fulfillmentInfo = await this.getFulfillmentInfo(intent)???
 		// fulfillmentInfo.prompt, fulfillmentInfo.tools, fulfillmentInfo.a2a ...
 
