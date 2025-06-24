@@ -45,7 +45,7 @@ export class IntentAnalyzer {
 
 	public async generate(query: string, threadId: string) {
 		// FIXME(yoojin): Need general system prompt for MCP tool search
-		const systemMessage =`
+		const systemMessage = `
 유저의 질문에 대해 function 을 사용할 수 있다.
 
 function에는 MCP_Tool, A2A_Tool 두 가지 <tool_type> 이 존재한다.
@@ -54,9 +54,9 @@ tool type은 function 결과 메세지의 처음에 [Bot Called <tool_type> with
 
 <MCP_Tool>
     ${
-      // FIXME: Need mcp specified prompt.
-      ""
-    }
+			// FIXME: Need mcp specified prompt.
+			""
+		}
     function 사용에 실패하면 더이상 function을 호출하지 않고 답변을 생성한다.
 </MCP_Tool>
 
@@ -82,7 +82,7 @@ tool type은 function 결과 메세지의 처음에 [Bot Called <tool_type> with
 		}
 
 		const processList: string[] = [];
-    let finalMessage = "";
+		let finalMessage = "";
 		let didCallTool = false;
 
 		while (true) {
@@ -146,7 +146,7 @@ tool type은 function 결과 메세지의 처음에 [Bot Called <tool_type> with
 				}
 			} else if (content) {
 				processList.push(content);
-        finalMessage = response;
+				finalMessage = response;
 			}
 
 			if (!didCallTool) break;
