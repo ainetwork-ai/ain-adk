@@ -14,14 +14,12 @@ import { BaseModel } from "./base.js";
 export default class AzureOpenAI extends BaseModel {
 	private client: AzureOpenAIClient;
 	private modelName: string;
-	private basePrompt: string;
 
 	constructor(
 		baseUrl: string,
 		apiKey: string,
 		apiVersion: string,
 		modelName: string,
-		basePrompt: string,
 	) {
 		super();
 		this.client = new AzureOpenAIClient({
@@ -30,23 +28,11 @@ export default class AzureOpenAI extends BaseModel {
 			apiVersion: apiVersion,
 		});
 		this.modelName = modelName;
-		this.basePrompt = basePrompt;
 	}
 
-	async fetch(userMessage: string, intentPrompt?: string) {
-		const systemPrompt = `
-    ${this.basePrompt}
-
-    <Knowledge>
-    ${
-			// NOTE(yoojin): Temporary add intent.
-			intentPrompt
-		}
-    </Knowledge>
-    `;
-
+	async fetch(userMessage: string, systemPrompt?: string) {
 		const messages: ChatCompletionMessageParam[] = [
-			{ role: "system", content: systemPrompt.trim() },
+			{ role: "system", content: (systemPrompt || "").trim() },
 			{ role: "user", content: userMessage },
 		];
 

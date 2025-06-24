@@ -12,7 +12,6 @@ const model = new AzureOpenAI(
 	process.env.AZURE_OPENAI_PTU_API_KEY!,
 	process.env.AZURE_OPENAI_PTU_API_VERSION!,
 	process.env.AZURE_OPENAI_DEPLOYMENT_NAME!,
-	"",
 );
 const intentAnalyzer = new IntentAnalyzer(model);
 const mcp = new MCPModule();
