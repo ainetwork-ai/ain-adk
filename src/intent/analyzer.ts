@@ -1,10 +1,10 @@
-import type { AgentCard } from "@a2a-js/sdk";
 import type { BaseModel } from "@/models/base.js";
 import { loggers } from "@/utils/logger.js";
 import type { A2AModule } from "./modules/a2a/index.js";
 import type { A2ATool } from "./modules/a2a/tool.js";
 import type { AgentTool } from "./modules/common/tool.js";
 import { PROTOCOL_TYPE } from "./modules/common/types.js";
+import type { FOLClient } from "./modules/fol/index.js";
 import type { MCPModule } from "./modules/mcp/index.js";
 import type { MCPTool } from "./modules/mcp/tool.js";
 
@@ -12,30 +12,10 @@ export class IntentAnalyzer {
 	private model: BaseModel;
 	private a2a?: A2AModule;
 	private mcp?: MCPModule;
+	private fol?: FOLClient;
 
 	constructor(model: BaseModel) {
 		this.model = model;
-	}
-
-	public buildAgentCard(): AgentCard {
-		// FIXME: build agent card from agent's capabilities from intent
-		return {
-			name: "ComCom Agent",
-			description:
-				"An agent that can answer questions about ComCom using notion.",
-			url: "http://localhost:3100/a2a",
-			version: "0.0.2", // Incremented version
-			capabilities: {
-				streaming: true, // The new framework supports streaming
-				pushNotifications: false, // Assuming not implemented for this agent yet
-				stateTransitionHistory: true, // Agent uses history
-			},
-			// authentication: null, // Property 'authentication' does not exist on type 'AgentCard'.
-			defaultInputModes: ["text"],
-			defaultOutputModes: ["text", "task-status"], // task-status is a common output mode
-			skills: [],
-			supportsAuthenticatedExtendedCard: false,
-		};
 	}
 
 	public addMCPModule(mcp: MCPModule): void {
@@ -44,6 +24,10 @@ export class IntentAnalyzer {
 
 	public addA2AModule(a2a: A2AModule): void {
 		this.a2a = a2a;
+	}
+
+	public addFOLModule(fol: FOLClient): void {
+		this.fol = fol;
 	}
 
 	public async handleQuery(query: string): Promise<any> {
