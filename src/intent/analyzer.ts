@@ -53,16 +53,13 @@ export class IntentAnalyzer {
 		const intent = query; // FIXME
 
 		// 2. intent fulfillment
-		// Using the extracted intent, generate a prompt for inference
-		const prompt = (await this.generatePrompt(intent, threadId)).response;
-
-		// 3. Generate response using prompt
-		const response = await this.model.fetch(query, prompt);
+		// Using the extracted intent, generate a response.
+		const response = (await this.generate(intent, threadId)).response;
 
 		return response;
 	}
 
-	public async generatePrompt(query: string, threadId: string) {
+	public async generate(query: string, threadId: string) {
 		// FIXME(yoojin): Need general system prompt for MCP tool search
 		const systemMessage =
 			"tool 사용에 실패하면 더이상 function을 호출하지 않는다.";
@@ -81,7 +78,8 @@ export class IntentAnalyzer {
 			tools.push(...this.a2a.getTools());
 		}
 
-		const finalText: string[] = [];
+		const processList: string[] = [];
+    let finalMessage = "";
 		let didCallTool = false;
 
 		while (true) {
@@ -137,22 +135,23 @@ export class IntentAnalyzer {
 
 					loggers.intent.debug("toolResult", { toolResult });
 
-					finalText.push(toolResult);
+					processList.push(toolResult);
 					messages.push({
 						role: "user",
 						content: toolResult,
 					});
 				}
 			} else if (content) {
-				finalText.push(content);
+				processList.push(content);
+        finalMessage = response;
 			}
 
 			if (!didCallTool) break;
 		}
 
 		const botResponse = {
-			process: finalText.join("\n"),
-			response: finalText[finalText.length - 1],
+			process: processList.join("\n"),
+			response: finalMessage,
 		};
 
 		return botResponse;
