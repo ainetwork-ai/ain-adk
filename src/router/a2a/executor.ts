@@ -85,7 +85,6 @@ export class AINAgentExecutor implements AgentExecutor {
 			taskId,
 			contextId,
 			"working",
-			"Processing your question, hang tight!",
 		);
 		eventBus.publish(workingStatusUpdate);
 
