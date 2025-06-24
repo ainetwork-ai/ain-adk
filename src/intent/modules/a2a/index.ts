@@ -24,7 +24,7 @@ export class A2AModule {
 		try {
 			const client = new A2AClient(url);
 			const card: AgentCard = await client.getAgentCard();
-			const toolName = card.name.replace(" ", "-");
+			const toolName = card.name.replaceAll(" ", "-");
 			const a2aTool = new A2ATool(toolName, client);
 
 			this.a2aServers.set(toolName, a2aTool);
