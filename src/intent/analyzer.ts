@@ -37,19 +37,35 @@ export class IntentAnalyzer {
 		const intent = query; // FIXME
 
 		// 2. intent fulfillment
-		// Using the extracted intent, generate a prompt for inference
-		const prompt = (await this.generatePrompt(intent, threadId)).response;
-
-		// 3. Generate response using prompt
-		const response = await this.model.fetch(query, prompt);
+		// Using the extracted intent, generate a response.
+		const response = (await this.generate(intent, threadId)).response;
 
 		return response;
 	}
 
-	public async generatePrompt(query: string, threadId: string) {
+	public async generate(query: string, threadId: string) {
 		// FIXME(yoojin): Need general system prompt for MCP tool search
-		const systemMessage =
-			"tool 사용에 실패하면 더이상 function을 호출하지 않는다.";
+		const systemMessage = `
+유저의 질문에 대해 function 을 사용할 수 있다.
+
+function에는 MCP_Tool, A2A_Tool 두 가지 <tool_type> 이 존재한다.
+tool type은 function 결과 메세지의 처음에 [Bot Called <tool_type> with args <tool_args>] 이 포함됨을 통해 알 수 있다.
+각 <tool_type> 에 대한 사용 지침은 아래를 참고한다.
+
+<MCP_Tool>
+    ${
+			// FIXME: Need mcp specified prompt.
+			""
+		}
+    function 사용에 실패하면 더이상 function을 호출하지 않고 답변을 생성한다.
+</MCP_Tool>
+
+<A2A_Tool>
+    A2A_Tool은 나와 다른 정보를 가진 Agent에게 query를 보내고 답변을 받는 function이다.
+    A2A_Tool을 통한 결과는 요청한 Agent에서 충분이 숙고한 후 생성한 텍스트로, 해당 내용에 대해서는 더 이상 발전시킬 수 없는 완성된 결과물이다.
+    이에 대해 같은 질문으로 내용을 보충하거나 새로운 function을 사용하지 않아도 된다.
+</A2A_Tool>
+`;
 
 		const messages = [
 			{ role: "system", content: systemMessage.trim() },
@@ -65,7 +81,8 @@ export class IntentAnalyzer {
 			tools.push(...this.a2a.getTools());
 		}
 
-		const finalText: string[] = [];
+		const processList: string[] = [];
+		let finalMessage = "";
 		let didCallTool = false;
 
 		while (true) {
@@ -102,7 +119,7 @@ export class IntentAnalyzer {
 							toolArgs,
 						);
 						toolResult =
-							`[Bot Called Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
+							`[Bot Called MCP Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
 							JSON.stringify(result.content, null, 2);
 					} else if (this.a2a && selectedTool.protocol === PROTOCOL_TYPE.A2A) {
 						const result = await this.a2a.useTool(
@@ -110,7 +127,7 @@ export class IntentAnalyzer {
 							messagePayload!,
 							threadId,
 						);
-						toolResult = `[Bot Called Tool ${toolName}]\n${result.join("\n")}`;
+						toolResult = `[Bot Called A2A Tool ${toolName}]\n${result.join("\n")}`;
 					} else {
 						// Unrecognized tool type. It cannot be happened...
 						loggers.intent.warn(
@@ -121,22 +138,23 @@ export class IntentAnalyzer {
 
 					loggers.intent.debug("toolResult", { toolResult });
 
-					finalText.push(toolResult);
+					processList.push(toolResult);
 					messages.push({
 						role: "user",
 						content: toolResult,
 					});
 				}
 			} else if (content) {
-				finalText.push(content);
+				processList.push(content);
+				finalMessage = response;
 			}
 
 			if (!didCallTool) break;
 		}
 
 		const botResponse = {
-			process: finalText.join("\n"),
-			response: finalText[finalText.length - 1],
+			process: processList.join("\n"),
+			response: finalMessage,
 		};
 
 		return botResponse;
