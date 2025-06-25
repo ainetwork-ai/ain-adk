@@ -8,7 +8,6 @@ const model = new AzureOpenAI(
   process.env.AZURE_OPENAI_PTU_API_KEY!,
   process.env.AZURE_OPENAI_PTU_API_VERSION!,
   process.env.AZURE_OPENAI_MODEL_NAME!,
-  ""
 );
 
 const folStore = new FOLLocalStore("fol-store");

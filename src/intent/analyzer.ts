@@ -14,8 +14,6 @@ export class IntentAnalyzer {
 	private mcp?: MCPModule;
 	private fol?: FOLClient;
 
-	private basePrompt?: string;
-
 	constructor(model: BaseModel) {
 		this.model = model;
 	}
@@ -32,10 +30,6 @@ export class IntentAnalyzer {
 		this.fol = fol;
 	}
 
-	public addBasePrompt(prompt: string): void {
-		this.basePrompt = prompt;
-	}
-
 	public async handleQuery(query: string): Promise<any> {
 		const threadId = "aaaa-bbbb-cccc-dddd"; // FIXME
 		// 1. intent triggering
@@ -44,7 +38,7 @@ export class IntentAnalyzer {
 
 		// 2. intent fulfillment
 		// Using the extracted intent, generate a response.
-		const { process, response } = await this.generate(intent, threadId);
+		const response = (await this.generate(intent, threadId)).response;
 
 		return response;
 	}
@@ -52,8 +46,6 @@ export class IntentAnalyzer {
 	public async generate(query: string, threadId: string) {
 		// FIXME(yoojin): Need general system prompt for MCP tool search
 		const systemMessage = `
-${this.basePrompt}
-
 유저의 질문에 대해 function 을 사용할 수 있다.
 
 function에는 MCP_Tool, A2A_Tool 두 가지 <tool_type> 이 존재한다.
@@ -102,6 +94,7 @@ tool type은 function 결과 메세지의 처음에 [Bot Called <tool_type> with
 
 			loggers.intent.debug("messages", { messages });
 
+			// TODO: content, tool_calls formatting
 			const { content, tool_calls } = response;
 
 			loggers.intent.debug("content", { content });

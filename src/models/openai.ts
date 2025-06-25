@@ -7,7 +7,6 @@ import type {
 import type { A2ATool } from "@/intent/modules/a2a/tool.js";
 import { PROTOCOL_TYPE } from "@/intent/modules/common/types.js";
 import type { MCPTool } from "@/intent/modules/mcp/tool.js";
-import { loggers } from "@/utils/logger.js";
 import type { AgentTool } from "../intent/modules/common/tool.js";
 import { BaseModel } from "./base.js";
 
@@ -30,10 +29,10 @@ export default class AzureOpenAI extends BaseModel {
 		this.modelName = modelName;
 	}
 
-	async fetch(userMessage: string, systemPrompt?: string) {
+	async fetch(query: string, systemPrompt?: string) {
 		const messages: ChatCompletionMessageParam[] = [
 			{ role: "system", content: (systemPrompt || "").trim() },
-			{ role: "user", content: userMessage },
+			{ role: "user", content: query },
 		];
 
 		return await this.chat(messages);
@@ -46,10 +45,10 @@ export default class AzureOpenAI extends BaseModel {
 		let functions: ChatCompletionTool[] = [];
 
 		if (tools && tools.length > 0) {
-			functions = await this.convertToolsToFunctions(tools);
+			functions = this.convertToolsToFunctions(tools);
 		}
 
-		if (Object.keys(functions).length > 0) {
+		if (functions.length > 0) {
 			return await this.chooseFunctions(messages, functions);
 		}
 		return await this.chat(messages);
@@ -78,9 +77,7 @@ export default class AzureOpenAI extends BaseModel {
 		return response.choices?.[0]?.message;
 	}
 
-	async convertToolsToFunctions(
-		tools: AgentTool[],
-	): Promise<ChatCompletionTool[]> {
+	convertToolsToFunctions(tools: AgentTool[]): ChatCompletionTool[] {
 		const newTools: ChatCompletionTool[] = [];
 		for (const tool of tools) {
 			if (!tool.enabled) {

@@ -49,6 +49,7 @@
 	},
 	"dependencies": {
 		"@a2a-js/sdk": "^0.2.2",
+		"@google/genai": "^1.6.0",
 		"@modelcontextprotocol/sdk": "^1.12.3",
 		"cors": "^2.8.5",
 		"dotenv": "^16.5.0",
