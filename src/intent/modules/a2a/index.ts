@@ -17,25 +17,36 @@ interface A2AThread {
 }
 
 export class A2AModule {
-	private a2aServers: Map<string, A2ATool> = new Map();
+	private a2aServers: Map<string, A2ATool | null> = new Map();
 	private threads: Map<string, A2AThread> = new Map();
 
 	public async addA2AServer(url: string): Promise<void> {
-		try {
-			const client = new A2AClient(url);
-			const card: AgentCard = await client.getAgentCard();
-			const toolName = card.name.replaceAll(" ", "-");
-			const a2aTool = new A2ATool(toolName, client);
-
-			this.a2aServers.set(toolName, a2aTool);
-		} catch (error: unknown) {
-			loggers.a2a.error("Error fetching or parsing agent card", { error });
-			throw error;
-		}
+		this.a2aServers.set(url, null);
 	}
 
-	public getTools(): A2ATool[] {
-		return Array.from(this.a2aServers.values());
+	public async getTools(): Promise<A2ATool[]> {
+		const tools: A2ATool[] = [];
+		for (const url of [...this.a2aServers.keys()]) {
+			const tool = this.a2aServers.get(url);
+			if (!tool || !tool.enabled) {
+				try {
+					const client = new A2AClient(url);
+					const card: AgentCard = await client.getAgentCard();
+					const toolName = card.name.replaceAll(" ", "-");
+					const a2aTool = new A2ATool(toolName, client, card);
+
+					tools.push(a2aTool);
+				} catch (_error: any) {
+					// Agent not responded
+					if (tool) {
+						tool.disable();
+					}
+				}
+			} else {
+				tools.push(tool);
+			}
+		}
+		return tools;
 	}
 
 	private getThreadWithId = (threadId: string): A2AThread => {
@@ -131,6 +142,8 @@ export class A2AModule {
 			}
 		} catch (error: unknown) {
 			loggers.a2a.error("Error communicating with agent:", { error });
+			tool.disable();
+			// TODO: add failed & disabled text for next inference?
 		}
 
 		return finalText;

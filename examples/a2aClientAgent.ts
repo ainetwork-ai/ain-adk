@@ -11,7 +11,7 @@ async function main() {
 		process.env.AZURE_OPENAI_PTU_BASE_URL!,
 		process.env.AZURE_OPENAI_PTU_API_KEY!,
 		process.env.AZURE_OPENAI_PTU_API_VERSION!,
-		process.env.AZURE_OPENAI_DEPLOYMENT_NAME!,
+		process.env.AZURE_OPENAI_MODEL_NAME!,
 	);
 	const intentAnalyzer = new IntentAnalyzer(model);
 	const a2aModule = new A2AModule();
