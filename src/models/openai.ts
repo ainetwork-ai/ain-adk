@@ -112,21 +112,14 @@ export default class AzureOpenAI extends BaseModel {
 				});
 			} else {
 				// PROTOCOL_TYPE.A2A
-				const { client, id } = tool as A2ATool;
-				try {
-					// FIXME: inefficient
-					const card = await client.getAgentCard();
-					newTools.push({
-						type: "function",
-						function: {
-							name: id,
-							description: card.description,
-						},
-					});
-				} catch (_error) {
-					loggers.model.warn(`No response from Agent ${id}. Ignoring...`);
-					tool.disable();
-				}
+				const { id, card } = tool as A2ATool;
+				newTools.push({
+					type: "function",
+					function: {
+						name: id,
+						description: card.description,
+					},
+				});
 			}
 		}
 		return newTools;
