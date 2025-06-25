@@ -47,7 +47,7 @@
 		"typescript-eslint": "^8.34.1"
 	},
 	"dependencies": {
-		"@a2a-js/sdk": "^0.2.1",
+		"@a2a-js/sdk": "^0.2.2",
 		"@modelcontextprotocol/sdk": "^1.12.3",
 		"cors": "^2.8.5",
 		"dotenv": "^16.5.0",
