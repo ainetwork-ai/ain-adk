@@ -13,6 +13,7 @@ export class IntentAnalyzer {
 	private a2a?: A2AModule;
 	private mcp?: MCPModule;
 	private fol?: FOLClient;
+	private basePrompt?: string;
 
 	constructor(model: BaseModel) {
 		this.model = model;
@@ -28,6 +29,10 @@ export class IntentAnalyzer {
 
 	public addFOLModule(fol: FOLClient): void {
 		this.fol = fol;
+	}
+
+	public addBasePrompt(prompt: string): void {
+		this.basePrompt = prompt;
 	}
 
 	public async handleQuery(query: string): Promise<any> {
@@ -46,6 +51,8 @@ export class IntentAnalyzer {
 	public async generate(query: string, threadId: string) {
 		// FIXME(yoojin): Need general system prompt for MCP tool search
 		const systemMessage = `
+${this.basePrompt}
+
 유저의 질문에 대해 function 을 사용할 수 있다.
 
 function에는 MCP_Tool, A2A_Tool 두 가지 <tool_type> 이 존재한다.
