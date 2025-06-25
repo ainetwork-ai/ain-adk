@@ -5,13 +5,20 @@ import { AINAgent } from "../src/ainagent.js";
 import { IntentAnalyzer } from "../src/intent/analyzer.js";
 import { MCPModule } from "../src/intent/modules/mcp/index.js";
 import AzureOpenAI from "../src/models/openai.js";
+import GeminiModel from "../src/models/gemini.js";
 import { AINAgentInfo } from "../src/types/index.js";
 
+/*
 const model = new AzureOpenAI(
 	process.env.AZURE_OPENAI_PTU_BASE_URL!,
 	process.env.AZURE_OPENAI_PTU_API_KEY!,
 	process.env.AZURE_OPENAI_PTU_API_VERSION!,
 	process.env.AZURE_OPENAI_MODEL_NAME!,
+);
+*/
+const model = new GeminiModel(
+	process.env.GEMINI_API_KEY!,
+	process.env.GEMINI_MODEL_NAME!,
 );
 const intentAnalyzer = new IntentAnalyzer(model);
 const mcp = new MCPModule();
