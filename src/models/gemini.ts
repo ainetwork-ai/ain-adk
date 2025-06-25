@@ -71,6 +71,7 @@ export default class GeminiModel extends BaseModel {
 		contents: ContentListUnion,
 		tools: FunctionDeclaration[],
 	) {
+		console.log(tools);
 		const response = await this.client.models.generateContent({
 			model: this.modelName,
 			contents,
@@ -82,6 +83,8 @@ export default class GeminiModel extends BaseModel {
 				],
 			},
 		});
+
+		console.log(response);
 
 		const tool_calls = response.functionCalls?.map((value: FunctionCall) => {
 			return {
