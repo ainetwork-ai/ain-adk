@@ -86,7 +86,7 @@ tool type은 function 결과 메세지의 처음에 [Bot Called <tool_type> with
 			tools.push(...this.mcp.getTools());
 		}
 		if (this.a2a) {
-			tools.push(...this.a2a.getTools());
+			tools.push(...(await this.a2a.getTools()));
 		}
 
 		const processList: string[] = [];
