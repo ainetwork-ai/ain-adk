@@ -33,9 +33,10 @@ export const getLogger = (service: string) => createLogger(service);
 // Convenience methods for different components
 export const loggers = {
 	agent: getLogger("AINAgent"),
-	intent: getLogger("IntentAnalyzer"),
-	mcp: getLogger("MCPClient"),
+	intent: getLogger("Intent"),
+	mcp: getLogger("MCPModule"),
 	a2a: getLogger("A2AModule"),
 	model: getLogger("Model"),
 	server: getLogger("A2AServer"),
+	fol: getLogger("FOL"),
 } as const;
