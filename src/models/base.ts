@@ -9,7 +9,7 @@ export interface FetchResponse {
 	toolCalls?: ToolCall[];
 }
 
-export interface IModel {
+export interface IBaseModel {
 	generateMessages<M>(queries: string[], systemPrompt?: string): M[];
 	expandMessages<M>(messages: M[], message: string): void;
 	convertToolsToFunctions<F>(tools: AgentTool[]): F[];
