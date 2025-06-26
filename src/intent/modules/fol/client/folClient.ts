@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import type { IBaseModel } from "@/models/base.js";
+import { loggers } from "@/utils/logger.js";
 import type { FOLStore } from "../store/index.js";
 import type { Facts } from "../types/index.js";
 
@@ -70,7 +71,7 @@ FOL 규칙:
 			const messages = this.model.generateMessages([prompt]);
 			const response = await this.model.fetch(messages);
 
-			console.log("debug", response);
+			loggers.fol.debug(response);
 
 			// AI 응답에서 텍스트 추출 (응답이 객체인 경우 content 프로퍼티 사용)
 			const responseText = response.content || "";
@@ -116,9 +117,9 @@ FOL 규칙:
 			// Store에 저장
 			await this.folStore.saveFacts(intent, updatedFacts);
 
-			console.log(`FOL 데이터가 업데이트되었습니다 (intent: ${intent})`);
+			loggers.fol.info(`FOL data updated (intent: ${intent})`);
 		} catch (error) {
-			console.error("updateFacts 실행 중 오류:", error);
+			loggers.fol.error("updateFacts execution error:", { error });
 			throw error;
 		}
 	}
@@ -130,7 +131,7 @@ FOL 규칙:
 		try {
 			return await this.folStore.retrieveFacts(intent);
 		} catch (error) {
-			console.error("retrieveFacts 실행 중 오류:", error);
+			loggers.fol.error("retrieveFacts execution error: ", { error });
 			throw error;
 		}
 	}
@@ -143,7 +144,7 @@ FOL 규칙:
 			const allFacts = await this.folStore.getAllFacts();
 			return Object.values(allFacts);
 		} catch (error) {
-			console.error("getFactsList 실행 중 오류:", error);
+			loggers.fol.error("getFactsList execution error:", { error });
 			throw error;
 		}
 	}
@@ -155,7 +156,7 @@ FOL 규칙:
 		try {
 			return await this.folStore.getAllFacts();
 		} catch (error) {
-			console.error("getFactsMap 실행 중 오류:", error);
+			loggers.fol.error("getFactsMap execution error:", { error });
 			throw error;
 		}
 	}
@@ -202,7 +203,7 @@ Facts: ${factsStr}
 
 			return responseText;
 		} catch (error) {
-			console.error("queryFacts 실행 중 오류:", error);
+			loggers.fol.error("queryFacts execution error:", { error });
 			throw error;
 		}
 	}

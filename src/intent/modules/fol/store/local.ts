@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { loggers } from "@/utils/logger.js";
 import type { Facts } from "../types/index.js";
 import { FOLStore } from "./base.js";
 
@@ -41,7 +42,7 @@ export class FOLLocalStore extends FOLStore {
 				description: description as string,
 			}));
 		} catch (error) {
-			console.error("constants.json 파일 읽기 실패:", error);
+			loggers.fol.error("Failed to load constants.json:", { error });
 			return [];
 		}
 	}
@@ -61,7 +62,7 @@ export class FOLLocalStore extends FOLStore {
 				description: description as string,
 			}));
 		} catch (error) {
-			console.error("predicates.json 파일 읽기 실패:", error);
+			loggers.fol.error("Failed to load predicates.json:", { error });
 			return [];
 		}
 	}
@@ -81,7 +82,7 @@ export class FOLLocalStore extends FOLStore {
 				description: description as string,
 			}));
 		} catch (error) {
-			console.error("facts.json 파일 읽기 실패:", error);
+			loggers.fol.error("Failed to load facts.json:", { error });
 			return [];
 		}
 	}
@@ -94,7 +95,7 @@ export class FOLLocalStore extends FOLStore {
 			const content = await fs.promises.readFile(this.intentFile, "utf8");
 			return JSON.parse(content);
 		} catch (error) {
-			console.error("intent.json 파일 읽기 실패:", error);
+			loggers.fol.error("Failed to load intent.json:", { error });
 			return {};
 		}
 	}
@@ -218,9 +219,9 @@ export class FOLLocalStore extends FOLStore {
 			intentMapping[intent] = facts.facts.map((fact) => fact.name);
 			await this.saveIntentMapping(intentMapping);
 
-			console.log(`FOL 데이터가 업데이트되었습니다 (intent: ${intent})`);
+			loggers.fol.info(`FOL data updated (intent: ${intent})`);
 		} catch (error) {
-			console.error("saveFacts 실행 중 오류:", error);
+			loggers.fol.error("saveFacts execution error:", { error });
 			throw error;
 		}
 	}
@@ -245,7 +246,9 @@ export class FOLLocalStore extends FOLStore {
 				facts: intentFacts,
 			};
 		} catch (error) {
-			console.error(`FOL 데이터 읽기 실패 (intent: ${intent}):`, error);
+			loggers.fol.error(`Failed to retrieve FOL (intent: ${intent}):`, {
+				error,
+			});
 			return null;
 		}
 	}
@@ -273,7 +276,7 @@ export class FOLLocalStore extends FOLStore {
 
 			return result;
 		} catch (error) {
-			console.error("모든 FOL 데이터 읽기 실패:", error);
+			loggers.fol.error("Failed to getAllFacts:", { error });
 			return {};
 		}
 	}
