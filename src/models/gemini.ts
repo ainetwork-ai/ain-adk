@@ -12,6 +12,7 @@ import type { A2ATool } from "@/intent/modules/a2a/tool.js";
 import type { AgentTool } from "@/intent/modules/common/tool.js";
 import { PROTOCOL_TYPE } from "@/intent/modules/common/types.js";
 import type { MCPTool } from "@/intent/modules/mcp/tool.js";
+import { loggers } from "@/utils/logger.js";
 import { BaseModel } from "./base.js";
 
 export default class GeminiModel extends BaseModel {
@@ -71,7 +72,6 @@ export default class GeminiModel extends BaseModel {
 		contents: ContentListUnion,
 		tools: FunctionDeclaration[],
 	) {
-		console.log(tools);
 		const response = await this.client.models.generateContent({
 			model: this.modelName,
 			contents,
@@ -84,7 +84,7 @@ export default class GeminiModel extends BaseModel {
 			},
 		});
 
-		console.log(response);
+		loggers.model.debug("Choose Function Response", { response });
 
 		const tool_calls = response.functionCalls?.map((value: FunctionCall) => {
 			return {
