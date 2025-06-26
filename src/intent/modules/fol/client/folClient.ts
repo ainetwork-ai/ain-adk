@@ -1,15 +1,15 @@
 import dotenv from "dotenv";
-import type { BaseModel } from "@/models/base.js";
+import type { IModel } from "@/models/base.js";
 import type { FOLStore } from "../store/index.js";
 import type { Facts } from "../types/index.js";
 
 dotenv.config();
 
 export class FOLClient {
-	private model: BaseModel<unknown, unknown>;
+	private model: IModel;
 	private folStore: FOLStore;
 
-	constructor(model: BaseModel<unknown, unknown>, folStore: FOLStore) {
+	constructor(model: IModel, folStore: FOLStore) {
 		this.model = model;
 		this.folStore = folStore;
 	}

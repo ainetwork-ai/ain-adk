@@ -9,7 +9,18 @@ export interface FetchResponse {
 	toolCalls?: ToolCall[];
 }
 
-export abstract class BaseModel<MessageType, ToolType> {
+export interface IModel {
+	generateMessages<M>(queries: string[], systemPrompt?: string): M[];
+	expandMessages<M>(messages: M[], message: string): void;
+	convertToolsToFunctions<F>(tools: AgentTool[]): F[];
+	fetch<M>(messages: M[]): Promise<FetchResponse>;
+	fetchWithContextMessage<M, F>(
+		messages: M[],
+		functions: F[],
+	): Promise<FetchResponse>;
+}
+
+export abstract class BaseModel<MessageType, FunctionType> {
 	abstract generateMessages(
 		queries: string[],
 		systemPrompt?: string,
@@ -17,12 +28,12 @@ export abstract class BaseModel<MessageType, ToolType> {
 
 	abstract expandMessages(messages: MessageType[], message: string): void;
 
-	abstract convertToolsToFunctions(tools: AgentTool[]): ToolType[];
+	abstract convertToolsToFunctions(tools: AgentTool[]): FunctionType[];
 
 	abstract fetch(messages: MessageType[]): Promise<FetchResponse>;
 
 	abstract fetchWithContextMessage(
 		messages: MessageType[],
-		tools: ToolType[],
+		functions: FunctionType[],
 	): Promise<FetchResponse>;
 }
