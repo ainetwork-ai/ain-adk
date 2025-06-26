@@ -1,9 +1,28 @@
 import type { AgentTool } from "../intent/modules/common/tool.js";
 
-export abstract class BaseModel {
-	abstract fetch(query: string, systemPrompt?: string): Promise<any>;
+export interface ToolCall {
+	name: string;
+	arguments?: Record<string, unknown>;
+}
+export interface FetchResponse {
+	content?: string;
+	toolCalls?: ToolCall[];
+}
+
+export abstract class BaseModel<MessageType, ToolType> {
+	abstract generateMessages(
+		queries: string[],
+		systemPrompt?: string,
+	): MessageType[];
+
+	abstract expandMessages(messages: MessageType[], message: string): void;
+
+	abstract convertToolsToFunctions(tools: AgentTool[]): ToolType[];
+
+	abstract fetch(messages: MessageType[]): Promise<FetchResponse>;
+
 	abstract fetchWithContextMessage(
-		messages: any[],
-		tools?: AgentTool[],
-	): Promise<any>;
+		messages: MessageType[],
+		tools: ToolType[],
+	): Promise<FetchResponse>;
 }

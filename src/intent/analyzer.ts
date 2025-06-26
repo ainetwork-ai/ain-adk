@@ -9,13 +9,13 @@ import type { MCPModule } from "./modules/mcp/index.js";
 import type { MCPTool } from "./modules/mcp/tool.js";
 
 export class IntentAnalyzer {
-	private model: BaseModel;
+	private model: BaseModel<unknown, unknown>;
 	private a2a?: A2AModule;
 	private mcp?: MCPModule;
 	private fol?: FOLClient;
 	private basePrompt?: string;
 
-	constructor(model: BaseModel) {
+	constructor(model: BaseModel<unknown, unknown>) {
 		this.model = model;
 	}
 
@@ -74,19 +74,16 @@ tool type은 tool 결과 메세지의 처음에 [Bot Called <tool_type> with arg
 </A2A_Tool>
 `;
 
-		const messages = [
-			{ role: "system", content: systemMessage.trim() },
-			{ role: "user", content: query },
-		];
+		const messages = this.model.generateMessages([query], systemMessage.trim());
 
 		const tools: AgentTool[] = [];
-
 		if (this.mcp) {
 			tools.push(...this.mcp.getTools());
 		}
 		if (this.a2a) {
 			tools.push(...(await this.a2a.getTools()));
 		}
+		const functions = this.model.convertToolsToFunctions(tools);
 
 		const processList: string[] = [];
 		let finalMessage = "";
@@ -95,30 +92,28 @@ tool type은 tool 결과 메세지의 처음에 [Bot Called <tool_type> with arg
 		while (true) {
 			const response = await this.model.fetchWithContextMessage(
 				messages,
-				tools,
+				functions,
 			);
 			didCallTool = false;
 
 			loggers.intent.debug("messages", { messages });
 
-			// TODO: content, tool_calls formatting
-			const { content, tool_calls } = response;
+			const { content, toolCalls } = response;
 
 			loggers.intent.debug("content", { content });
-			loggers.intent.debug("tool_calls", { ...tool_calls });
+			loggers.intent.debug("tool_calls", { ...toolCalls });
 
-			if (tool_calls) {
+			if (toolCalls) {
 				const messagePayload = this.a2a?.getMessagePayload(query, threadId);
 
-				for (const tool of tool_calls) {
-					const calledFunction = tool.function;
-					const toolName = calledFunction.name;
+				for (const toolCall of toolCalls) {
+					const toolName = toolCall.name;
 					didCallTool = true;
 					const selectedTool = tools.filter((tool) => tool.id === toolName)[0];
 
 					let toolResult = "";
 					if (this.mcp && selectedTool.protocol === PROTOCOL_TYPE.MCP) {
-						const toolArgs = JSON.parse(calledFunction.arguments) as
+						const toolArgs = toolCall.arguments as
 							| { [x: string]: unknown }
 							| undefined;
 						loggers.intent.debug("MCP tool call", { toolName, toolArgs });
@@ -147,14 +142,11 @@ tool type은 tool 결과 메세지의 처음에 [Bot Called <tool_type> with arg
 					loggers.intent.debug("toolResult", { toolResult });
 
 					processList.push(toolResult);
-					messages.push({
-						role: "user",
-						content: toolResult,
-					});
+					this.model.expandMessages(messages, toolResult);
 				}
 			} else if (content) {
 				processList.push(content);
-				finalMessage = response;
+				finalMessage = content;
 			}
 
 			if (!didCallTool) break;
