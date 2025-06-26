@@ -4,12 +4,10 @@ import {
 	type FunctionDeclaration,
 	GoogleGenAI,
 } from "@google/genai";
-import type { ChatCompletionMessageToolCall } from "openai/resources";
 import type { A2ATool } from "@/intent/modules/a2a/tool.js";
 import type { AgentTool } from "@/intent/modules/common/tool.js";
 import { PROTOCOL_TYPE } from "@/intent/modules/common/types.js";
 import type { MCPTool } from "@/intent/modules/mcp/tool.js";
-import { loggers } from "@/utils/logger.js";
 import { BaseModel, type FetchResponse, type ToolCall } from "./base.js";
 
 export default class GeminiModel extends BaseModel<
@@ -64,18 +62,6 @@ export default class GeminiModel extends BaseModel<
 				},
 			});
 
-			loggers.model.debug("Choose Function Response", { response });
-
-			const tool_calls = response.functionCalls?.map((value: FunctionCall) => {
-				return {
-					id: value.id,
-					function: {
-						arguments: JSON.stringify(value.args || {}),
-						name: value.name,
-					},
-					type: "function",
-				} as ChatCompletionMessageToolCall;
-			});
 			const { text, functionCalls } = response;
 			const hasName = (
 				value: FunctionCall,
