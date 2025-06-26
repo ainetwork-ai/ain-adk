@@ -1,21 +1,21 @@
 import {
-	type ContentListUnion,
+	type Content,
 	type FunctionCall,
 	type FunctionDeclaration,
 	GoogleGenAI,
 } from "@google/genai";
-import type {
-	ChatCompletionMessageParam,
-	ChatCompletionMessageToolCall,
-} from "openai/resources";
+import type { ChatCompletionMessageToolCall } from "openai/resources";
 import type { A2ATool } from "@/intent/modules/a2a/tool.js";
 import type { AgentTool } from "@/intent/modules/common/tool.js";
 import { PROTOCOL_TYPE } from "@/intent/modules/common/types.js";
 import type { MCPTool } from "@/intent/modules/mcp/tool.js";
 import { loggers } from "@/utils/logger.js";
-import { BaseModel } from "./base.js";
+import { BaseModel, type FetchResponse, type ToolCall } from "./base.js";
 
-export default class GeminiModel extends BaseModel {
+export default class GeminiModel extends BaseModel<
+	Content,
+	FunctionDeclaration
+> {
 	private client: GoogleGenAI;
 	private modelName: string;
 
@@ -25,93 +25,89 @@ export default class GeminiModel extends BaseModel {
 		this.modelName = modelName;
 	}
 
-	async fetch(query: string, systemPrompt?: string) {
-		const messages: ChatCompletionMessageParam[] = [
-			{ role: "system", content: (systemPrompt || "").trim() },
-			{ role: "user", content: query },
-		];
+	generateMessages(queries: string[], systemPrompt?: string): Content[] {
+		const messages: Content[] = !systemPrompt
+			? []
+			: [{ role: "model", parts: [{ text: systemPrompt.trim() }] }];
+		const userContent: Content[] = queries.map((query: string) => {
+			return { role: "user", parts: [{ text: query }] };
+		});
+		return messages.concat(userContent);
+	}
 
-		return await this.chat(messages);
+	expandMessages(messages: Content[], message: string): void {
+		messages.push({
+			role: "user",
+			parts: [{ text: message }],
+		});
+	}
+
+	async fetch(messages: Content[]): Promise<FetchResponse> {
+		const response = await this.client.models.generateContent({
+			model: this.modelName,
+			contents: messages,
+		});
+
+		return { content: response.text };
 	}
 
 	async fetchWithContextMessage(
-		messages: ChatCompletionMessageParam[],
-		tools: AgentTool[],
-	): Promise<any> {
-		let functions: FunctionDeclaration[] = [];
-		const contents: ContentListUnion = messages.map((message) => {
-			const elem = {} as any;
-			elem.role = message.role === "system" ? "model" : "user";
-			if (typeof message.content === "string") {
-				elem.parts = [{ text: message.content as string }];
-			}
-			//TODO: support other message content type
-			return elem;
-		});
-
-		if (tools && tools.length > 0) {
-			functions = this.convertToolsToFunctions(tools);
-		}
-
+		messages: Content[],
+		functions: FunctionDeclaration[],
+	): Promise<FetchResponse> {
 		if (functions.length > 0) {
-			return await this.chooseFunctions(contents, functions);
-		}
-		return await this.chat(contents);
-	}
-
-	async chat(contents: ContentListUnion) {
-		const response = await this.client.models.generateContent({
-			model: this.modelName,
-			contents,
-		});
-
-		return response.text;
-	}
-
-	async chooseFunctions(
-		contents: ContentListUnion,
-		tools: FunctionDeclaration[],
-	) {
-		const response = await this.client.models.generateContent({
-			model: this.modelName,
-			contents,
-			config: {
-				tools: [
-					{
-						functionDeclarations: tools,
-					},
-				],
-			},
-		});
-
-		loggers.model.debug("Choose Function Response", { response });
-
-		const tool_calls = response.functionCalls?.map((value: FunctionCall) => {
-			return {
-				id: value.id,
-				function: {
-					arguments: JSON.stringify(value.args || {}),
-					name: value.name,
+			const response = await this.client.models.generateContent({
+				model: this.modelName,
+				contents: messages,
+				config: {
+					tools: [{ functionDeclarations: functions }],
 				},
-				type: "function",
-			} as ChatCompletionMessageToolCall;
-		});
+			});
 
-		return {
-			content: response.text,
-			tool_calls,
-		};
+			loggers.model.debug("Choose Function Response", { response });
+
+			const tool_calls = response.functionCalls?.map((value: FunctionCall) => {
+				return {
+					id: value.id,
+					function: {
+						arguments: JSON.stringify(value.args || {}),
+						name: value.name,
+					},
+					type: "function",
+				} as ChatCompletionMessageToolCall;
+			});
+			const { text, functionCalls } = response;
+			const hasName = (
+				value: FunctionCall,
+			): value is FunctionCall & { name: string } => {
+				return value.name !== undefined;
+			};
+			const toolCalls: ToolCall[] | undefined = functionCalls
+				?.filter(hasName)
+				.map((value) => {
+					return {
+						name: value.name,
+						arguments: value.args,
+					};
+				});
+
+			return {
+				content: text,
+				toolCalls,
+			};
+		}
+		return await this.fetch(messages);
 	}
 
 	convertToolsToFunctions(tools: AgentTool[]): FunctionDeclaration[] {
-		const newTools: FunctionDeclaration[] = [];
+		const functions: FunctionDeclaration[] = [];
 		for (const tool of tools) {
 			if (!tool.enabled) {
 				continue;
 			}
 			if (tool.protocol === PROTOCOL_TYPE.MCP) {
 				const { mcpTool, id } = tool as MCPTool;
-				newTools.push({
+				functions.push({
 					name: id,
 					description: mcpTool.description,
 					parametersJsonSchema: mcpTool.inputSchema,
@@ -119,12 +115,12 @@ export default class GeminiModel extends BaseModel {
 			} else {
 				// PROTOCOL_TYPE.A2A
 				const { id, card } = tool as A2ATool;
-				newTools.push({
+				functions.push({
 					name: id,
 					description: card.description,
 				});
 			}
 		}
-		return newTools;
+		return functions;
 	}
 }
