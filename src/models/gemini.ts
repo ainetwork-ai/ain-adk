@@ -34,12 +34,11 @@ export default class GeminiModel extends BaseModel<
 		return messages.concat(userContent);
 	}
 
-	expandMessages(messages: Content[], message: string): Content[] {
+	expandMessages(messages: Content[], message: string): void {
 		messages.push({
 			role: "user",
 			parts: [{ text: message }],
 		});
-		return messages;
 	}
 
 	async fetch(messages: Content[]): Promise<FetchResponse> {
