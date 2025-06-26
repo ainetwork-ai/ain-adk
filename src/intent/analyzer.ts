@@ -53,24 +53,37 @@ export class IntentAnalyzer {
 		const systemMessage = `
 ${this.basePrompt}
 
-유저의 질문에 대해 tool을 사용할 수 있다.
+유저의 질문에 대해 tool 을 사용할 수 있다.
 
 tool에는 MCP_Tool, A2A_Tool 두 가지 <tool_type> 이 존재한다.
 tool type은 tool 결과 메세지의 처음에 [Bot Called <tool_type> with args <tool_args>] 이 포함됨을 통해 알 수 있다.
+tool 실행 후에는 반드시 최종 응답 메시지를 작성해야한다.
+
 각 <tool_type> 에 대한 사용 지침은 아래를 참고한다.
 
 <MCP_Tool>
-    ${
-			// FIXME: Need mcp specified prompt.
-			""
-		}
-    tool 사용에 실패하면 더이상 tool을 호출하지 않고 답변을 생성한다.
+    tools 를 통해 MCP tool 을 사용한다.
+    MCP tool 의 이름은 다음과 같이 구성되어있다. 
+      {MCP_NAME}_{TOOL_NAME}
+      예를 들어, "notionApi" mcp의 tool 이름은 아래와 같다.
+        notionApi_API-post-search
+
+    각 MCP_NAME 마다 <{MCP_NAME}> 아래에서 별도의 규칙을 지정할 수 있다. 
+
+    <notionApi>
+      notionApi 검색에 대한 요청은 반드시 parameter 없는 API-post-search을 선행하여 키워드와 관련된 post 혹은 database_id를 찾고, 그에 따른 검색을 재수행하여 정보를 얻어야한다.
+      만약 키워드로 post-search에 실패한 경우 영어 또는 한글 로 키워드를 번역하여 한 번 더 검색하고, 그럼에도 실패한 경우에 찾을수 없다는 메세지를 보내야한다.
+      notionApi tool을 이용한 답변 앞에는 성공 여부와 관계없이 반드시 [notion] 을 붙인다.
+    </notionApi>
 </MCP_Tool>
 
 <A2A_Tool>
-    A2A_Tool은 나와 다른 정보를 가진 Agent에게 query를 보내고 답변을 받는 tool이다.
+    A2A_Tool은 나와 다른 정보를 가진 Agent에게 query를 보내고 답변을 받는 tool이다. 어떤 Agent 를 통해 답변 받았는지 반드시 표기해야한다.
     A2A_Tool을 통한 결과는 요청한 Agent에서 충분이 숙고한 후 생성한 텍스트로, 해당 내용에 대해서는 더 이상 발전시킬 수 없는 완성된 결과물이다.
     이에 대해 같은 질문으로 내용을 보충하거나 새로운 tool을 사용하지 않아도 된다.
+
+    [A2A Call by <AGENT_NAME>] 으로 시작하는 텍스트가 요청으로 들어온 경우 다른 Agent에서 A2A_Tool 로써 요청한 query이다.
+    이 경우 다른 A2A_Tool 을 사용하지 않고 MCP_Tool 만 사용하여 답변을 생성해야한다.
 </A2A_Tool>
 `;
 
