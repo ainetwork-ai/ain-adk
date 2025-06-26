@@ -1,4 +1,4 @@
-import type { IModel } from "@/models/base.js";
+import type { IBaseModel } from "@/models/base.js";
 import { loggers } from "@/utils/logger.js";
 import type { A2AModule } from "./modules/a2a/index.js";
 import type { A2ATool } from "./modules/a2a/tool.js";
@@ -9,13 +9,13 @@ import type { MCPModule } from "./modules/mcp/index.js";
 import type { MCPTool } from "./modules/mcp/tool.js";
 
 export class IntentAnalyzer {
-	private model: IModel;
+	private model: IBaseModel;
 	private a2a?: A2AModule;
 	private mcp?: MCPModule;
 	private fol?: FOLClient;
 	private basePrompt?: string;
 
-	constructor(model: IModel) {
+	constructor(model: IBaseModel) {
 		this.model = model;
 	}
 
