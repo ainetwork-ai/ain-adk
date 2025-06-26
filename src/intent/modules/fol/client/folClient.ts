@@ -6,10 +6,10 @@ import type { Facts } from "../types/index.js";
 dotenv.config();
 
 export class FOLClient {
-	private model: BaseModel;
+	private model: BaseModel<unknown, unknown>;
 	private folStore: FOLStore;
 
-	constructor(model: BaseModel, folStore: FOLStore) {
+	constructor(model: BaseModel<unknown, unknown>, folStore: FOLStore) {
 		this.model = model;
 		this.folStore = folStore;
 	}
@@ -67,16 +67,16 @@ FOL 규칙:
 - 각 항목에는 의미있는 설명을 포함해주세요
 - 기존 정보와 중복되지 않도록 주의`;
 
-			const response = await this.model.fetch(prompt);
+			const messages = this.model.generateMessages([prompt]);
+			const response = await this.model.fetch(messages);
 
 			console.log("debug", response);
 
 			// AI 응답에서 텍스트 추출 (응답이 객체인 경우 content 프로퍼티 사용)
-			const responseText =
-				typeof response === "string" ? response : response.content;
+			const responseText = response.content;
 
 			// AI 응답에서 JSON 추출
-			const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+			const jsonMatch = responseText?.match(/\{[\s\S]*\}/);
 			if (!jsonMatch) {
 				throw new Error("AI 응답에서 유효한 JSON을 찾을 수 없습니다");
 			}
@@ -194,11 +194,11 @@ Facts: ${factsStr}
 위의 FOL 데이터를 논리적으로 분석하여 질문에 대한 답변을 제공해주세요.
 각 항목은 "이름: 설명" 형태로 구성되어 있습니다.`;
 
-			const response = await this.model.fetch(prompt);
+			const messages = this.model.generateMessages([prompt]);
+			const response = await this.model.fetch(messages);
 
 			// AI 응답에서 텍스트 추출 (응답이 객체인 경우 content 프로퍼티 사용)
-			const responseText =
-				typeof response === "string" ? response : response.content;
+			const responseText = response.content || "";
 
 			return responseText;
 		} catch (error) {
