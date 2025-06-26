@@ -73,7 +73,7 @@ FOL 규칙:
 			console.log("debug", response);
 
 			// AI 응답에서 텍스트 추출 (응답이 객체인 경우 content 프로퍼티 사용)
-			const responseText = response.content;
+			const responseText = response.content || "";
 
 			// AI 응답에서 JSON 추출
 			const jsonMatch = responseText?.match(/\{[\s\S]*\}/);
