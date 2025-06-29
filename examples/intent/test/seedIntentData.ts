@@ -1,6 +1,6 @@
 // 목적: 예시 intents 및 triggerSentences를 DB에 삽입하는 seed 스크립트
 // 주의: 기존 데이터가 있으면 삭제하고 새로 삽입합니다.
-// 실행: npx tsx examples/intent/seedIntentData.ts
+// 실행: npx tsx examples/intent/test/seedIntentData.ts
 
 import "dotenv/config";
 import mongoose from "mongoose";

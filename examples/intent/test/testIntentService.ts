@@ -1,6 +1,6 @@
 // 목적: DB 연결 및 IntentService의 findAllWithTriggerSentences()가 정상 동작하는지 테스트합니다.
 // 실행 방법: 환경변수(MONGODB_URI 등) 설정 후 아래 명령어로 실행하세요.
-//   npx tsx examples/intent/testIntentService.ts
+//   npx tsx examples/intent/test/testIntentService.ts
 import "dotenv/config";
 import mongoose from "mongoose";
 import { IntentService } from "../service/intent.service.js";
