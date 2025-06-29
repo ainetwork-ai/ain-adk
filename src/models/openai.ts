@@ -1,27 +1,27 @@
 import { AzureOpenAI as AzureOpenAIClient } from "openai";
 import type {
-	ChatCompletionMessage,
-	ChatCompletionMessageParam,
+	ChatCompletionMessageParam as CCMessageParam,
+	ChatCompletionMessageToolCall,
 	ChatCompletionTool,
 } from "openai/resources";
 import type { A2ATool } from "@/intent/modules/a2a/tool.js";
 import { PROTOCOL_TYPE } from "@/intent/modules/common/types.js";
 import type { MCPTool } from "@/intent/modules/mcp/tool.js";
-import { loggers } from "@/utils/logger.js";
 import type { AgentTool } from "../intent/modules/common/tool.js";
-import { BaseModel } from "./base.js";
+import { BaseModel, type FetchResponse, type ToolCall } from "./base.js";
 
-export default class AzureOpenAI extends BaseModel {
+export default class AzureOpenAI extends BaseModel<
+	CCMessageParam,
+	ChatCompletionTool
+> {
 	private client: AzureOpenAIClient;
 	private modelName: string;
-	private basePrompt: string;
 
 	constructor(
 		baseUrl: string,
 		apiKey: string,
 		apiVersion: string,
 		modelName: string,
-		basePrompt: string,
 	) {
 		super();
 		this.client = new AzureOpenAIClient({
@@ -30,79 +30,77 @@ export default class AzureOpenAI extends BaseModel {
 			apiVersion: apiVersion,
 		});
 		this.modelName = modelName;
-		this.basePrompt = basePrompt;
 	}
 
-	async fetch(userMessage: string, intentPrompt?: string) {
-		const systemPrompt = `
-    ${this.basePrompt}
+	generateMessages(queries: string[], systemPrompt?: string): CCMessageParam[] {
+		const messages: CCMessageParam[] = !systemPrompt
+			? []
+			: [{ role: "system", content: systemPrompt.trim() }];
+		const userContent: CCMessageParam[] = queries.map((query: string) => {
+			return { role: "user", content: query };
+		});
+		return messages.concat(userContent);
+	}
 
-    <Knowledge>
-    ${
-			// NOTE(yoojin): Temporary add intent.
-			intentPrompt
-		}
-    </Knowledge>
-    `;
+	expandMessages(messages: CCMessageParam[], message: string): void {
+		messages.push({
+			role: "user",
+			content: message,
+		});
+	}
 
-		const messages: ChatCompletionMessageParam[] = [
-			{ role: "system", content: systemPrompt.trim() },
-			{ role: "user", content: userMessage },
-		];
+	async fetch(messages: CCMessageParam[]): Promise<FetchResponse> {
+		const response = await this.client.chat.completions.create({
+			model: this.modelName,
+			messages,
+		});
 
-		return await this.chat(messages);
+		return {
+			content: response.choices[0].message.content || undefined,
+		};
 	}
 
 	async fetchWithContextMessage(
-		messages: ChatCompletionMessageParam[],
-		tools?: AgentTool[],
-	): Promise<ChatCompletionMessage> {
-		let functions: ChatCompletionTool[] = [];
-
-		if (tools && tools.length > 0) {
-			functions = await this.convertToolsToFunctions(tools);
-		}
-
-		if (Object.keys(functions).length > 0) {
-			return await this.chooseFunctions(messages, functions);
-		}
-		return await this.chat(messages);
-	}
-
-	async chat(messages: ChatCompletionMessageParam[]) {
-		const response = await this.client.chat.completions.create({
-			model: this.modelName,
-			messages,
-		});
-
-		return response.choices?.[0]?.message;
-	}
-
-	async chooseFunctions(
-		messages: ChatCompletionMessageParam[],
+		messages: CCMessageParam[],
 		functions: ChatCompletionTool[],
-	) {
-		const response = await this.client.chat.completions.create({
-			model: this.modelName,
-			messages,
-			tools: functions,
-			tool_choice: "auto",
-		});
+	): Promise<FetchResponse> {
+		if (functions.length > 0) {
+			const response = await this.client.chat.completions.create({
+				model: this.modelName,
+				messages,
+				tools: functions,
+				tool_choice: "auto",
+			});
 
-		return response.choices?.[0]?.message;
+			const { content, tool_calls } = response.choices[0].message;
+
+			const toolCalls: ToolCall[] | undefined = tool_calls?.map(
+				(value: ChatCompletionMessageToolCall) => {
+					return {
+						name: value.function.name,
+						// FIXME: value.function.arguments could not be a valid JSON
+						arguments: JSON.parse(value.function.arguments),
+					};
+				},
+			);
+
+			return {
+				content: content || undefined,
+				toolCalls,
+			};
+		}
+		return await this.fetch(messages);
 	}
 
-	async convertToolsToFunctions(
-		tools: AgentTool[],
-	): Promise<ChatCompletionTool[]> {
-		const newTools: ChatCompletionTool[] = [];
+	convertToolsToFunctions(tools: AgentTool[]): ChatCompletionTool[] {
+		const functions: ChatCompletionTool[] = [];
 		for (const tool of tools) {
 			if (!tool.enabled) {
 				continue;
 			}
 			if (tool.protocol === PROTOCOL_TYPE.MCP) {
 				const { mcpTool, id } = tool as MCPTool;
-				newTools.push({
+				functions.push({
 					type: "function",
 					function: {
 						name: id,
@@ -112,23 +110,16 @@ export default class AzureOpenAI extends BaseModel {
 				});
 			} else {
 				// PROTOCOL_TYPE.A2A
-				const { client, id } = tool as A2ATool;
-				try {
-					// FIXME: inefficient
-					const card = await client.getAgentCard();
-					newTools.push({
-						type: "function",
-						function: {
-							name: id,
-							description: card.description,
-						},
-					});
-				} catch (_error) {
-					loggers.model.warn(`No response from Agent ${id}. Ignoring...`);
-					tool.disable();
-				}
+				const { id, card } = tool as A2ATool;
+				functions.push({
+					type: "function",
+					function: {
+						name: id,
+						description: card.description,
+					},
+				});
 			}
 		}
-		return newTools;
+		return functions;
 	}
 }
