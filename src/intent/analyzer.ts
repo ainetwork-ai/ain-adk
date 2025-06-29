@@ -27,9 +27,9 @@ export class IntentAnalyzer {
 	private intents: Intent[];
 	private basePrompt?: string;
 
-	constructor(model: IBaseModel) {
+	constructor(model: IBaseModel, intents: Intent[]) {
 		this.model = model;
-		this.intents = [];
+		this.intents = intents;
 	}
 
 	public addMCPModule(mcp: MCPModule): void {
