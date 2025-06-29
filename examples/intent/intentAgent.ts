@@ -2,75 +2,34 @@ import "dotenv/config";
 
 import { getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { AINAgent } from "../../src/ainagent.js";
-import { Intent, IntentAnalyzer } from "../../src/intent/analyzer.js";
+import { IntentAnalyzer } from "../../src/intent/analyzer.js";
 import { MCPModule } from "../../src/intent/modules/mcp/index.js";
 import AzureOpenAI from "../../src/models/openai.js";
 import { AINAgentInfo } from "../../src/types/index.js";
+import mongoose from "mongoose";
+import { IntentService } from "./service/intent.service";
+import { ADKIntent, IntentModule } from "../../src/intent/modules/intent/types.js";
 
-
-function findAllIntentsFromDB() {
-    return [
-        {
-            id: "1",
-            name: "search_notion",
-            description: "search notion",
-        },
-        {
-            id: "2",
-            name: "call_design_team",
-            description: "call design team",
-        },
-    ];
-}
-
-function findAllIntentTriggerSentencesFromDB() {
-    return [
-        {
-            intentId: "1",
-            sentence: "노션에서 찾아줘",
-        },
-        {
-            intentId: "1",
-            sentence: "멤버들 작업목록 찾아줘",
-        },
-        {
-            intentId: "2",
-            sentence: "디자인팀 멤버들 찾아줘",
-        },
-        {
-            intentId: "2",
-            sentence: "지금 디자인팀은 뭐하고있어?",
-        },
-    ];
-}
-
-function getIntents() {
-    // 데이터베이스에서 데이터 가져오기
-    const intents = findAllIntentsFromDB();
-    const intentTriggerSentences = findAllIntentTriggerSentencesFromDB();
-
-    // adk intents interface형식으로 변환
-    const mergedIntents: Intent[] = intents.map((intent) => ({
-        ...intent,
-        triggerSentences: intentTriggerSentences
-            .filter((ts) => ts.intentId === intent.id)
-            .map((ts) => ts.sentence),
-    }));
-
-    return mergedIntents;
-}
+// DB 연결
+await mongoose.connect(process.env.MONGODB_URI!);
 
 const model = new AzureOpenAI(
     process.env.AZURE_OPENAI_PTU_BASE_URL!,
     process.env.AZURE_OPENAI_PTU_API_KEY!,
     process.env.AZURE_OPENAI_PTU_API_VERSION!,
-    process.env.AZURE_OPENAI_DEPLOYMENT_NAME!,
-    "",
+    process.env.AZURE_OPENAI_DEPLOYMENT_NAME!
 );
 
-const intents = getIntents();
+// IntentModule 구현체
+class DBIntentModule implements IntentModule {
+    private service = new IntentService();
+    async getIntents(): Promise<ADKIntent[]> {
+        return this.service.findAllWithTriggerSentences();
+    }
+}
 
-const intentAnalyzer = new IntentAnalyzer(model, intents);
+const intentAnalyzer = new IntentAnalyzer(model);
+intentAnalyzer.setIntentModule(new DBIntentModule());
 
 const mcp = new MCPModule();
 

@@ -1,22 +1,17 @@
-import type { IBaseModel } from "@/models/base.js";
-import { loggers } from "@/utils/logger.js";
 import type { A2AModule } from "./modules/a2a/index.js";
 import type { A2ATool } from "./modules/a2a/tool.js";
 import type { AgentTool } from "./modules/common/tool.js";
-import { PROTOCOL_TYPE } from "./modules/common/types.js";
 import type { FOLClient } from "./modules/fol/index.js";
 import type { MCPModule } from "./modules/mcp/index.js";
 import type { MCPTool } from "./modules/mcp/tool.js";
+import type { ADKIntent, IntentModule } from "./modules/intent/types.js";
+import type { IBaseModel } from "@/models/base.js";
+import { loggers } from "@/utils/logger.js";
+import { PROTOCOL_TYPE } from "./modules/common/types.js";
 
 export interface Chat {
 	user: string;
 	assistant?: string;
-}
-
-export interface Intent {
-	name: string;
-	description: string;
-	triggerSentences: string[];
 }
 
 export class IntentAnalyzer {
@@ -24,12 +19,11 @@ export class IntentAnalyzer {
 	private a2a?: A2AModule;
 	private mcp?: MCPModule;
 	private fol?: FOLClient;
-	private intents: Intent[];
 	private basePrompt?: string;
+	private intentModule?: IntentModule;
 
-	constructor(model: IBaseModel, intents: Intent[]) {
+	constructor(model: IBaseModel) {
 		this.model = model;
-		this.intents = intents;
 	}
 
 	public addMCPModule(mcp: MCPModule): void {
@@ -40,7 +34,10 @@ export class IntentAnalyzer {
 		this.a2a = a2a;
 	}
 
-	private async inferenceIntentName(query: string): Promise<string> {
+	private async inferenceIntentName(
+		query: string,
+		intents: ADKIntent[],
+	): Promise<string> {
 		const result = await this.model.fetchWithContextMessage(
 			[
 				{
@@ -48,13 +45,13 @@ export class IntentAnalyzer {
 					content: `
 				당신은 인텐트 분류기이다. 주어진 인텐트 설명에 따라 유저 쿼리에 대해 적절한 인텐트 선택하여 반환해야한다.
 				반환가능한 인텐트 리스트와 설명은 다음과 같다. 
-				${this.intents
+				${intents
 					.map(
 						(intent) =>
 							`
-						name: ${intent.description}
+						name: ${intent.name}
 						desc: ${intent.description}
-						triggerSentences: ${intent.triggerSentences.map((sentence) => `- ${sentence}`).join("\n")}`,
+						예시 문장: ${intent.triggerSentences.map((sentence: string) => `- ${sentence}`).join("\n")}`,
 					)
 					.join("\n")}
 				
@@ -75,8 +72,10 @@ export class IntentAnalyzer {
 		return intentName;
 	}
 
+	// biome-ignore lint/correctness/noUnusedFunctionParameters: <history>
 	public async classifyIntent(query: string, history: Chat[]): Promise<string> {
-		return this.inferenceIntentName(query);
+		const intents = (await this.intentModule?.getIntents()) ?? [];
+		return this.inferenceIntentName(query, intents);
 	}
 
 	public addFOLModule(fol: FOLClient): void {
@@ -87,10 +86,16 @@ export class IntentAnalyzer {
 		this.basePrompt = prompt;
 	}
 
+	public setIntentModule(module: IntentModule) {
+		this.intentModule = module;
+	}
+
 	public async handleQuery(query: string): Promise<any> {
 		const threadId = "aaaa-bbbb-cccc-dddd"; // FIXME
 		// 1. intent triggering
 		// TODO: Extract the user's intent using query, context, and FOL
+
+		// biome-ignore lint/correctness/noUnusedVariables: <intentName>
 		const intentName = await this.classifyIntent(query, []); // FIXME
 		// fulfillmentInfo = await this.getFulfillmentInfo(intent)???
 		// fulfillmentInfo.prompt, fulfillmentInfo.tools, fulfillmentInfo.a2a ...
