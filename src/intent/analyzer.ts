@@ -35,8 +35,8 @@ export class IntentAnalyzer {
 	}
 
 	private async inferenceIntentName(
-		query: string,
 		intents: ADKIntent[],
+		query: string,
 	): Promise<string> {
 		const result = await this.model.fetchWithContextMessage(
 			[
@@ -55,10 +55,10 @@ export class IntentAnalyzer {
 					)
 					.join("\n")}
 				
-				반드시 주어진 "인텐트 이름" 만 반환해야한다.
+				반드시 주어진 <인텐트 이름> 만 반환해야한다.
 				예: 
-				query: "오늘 날씨 어때?"
-				response: "find_weather"
+				query: 오늘 날씨 어때?
+				response: find_weather
 				`,
 				},
 				{ role: "user", content: `${query}\n\n` },
@@ -66,16 +66,21 @@ export class IntentAnalyzer {
 			[],
 		);
 		const intentName = result.content;
-		if (!intentName) {
-			throw new Error("Intent not found");
-		}
-		return intentName;
+		return intentName ?? "default";
 	}
 
-	// biome-ignore lint/correctness/noUnusedFunctionParameters: <history>
-	public async classifyIntent(query: string, history: Chat[]): Promise<string> {
-		const intents = (await this.intentModule?.getIntents()) ?? [];
-		return this.inferenceIntentName(query, intents);
+	public async classifyIntent(
+		intents: ADKIntent[],
+		query: string,
+		history: Chat[],
+	): Promise<ADKIntent> {
+		const intentName = await this.inferenceIntentName(intents, query);
+		console.log("intentName", intentName);
+		const intent = intents.find((intent) => intent.name === intentName);
+		if (!intent) {
+			throw new Error(`Intent not found: ${intentName}`);
+		}
+		return intent;
 	}
 
 	public addFOLModule(fol: FOLClient): void {
@@ -95,8 +100,8 @@ export class IntentAnalyzer {
 		// 1. intent triggering
 		// TODO: Extract the user's intent using query, context, and FOL
 
-		// biome-ignore lint/correctness/noUnusedVariables: <intentName>
-		const intentName = await this.classifyIntent(query, []); // FIXME
+		const intents = (await this.intentModule?.getIntents()) ?? [];
+		const triggeredIntent = await this.classifyIntent(intents, query, []);
 		// fulfillmentInfo = await this.getFulfillmentInfo(intent)???
 		// fulfillmentInfo.prompt, fulfillmentInfo.tools, fulfillmentInfo.a2a ...
 
@@ -104,6 +109,16 @@ export class IntentAnalyzer {
 		// Using the extracted intent, generate a response.
 		const response = (await this.generate(query, threadId)).response;
 
+		// 3. intent triggering info
+		await this.intentModule?.saveIntentTriggeringInfo({
+			context: {
+				messages: [
+					{ role: "user", content: query },
+					{ role: "assistant", content: response },
+				],
+			},
+			intent: triggeredIntent,
+		});
 		return response;
 	}
 

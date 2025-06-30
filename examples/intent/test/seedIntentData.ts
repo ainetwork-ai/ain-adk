@@ -38,6 +38,10 @@ async function main() {
       name: "onboard_new_onprem_server",
       description: "ComCom에서 신규 온프렘(사내) 서버를 구축하거나 온보딩할 때",
     },
+    {
+      name: "default",
+      description: "기본 인텐트, 특별히 관련이 없는 인텐트일 때 반환하는 용도",
+    },
   ];
 
   // 2. 인텐트 삽입

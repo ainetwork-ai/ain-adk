@@ -8,7 +8,8 @@ import AzureOpenAI from "../../src/models/openai.js";
 import { AINAgentInfo } from "../../src/types/index.js";
 import mongoose from "mongoose";
 import { IntentService } from "./service/intent.service";
-import { ADKIntent, IntentModule } from "../../src/intent/modules/intent/types.js";
+import { ADKIntent, IntentModule, ADKIntentTriggeringInfo } from "../../src/intent/modules/intent/types.js";
+import { IntentTriggeringInfoModel } from "./model/intentTriggeringInfo.model";
 
 // DB 연결
 await mongoose.connect(process.env.MONGODB_URI!);
@@ -23,8 +24,14 @@ const model = new AzureOpenAI(
 // IntentModule 구현체
 class DBIntentModule implements IntentModule {
     private service = new IntentService();
+    private intentTriggeringInfoModel = IntentTriggeringInfoModel;
+
     async getIntents(): Promise<ADKIntent[]> {
         return this.service.findAllWithTriggerSentences();
+    }
+
+    async saveIntentTriggeringInfo(info: ADKIntentTriggeringInfo): Promise<void> {
+        await this.intentTriggeringInfoModel.create(info);
     }
 }
 
@@ -39,7 +46,7 @@ await mcp.addMCPConfig({
         args: ["-y", "@notionhq/notion-mcp-server"],
         env: {
             ...getDefaultEnvironment(),
-            OPENAPI_MCP_HEADERS: `{\"Authorization\": \"Bearer ntn_${process.env.NOTION_API_KEY}\", \"Notion-Version\": \"2022-06-28\" }`,
+            OPENAPI_MCP_HEADERS: `{"Authorization": "Bearer ntn_${process.env.NOTION_API_KEY}", "Notion-Version": "2022-06-28" }`,
         },
     },
 });
