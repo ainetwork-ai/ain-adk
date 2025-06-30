@@ -1,12 +1,18 @@
-import type { IBaseModel } from "@/models/base.js";
-import { loggers } from "@/utils/logger.js";
 import type { A2AModule } from "./modules/a2a/index.js";
 import type { A2ATool } from "./modules/a2a/tool.js";
 import type { AgentTool } from "./modules/common/tool.js";
-import { PROTOCOL_TYPE } from "./modules/common/types.js";
 import type { FOLClient } from "./modules/fol/index.js";
 import type { MCPModule } from "./modules/mcp/index.js";
 import type { MCPTool } from "./modules/mcp/tool.js";
+import type { ADKIntent, IntentModule } from "./modules/intent/types.js";
+import type { IBaseModel } from "@/models/base.js";
+import { loggers } from "@/utils/logger.js";
+import { PROTOCOL_TYPE } from "./modules/common/types.js";
+
+export interface Chat {
+	user: string;
+	assistant?: string;
+}
 
 export class IntentAnalyzer {
 	private model: IBaseModel;
@@ -14,6 +20,7 @@ export class IntentAnalyzer {
 	private mcp?: MCPModule;
 	private fol?: FOLClient;
 	private basePrompt?: string;
+	private intentModule?: IntentModule;
 
 	constructor(model: IBaseModel) {
 		this.model = model;
@@ -27,6 +34,55 @@ export class IntentAnalyzer {
 		this.a2a = a2a;
 	}
 
+	private async inferenceIntentName(
+		intents: ADKIntent[],
+		query: string,
+	): Promise<string> {
+		const result = await this.model.fetchWithContextMessage(
+			[
+				{
+					role: "system",
+					content: `
+				당신은 인텐트 분류기이다. 주어진 인텐트 설명에 따라 유저 쿼리에 대해 적절한 인텐트 선택하여 반환해야한다.
+				반환가능한 인텐트 리스트와 설명은 다음과 같다. 
+				${intents
+					.map(
+						(intent) =>
+							`
+						name: ${intent.name}
+						desc: ${intent.description}
+						예시 문장: ${intent.triggerSentences.map((sentence: string) => `- ${sentence}`).join("\n")}`,
+					)
+					.join("\n")}
+				
+				반드시 주어진 <인텐트 이름> 만 반환해야한다.
+				예: 
+				query: 오늘 날씨 어때?
+				response: find_weather
+				`,
+				},
+				{ role: "user", content: `${query}\n\n` },
+			],
+			[],
+		);
+		const intentName = result.content;
+		return intentName ?? "default";
+	}
+
+	public async classifyIntent(
+		intents: ADKIntent[],
+		query: string,
+		history: Chat[],
+	): Promise<ADKIntent> {
+		const intentName = await this.inferenceIntentName(intents, query);
+		console.log("intentName", intentName);
+		const intent = intents.find((intent) => intent.name === intentName);
+		if (!intent) {
+			throw new Error(`Intent not found: ${intentName}`);
+		}
+		return intent;
+	}
+
 	public addFOLModule(fol: FOLClient): void {
 		this.fol = fol;
 	}
@@ -35,16 +91,34 @@ export class IntentAnalyzer {
 		this.basePrompt = prompt;
 	}
 
+	public setIntentModule(module: IntentModule) {
+		this.intentModule = module;
+	}
+
 	public async handleQuery(query: string): Promise<any> {
 		const threadId = "aaaa-bbbb-cccc-dddd"; // FIXME
 		// 1. intent triggering
 		// TODO: Extract the user's intent using query, context, and FOL
-		const intent = query; // FIXME
+
+		const intents = (await this.intentModule?.getIntents()) ?? [];
+		const triggeredIntent = await this.classifyIntent(intents, query, []);
+		// fulfillmentInfo = await this.getFulfillmentInfo(intent)???
+		// fulfillmentInfo.prompt, fulfillmentInfo.tools, fulfillmentInfo.a2a ...
 
 		// 2. intent fulfillment
 		// Using the extracted intent, generate a response.
-		const response = (await this.generate(intent, threadId)).response;
+		const response = (await this.generate(query, threadId)).response;
 
+		// 3. intent triggering info
+		await this.intentModule?.saveIntentTriggeringInfo({
+			context: {
+				messages: [
+					{ role: "user", content: query },
+					{ role: "assistant", content: response },
+				],
+			},
+			intent: triggeredIntent,
+		});
 		return response;
 	}
 
