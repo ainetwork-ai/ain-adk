@@ -53,7 +53,12 @@ export class IntentAnalyzer {
 		const systemMessage = `
 ${this.basePrompt}
 
-유저의 질문에 대해 tool 을 사용할 수 있다.
+You are a highly sophisticated automated agent that can answer user queries by utilizing various tools and resources.
+
+There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.
+You can call tools repeatedly to take actions or gather as much context as needed until you have completed the task fully. Don't give up unless you are sure the request cannot be fulfilled with the tools you have.
+It's YOUR RESPONSIBILITY to make sure that you have done all you can to collect necessary context.
+If you are not sure about content or context pertaining to the user's request, use your tools to read data and gather the relevant information: do NOT guess or make up an answer.
 
 tool에는 MCP_Tool, A2A_Tool 두 가지 <tool_type> 이 존재한다.
 tool type은 tool 결과 메세지의 처음에 [Bot Called <tool_type> with args <tool_args>] 이 포함됨을 통해 알 수 있다.
@@ -69,12 +74,6 @@ tool 실행 후에는 반드시 최종 응답 메시지를 작성해야한다.
         notionApi_API-post-search
 
     각 MCP_NAME 마다 <{MCP_NAME}> 아래에서 별도의 규칙을 지정할 수 있다. 
-
-    <notionApi>
-      notionApi 검색에 대한 요청은 반드시 parameter 없는 API-post-search을 선행하여 키워드와 관련된 post 혹은 database_id를 찾고, 그에 따른 검색을 재수행하여 정보를 얻어야한다.
-      만약 키워드로 post-search에 실패한 경우 영어 또는 한글 로 키워드를 번역하여 한 번 더 검색하고, 그럼에도 실패한 경우에 찾을수 없다는 메세지를 보내야한다.
-      notionApi tool을 이용한 답변 앞에는 성공 여부와 관계없이 반드시 [notion] 을 붙인다.
-    </notionApi>
 </MCP_Tool>
 
 <A2A_Tool>
@@ -135,15 +134,18 @@ tool 실행 후에는 반드시 최종 응답 메시지를 작성해야한다.
 							toolArgs,
 						);
 						toolResult =
-							`[Bot Called MCP Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
-							JSON.stringify(result.content, null, 2);
+							`[Bot Called MCP Tool ${toolName} with args ${JSON.stringify(
+								toolArgs,
+							)}]\n` + JSON.stringify(result.content, null, 2);
 					} else if (this.a2a && selectedTool.protocol === PROTOCOL_TYPE.A2A) {
 						const result = await this.a2a.useTool(
 							selectedTool as A2ATool,
 							messagePayload!,
 							threadId,
 						);
-						toolResult = `[Bot Called A2A Tool ${toolName}]\n${result.join("\n")}`;
+						toolResult = `[Bot Called A2A Tool ${toolName}]\n${result.join(
+							"\n",
+						)}`;
 					} else {
 						// Unrecognized tool type. It cannot be happened...
 						loggers.intent.warn(
