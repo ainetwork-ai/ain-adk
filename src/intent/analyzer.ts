@@ -45,7 +45,9 @@ export class IntentAnalyzer {
 		// Using the extracted intent, generate a response.
 		const response = (await this.generate(intent, threadId)).response;
 
-		return response;
+		return {
+			content: response,
+		};
 	}
 
 	public async generate(query: string, threadId: string) {
