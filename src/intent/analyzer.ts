@@ -9,56 +9,66 @@ import type { MCPModule } from "./modules/mcp/index.js";
 import type { MCPTool } from "./modules/mcp/tool.js";
 
 export class IntentAnalyzer {
-	private model: IBaseModel;
-	private a2a?: A2AModule;
-	private mcp?: MCPModule;
-	private fol?: FOLClient;
-	private basePrompt?: string;
+  private model: IBaseModel;
+  private a2a?: A2AModule;
+  private mcp?: MCPModule;
+  private fol?: FOLClient;
+  private basePrompt?: string;
 
-	constructor(model: IBaseModel) {
-		this.model = model;
-	}
+  constructor(model: IBaseModel) {
+    this.model = model;
+  }
 
-	public addMCPModule(mcp: MCPModule): void {
-		this.mcp = mcp;
-	}
+  public addMCPModule(mcp: MCPModule): void {
+    this.mcp = mcp;
+  }
 
-	public addA2AModule(a2a: A2AModule): void {
-		this.a2a = a2a;
-	}
+  public addA2AModule(a2a: A2AModule): void {
+    this.a2a = a2a;
+  }
 
-	public addFOLModule(fol: FOLClient): void {
-		this.fol = fol;
-	}
+  public addFOLModule(fol: FOLClient): void {
+    this.fol = fol;
+  }
 
-	public addBasePrompt(prompt: string): void {
-		this.basePrompt = prompt;
-	}
+  public addBasePrompt(prompt: string): void {
+    this.basePrompt = prompt;
+  }
 
-	public async handleQuery(query: string): Promise<any> {
-		const threadId = "aaaa-bbbb-cccc-dddd"; // FIXME
-		// 1. intent triggering
-		// TODO: Extract the user's intent using query, context, and FOL
-		const intent = query; // FIXME
+  public async handleQuery(query: string): Promise<any> {
+    const threadId = "aaaa-bbbb-cccc-dddd"; // FIXME
+    // 1. intent triggering
+    // TODO: Extract the user's intent using query, context, and FOL
+    const intent = query; // FIXME
 
-		// 2. intent fulfillment
-		// Using the extracted intent, generate a response.
-		const response = (await this.generate(intent, threadId)).response;
+    // 2. intent fulfillment
+    // Using the extracted intent, generate a response.
+    const response = (await this.generate(intent, threadId)).response;
 
-		return response;
-	}
+    return response;
+  }
 
-	public async generate(query: string, threadId: string) {
-		// FIXME(yoojin): Need general system prompt for MCP tool search
-		const systemMessage = `
+  public async generate(query: string, threadId: string) {
+    // FIXME(yoojin): Need general system prompt for MCP tool search
+    const systemMessage = `
+Today is ${new Date().toLocaleDateString()}.
+
 ${this.basePrompt}
 
 You are a highly sophisticated automated agent that can answer user queries by utilizing various tools and resources.
 
 There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.
-You can call tools repeatedly to take actions or gather as much context as needed until you have completed the task fully. Don't give up unless you are sure the request cannot be fulfilled with the tools you have.
+You can call tools repeatedly to take actions or gather as much context as needed until you have completed the task fully.
+
+Don't give up unless you are sure the request cannot be fulfilled with the tools you have.
 It's YOUR RESPONSIBILITY to make sure that you have done all you can to collect necessary context.
+
 If you are not sure about content or context pertaining to the user's request, use your tools to read data and gather the relevant information: do NOT guess or make up an answer.
+Be THOROUGH when gathering information. Make sure you have the FULL picture before replying. Use additional tool calls or clarifying questions as needed.
+
+Don't try to answer the user's question directly.
+First break down the user's request into smaller concepts and think about the kinds of tools and queries you need to grasp each concept.
+
 
 tool에는 MCP_Tool, A2A_Tool 두 가지 <tool_type> 이 존재한다.
 tool type은 tool 결과 메세지의 처음에 [Bot Called <tool_type> with args <tool_args>] 이 포함됨을 통해 알 수 있다.
@@ -86,92 +96,92 @@ tool 실행 후에는 반드시 최종 응답 메시지를 작성해야한다.
 </A2A_Tool>
 `;
 
-		const messages = this.model.generateMessages([query], systemMessage.trim());
+    const messages = this.model.generateMessages([query], systemMessage.trim());
 
-		const tools: AgentTool[] = [];
-		if (this.mcp) {
-			tools.push(...this.mcp.getTools());
-		}
-		if (this.a2a) {
-			tools.push(...(await this.a2a.getTools()));
-		}
-		const functions = this.model.convertToolsToFunctions(tools);
+    const tools: AgentTool[] = [];
+    if (this.mcp) {
+      tools.push(...this.mcp.getTools());
+    }
+    if (this.a2a) {
+      tools.push(...(await this.a2a.getTools()));
+    }
+    const functions = this.model.convertToolsToFunctions(tools);
 
-		const processList: string[] = [];
-		let finalMessage = "";
-		let didCallTool = false;
+    const processList: string[] = [];
+    let finalMessage = "";
+    let didCallTool = false;
 
-		while (true) {
-			const response = await this.model.fetchWithContextMessage(
-				messages,
-				functions,
-			);
-			didCallTool = false;
+    while (true) {
+      const response = await this.model.fetchWithContextMessage(
+        messages,
+        functions
+      );
+      didCallTool = false;
 
-			loggers.intent.debug("messages", { messages });
+      loggers.intent.debug("messages", { messages });
 
-			const { content, toolCalls } = response;
+      const { content, toolCalls } = response;
 
-			loggers.intent.debug("content", { content });
-			loggers.intent.debug("tool_calls", { ...toolCalls });
+      loggers.intent.debug("content", { content });
+      loggers.intent.debug("tool_calls", { ...toolCalls });
 
-			if (toolCalls) {
-				const messagePayload = this.a2a?.getMessagePayload(query, threadId);
+      if (toolCalls) {
+        const messagePayload = this.a2a?.getMessagePayload(query, threadId);
 
-				for (const toolCall of toolCalls) {
-					const toolName = toolCall.name;
-					didCallTool = true;
-					const selectedTool = tools.filter((tool) => tool.id === toolName)[0];
+        for (const toolCall of toolCalls) {
+          const toolName = toolCall.name;
+          didCallTool = true;
+          const selectedTool = tools.filter((tool) => tool.id === toolName)[0];
 
-					let toolResult = "";
-					if (this.mcp && selectedTool.protocol === PROTOCOL_TYPE.MCP) {
-						const toolArgs = toolCall.arguments as
-							| { [x: string]: unknown }
-							| undefined;
-						loggers.intent.debug("MCP tool call", { toolName, toolArgs });
-						const result = await this.mcp.useTool(
-							selectedTool as MCPTool,
-							toolArgs,
-						);
-						toolResult =
-							`[Bot Called MCP Tool ${toolName} with args ${JSON.stringify(
-								toolArgs,
-							)}]\n` + JSON.stringify(result.content, null, 2);
-					} else if (this.a2a && selectedTool.protocol === PROTOCOL_TYPE.A2A) {
-						const result = await this.a2a.useTool(
-							selectedTool as A2ATool,
-							messagePayload!,
-							threadId,
-						);
-						toolResult = `[Bot Called A2A Tool ${toolName}]\n${result.join(
-							"\n",
-						)}`;
-					} else {
-						// Unrecognized tool type. It cannot be happened...
-						loggers.intent.warn(
-							`Unrecognized tool type: ${selectedTool.protocol}`,
-						);
-						continue;
-					}
+          let toolResult = "";
+          if (this.mcp && selectedTool.protocol === PROTOCOL_TYPE.MCP) {
+            const toolArgs = toolCall.arguments as
+              | { [x: string]: unknown }
+              | undefined;
+            loggers.intent.debug("MCP tool call", { toolName, toolArgs });
+            const result = await this.mcp.useTool(
+              selectedTool as MCPTool,
+              toolArgs
+            );
+            toolResult =
+              `[Bot Called MCP Tool ${toolName} with args ${JSON.stringify(
+                toolArgs
+              )}]\n` + JSON.stringify(result.content, null, 2);
+          } else if (this.a2a && selectedTool.protocol === PROTOCOL_TYPE.A2A) {
+            const result = await this.a2a.useTool(
+              selectedTool as A2ATool,
+              messagePayload!,
+              threadId
+            );
+            toolResult = `[Bot Called A2A Tool ${toolName}]\n${result.join(
+              "\n"
+            )}`;
+          } else {
+            // Unrecognized tool type. It cannot be happened...
+            loggers.intent.warn(
+              `Unrecognized tool type: ${selectedTool.protocol}`
+            );
+            continue;
+          }
 
-					loggers.intent.debug("toolResult", { toolResult });
+          loggers.intent.debug("toolResult", { toolResult });
 
-					processList.push(toolResult);
-					this.model.expandMessages(messages, toolResult);
-				}
-			} else if (content) {
-				processList.push(content);
-				finalMessage = content;
-			}
+          processList.push(toolResult);
+          this.model.expandMessages(messages, toolResult);
+        }
+      } else if (content) {
+        processList.push(content);
+        finalMessage = content;
+      }
 
-			if (!didCallTool) break;
-		}
+      if (!didCallTool) break;
+    }
 
-		const botResponse = {
-			process: processList.join("\n"),
-			response: finalMessage,
-		};
+    const botResponse = {
+      process: processList.join("\n"),
+      response: finalMessage,
+    };
 
-		return botResponse;
-	}
+    return botResponse;
+  }
 }
