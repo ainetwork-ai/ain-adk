@@ -71,7 +71,6 @@ Be THOROUGH when gathering information. Make sure you have the FULL picture befo
 Don't try to answer the user's question directly.
 First break down the user's request into smaller concepts and think about the kinds of tools and queries you need to grasp each concept.
 
-
 tool에는 MCP_Tool, A2A_Tool 두 가지 <tool_type> 이 존재한다.
 tool type은 tool 결과 메세지의 처음에 [Bot Called <tool_type> with args <tool_args>] 이 포함됨을 통해 알 수 있다.
 tool 실행 후에는 반드시 최종 응답 메시지를 작성해야한다.
@@ -85,7 +84,7 @@ tool 실행 후에는 반드시 최종 응답 메시지를 작성해야한다.
       예를 들어, "notionApi" mcp의 tool 이름은 아래와 같다.
         notionApi_API-post-search
 
-    각 MCP_NAME 마다 <{MCP_NAME}> 아래에서 별도의 규칙을 지정할 수 있다. 
+    각 MCP_NAME 마다 <{MCP_NAME}> 아래에서 별도의 규칙을 지정할 수 있다.
 </MCP_Tool>
 
 <A2A_Tool>
@@ -146,18 +145,15 @@ tool 실행 후에는 반드시 최종 응답 메시지를 작성해야한다.
 							toolArgs,
 						);
 						toolResult =
-							`[Bot Called MCP Tool ${toolName} with args ${JSON.stringify(
-								toolArgs,
-							)}]\n` + JSON.stringify(result.content, null, 2);
+							`[Bot Called MCP Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
+							JSON.stringify(result.content, null, 2);
 					} else if (this.a2a && selectedTool.protocol === PROTOCOL_TYPE.A2A) {
 						const result = await this.a2a.useTool(
 							selectedTool as A2ATool,
 							messagePayload!,
 							threadId,
 						);
-						toolResult = `[Bot Called A2A Tool ${toolName}]\n${result.join(
-							"\n",
-						)}`;
+						toolResult = `[Bot Called A2A Tool ${toolName}]\n${result.join("\n")}`;
 					} else {
 						// Unrecognized tool type. It cannot be happened...
 						loggers.intent.warn(
