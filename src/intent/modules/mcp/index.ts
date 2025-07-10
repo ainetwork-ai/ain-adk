@@ -41,6 +41,7 @@ export class MCPModule {
 		return this.tools;
 	}
 
+	// biome-ignore lint/suspicious/noExplicitAny: usage of 'any' is required for dynamic tool arguments
 	async useTool(tool: MCPTool, _args?: any): Promise<any> {
 		const { serverName, mcpTool } = tool;
 		const toolName = mcpTool.name;

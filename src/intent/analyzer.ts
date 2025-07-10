@@ -35,7 +35,7 @@ export class IntentAnalyzer {
 		this.basePrompt = prompt;
 	}
 
-	public async handleQuery(query: string): Promise<any> {
+	public async handleQuery(query: string): Promise<{ content: string }> {
 		const threadId = "aaaa-bbbb-cccc-dddd"; // FIXME
 		// 1. intent triggering
 		// TODO: Extract the user's intent using query, context, and FOL
@@ -144,16 +144,25 @@ tool 실행 후에는 반드시 최종 응답 메시지를 작성해야한다.
 							selectedTool as MCPTool,
 							toolArgs,
 						);
-						toolResult =
-							`[Bot Called MCP Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
-							JSON.stringify(result.content, null, 2);
+						toolResult = `[Bot Called MCP Tool ${toolName} with args ${JSON.stringify(
+							toolArgs,
+						)}]\n${JSON.stringify(result.content, null, 2)}`;
 					} else if (this.a2a && selectedTool.protocol === PROTOCOL_TYPE.A2A) {
+						if (!messagePayload) {
+							loggers.intent.warn(
+								"A2A tool call attempted but messagePayload is undefined",
+								{ toolName },
+							);
+							continue;
+						}
 						const result = await this.a2a.useTool(
 							selectedTool as A2ATool,
-							messagePayload!,
+							messagePayload,
 							threadId,
 						);
-						toolResult = `[Bot Called A2A Tool ${toolName}]\n${result.join("\n")}`;
+						toolResult = `[Bot Called A2A Tool ${toolName}]\n${result.join(
+							"\n",
+						)}`;
 					} else {
 						// Unrecognized tool type. It cannot be happened...
 						loggers.intent.warn(

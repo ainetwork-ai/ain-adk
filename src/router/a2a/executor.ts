@@ -131,13 +131,19 @@ export class AINAgentExecutor implements AgentExecutor {
 			);
 			eventBus.publish(finalUpdate);
 			loggers.server.info(`Task ${taskId} completed successfully.`);
-		} catch (error: any) {
+		} catch (error: unknown) {
 			loggers.server.error(`Error processing task ${taskId}:`, error);
+			let errorMessage = "Unknown error";
+			if (error instanceof Error) {
+				errorMessage = error.message;
+			} else if (typeof error === "string") {
+				errorMessage = error;
+			}
 			const errorUpdate = this.createTaskStatusUpdateEvent(
 				taskId,
 				contextId,
 				"failed",
-				`Agent error: ${error.message}`,
+				`Agent error: ${errorMessage}`,
 			);
 			eventBus.publish(errorUpdate);
 			return;

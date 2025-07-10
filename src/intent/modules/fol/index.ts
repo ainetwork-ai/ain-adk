@@ -10,4 +10,4 @@ export {
 	FOLPostgreSqlStore,
 	FOLStore,
 } from "./store/index.js";
-export type { Facts } from "./types/index.js";
+export type { Fols as Facts } from "./types/index.js";

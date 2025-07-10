@@ -2,11 +2,14 @@ import dotenv from "dotenv";
 import type { IBaseModel } from "@/models/base.js";
 import { loggers } from "@/utils/logger.js";
 import type { FOLStore } from "../store/index.js";
-import type { Facts } from "../types/index.js";
+import type { FactItem, FolItem, Fols } from "../types/index.js";
 
 dotenv.config();
 
 export class FOLClient {
+	/**
+	 * FOLClient는 자연어로 입력된 정보를 First-Order Logic (FOL) 형식으로 변환
+	 */
 	private model: IBaseModel;
 	private folStore: FOLStore;
 
@@ -18,24 +21,25 @@ export class FOLClient {
 	/**
 	 * 자연어로 정보를 넣어주면 FOL 형식으로 바꿔서 Store에 저장하기
 	 */
-	async updateFacts(intent: string, text: string): Promise<void> {
+	async updateFacts(text: string): Promise<void> {
 		try {
 			// 기존 Facts 가져오기
-			const existingFacts = (await this.folStore.retrieveFacts(intent)) || {
-				constants: [],
-				predicates: [],
-				facts: [],
-			};
+			const existingFacts = await this.folStore.getAllFols();
 
 			// 기존 데이터를 문자열로 변환 (AI 프롬프트용)
 			const existingConstantsStr = existingFacts.constants
-				.map((c) => `${c.name}: ${c.description}`)
+				.map((c) => `${c.value}: ${c.description}`)
 				.join(", ");
 			const existingPredicatesStr = existingFacts.predicates
-				.map((p) => `${p.name}: ${p.description}`)
+				.map((p) => `${p.value}: ${p.description}`)
 				.join(", ");
 			const existingFactsStr = existingFacts.facts
-				.map((f) => `${f.name}: ${f.description}`)
+				.map(
+					(f) =>
+						`${f.value}: ${f.description} [${f.predicate}(${(
+							f.arguments || []
+						).join(", ")})]`,
+				)
 				.join(", ");
 
 			// 자연어를 FOL로 변환하는 프롬프트
@@ -51,20 +55,20 @@ export class FOLClient {
 다음 JSON 형식으로 응답해주세요:
 {
   "constants": [
-    {"name": "constant_name", "description": "상수에 대한 설명"}
+    {"value": "constant_name", "description": "상수에 대한 설명"}
   ],
   "predicates": [
-    {"name": "Predicate(x)", "description": "술어에 대한 설명"}
+    {"value": "Predicate(x)", "description": "술어에 대한 설명"}
   ],
   "facts": [
-    {"name": "Fact(constant)", "description": "사실에 대한 설명"}
+    {"value": "Fact(constant)", "description": "사실에 대한 설명"}
   ]
 }
 
 FOL 규칙:
 - Constants는 소문자로 시작 (예: john, mary, book1)
 - Predicates는 대문자로 시작하고 변수 포함 (예: Person(x), Likes(x,y))
-- Facts는 구체적인 사실 (예: Person(john), Likes(mary, book1))
+- Facts는 구체적인 사실(예: Person(john), Likes(mary, book1)) 혹은 규칙을 FOL 형식으로 작성
 - 각 항목에는 의미있는 설명을 포함해주세요
 - 기존 정보와 중복되지 않도록 주의`;
 
@@ -84,40 +88,51 @@ FOL 규칙:
 
 			const newFolData = JSON.parse(jsonMatch[0]);
 
-			// 기존 데이터와 병합 (중복 제거 - name 기준)
-			const mergeData = (
-				existing: { name: string; description: string }[],
-				newItems: { name: string; description: string }[],
-			) => {
-				const merged = new Map<string, string>();
-				existing.forEach(({ name, description }) => {
-					merged.set(name, description);
+			// 병합 함수: value 기준으로 FolItem, FactItem 모두 병합
+			const mergeFolItems = (
+				existing: FolItem[],
+				newItems: FolItem[],
+			): FolItem[] => {
+				const merged = new Map<string, FolItem>();
+				existing.forEach((item) => {
+					merged.set(item.value, item);
 				});
-				newItems.forEach(({ name, description }) => {
-					merged.set(name, description);
+				newItems.forEach((item) => {
+					merged.set(item.value, item);
 				});
-				return Array.from(merged.entries()).map(([name, description]) => ({
-					name,
-					description,
-				}));
+				return Array.from(merged.values());
 			};
 
-			const updatedFacts: Facts = {
-				constants: mergeData(
+			const mergeFactItems = (
+				existing: FactItem[],
+				newItems: FactItem[],
+			): FactItem[] => {
+				const merged = new Map<string, FactItem>();
+				existing.forEach((item) => {
+					merged.set(item.value, item);
+				});
+				newItems.forEach((item) => {
+					merged.set(item.value, item);
+				});
+				return Array.from(merged.values());
+			};
+
+			const updatedFacts: Fols = {
+				constants: mergeFolItems(
 					existingFacts.constants,
 					newFolData.constants || [],
 				),
-				predicates: mergeData(
+				predicates: mergeFolItems(
 					existingFacts.predicates,
 					newFolData.predicates || [],
 				),
-				facts: mergeData(existingFacts.facts, newFolData.facts || []),
+				facts: mergeFactItems(existingFacts.facts, newFolData.facts || []),
 			};
 
 			// Store에 저장
-			await this.folStore.saveFacts(intent, updatedFacts);
+			await this.folStore.saveFacts(updatedFacts);
 
-			loggers.fol.info(`FOL data updated (intent: ${intent})`);
+			loggers.fol.info("FOL data updated");
 		} catch (error) {
 			loggers.fol.error("updateFacts execution error:", { error });
 			throw error;
@@ -125,24 +140,12 @@ FOL 규칙:
 	}
 
 	/**
-	 * 특정 intent에 대한 Facts 조회
-	 */
-	async retrieveFacts(intent: string): Promise<Facts | null> {
-		try {
-			return await this.folStore.retrieveFacts(intent);
-		} catch (error) {
-			loggers.fol.error("retrieveFacts execution error: ", { error });
-			throw error;
-		}
-	}
-
-	/**
 	 * 모든 Facts 목록 조회
 	 */
-	async getFactsList(): Promise<Facts[]> {
+	async getFactsList(): Promise<Fols> {
 		try {
-			const allFacts = await this.folStore.getAllFacts();
-			return Object.values(allFacts);
+			const allFacts = await this.folStore.getAllFols();
+			return allFacts;
 		} catch (error) {
 			loggers.fol.error("getFactsList execution error:", { error });
 			throw error;
@@ -150,13 +153,37 @@ FOL 규칙:
 	}
 
 	/**
-	 * Intent별 Facts 맵 조회
+	 * 모든 Constants와 Predicate를 조회해서 확인하고, 유저의 질문에서 필요한 Query를 생성
 	 */
-	async getFactsMap(): Promise<{ [intent: string]: Facts }> {
+	async createQuery(user_question: string): Promise<string> {
 		try {
-			return await this.folStore.getAllFacts();
+			const constants = await this.folStore.retrieveConstantsByQuery();
+			const predicates = await this.folStore.retrievePredicatesByQuery();
+
+			// 결과를 문자열로 변환
+			const constantsStr = constants
+				.map((c) => `${c.value}: ${c.description}`)
+				.join(", ");
+			const predicatesStr = predicates
+				.map((p) => `${p.value}: ${p.description}`)
+				.join(", ");
+
+			const prompt = `다음 First-Order Logic (FOL) 데이터를 기반으로 유저의 질문에서 검색을 위한 적절한 keyword를 추출해주세요. No verbose. Just return a keyword in below constants or predicates. 
+
+Constants:
+{${constantsStr}
+
+Predicates:
+${predicatesStr}
+
+유저의 질문: ${user_question}}`;
+			const messages = this.model.generateMessages([prompt]);
+			loggers.fol.debug("Query messages:", messages);
+			const response = await this.model.fetch(messages);
+			loggers.fol.debug("Query response:", response);
+			return response.content || prompt;
 		} catch (error) {
-			loggers.fol.error("getFactsMap execution error:", { error });
+			loggers.fol.error("createQuery execution error:", { error });
 			throw error;
 		}
 	}
@@ -164,39 +191,41 @@ FOL 규칙:
 	/**
 	 * FOL 기반 데이터 조회 및 추론
 	 */
-	async queryFacts(intent: string, query: string): Promise<string> {
-		try {
-			const facts = await this.retrieveFacts(intent);
-			if (!facts) {
-				return `Intent '${intent}'에 대한 Facts가 없습니다.`;
-			}
+	async inferenceBasedOnFOLs(user_question: string): Promise<string> {
+		const query = await this.createQuery(user_question);
 
+		try {
+			const facts = await this.folStore.retrieveFactsByQuery(query);
+			if (facts.length === 0) {
+				return `Query '${query}'에 대한 Facts가 없습니다.`;
+			}
 			// 데이터를 문자열로 변환 (AI 프롬프트용)
-			const constantsStr = facts.constants
-				.map((c) => `${c.name}: ${c.description}`)
-				.join(", ");
-			const predicatesStr = facts.predicates
-				.map((p) => `${p.name}: ${p.description}`)
-				.join(", ");
-			const factsStr = facts.facts
-				.map((f) => `${f.name}: ${f.description}`)
+			const factsStr = facts
+				.map(
+					(f) =>
+						`${f.value}: ${f.description} [${f.predicate}(${(
+							f.arguments || []
+						).join(", ")})]`,
+				)
 				.join(", ");
 
 			// FOL 데이터와 쿼리를 기반으로 AI 추론 수행
 			const prompt = `
 다음 First-Order Logic (FOL) 데이터를 기반으로 질문에 답해주세요.
 
-Constants: ${constantsStr}
-Predicates: ${predicatesStr}
-Facts: ${factsStr}
+Facts: ${factsStr.length > 0 ? factsStr : "없음"}
 
-질문: ${query}
+질문: ${user_question}
 
-위의 FOL 데이터를 논리적으로 분석하여 질문에 대한 답변을 제공해주세요.
-각 항목은 "이름: 설명" 형태로 구성되어 있습니다.`;
+위의 FOL 데이터를 논리적으로 분석하여 질문에 대한 답변을 제공해주세요.`;
 
 			const messages = this.model.generateMessages([prompt]);
+
+			loggers.fol.debug("Inference messages:", messages);
+
 			const response = await this.model.fetch(messages);
+
+			loggers.fol.debug("Inference response:", response);
 
 			// AI 응답에서 텍스트 추출 (응답이 객체인 경우 content 프로퍼티 사용)
 			const responseText = response.content || "";

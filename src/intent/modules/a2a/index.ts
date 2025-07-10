@@ -36,7 +36,7 @@ export class A2AModule {
 					const a2aTool = new A2ATool(toolName, client, card);
 
 					tools.push(a2aTool);
-				} catch (_error: any) {
+				} catch (_error) {
 					// Agent not responded
 					if (tool) {
 						tool.disable();

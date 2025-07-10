@@ -51,8 +51,11 @@ export class A2ARouter {
 				);
 				// Check if it's an AsyncGenerator (stream)
 				if (
-					typeof (rpcResponseOrStream as any)?.[Symbol.asyncIterator] ===
-					"function"
+					typeof (
+						rpcResponseOrStream as unknown as {
+							[Symbol.asyncIterator]?: unknown;
+						}
+					)?.[Symbol.asyncIterator] === "function"
 				) {
 					const stream = rpcResponseOrStream as AsyncGenerator<
 						JSONRPCSuccessResponse,

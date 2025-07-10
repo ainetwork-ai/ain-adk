@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
+
 import { loggers } from "@/utils/logger.js";
-import type { Facts } from "../types/index.js";
+import {
+	createEmptyFols,
+	type FactItem,
+	type FolItem,
+	type Fols,
+} from "../types/index.js";
 import { FOLStore } from "./base.js";
 
 export class FOLLocalStore extends FOLStore {
@@ -9,7 +15,6 @@ export class FOLLocalStore extends FOLStore {
 	private constantsFile: string;
 	private predicatesFile: string;
 	private factsFile: string;
-	private intentFile: string;
 
 	constructor(storePath: string) {
 		super();
@@ -17,7 +22,6 @@ export class FOLLocalStore extends FOLStore {
 		this.constantsFile = path.join(storePath, "constants.json");
 		this.predicatesFile = path.join(storePath, "predicates.json");
 		this.factsFile = path.join(storePath, "facts.json");
-		this.intentFile = path.join(storePath, "intent.json");
 		this.ensureDirectoryExists();
 	}
 
@@ -27,257 +31,268 @@ export class FOLLocalStore extends FOLStore {
 		}
 	}
 
-	private async loadConstants(): Promise<
-		{ name: string; description: string }[]
-	> {
+	private async loadConstants(): Promise<FolItem[]> {
 		if (!fs.existsSync(this.constantsFile)) {
 			return [];
 		}
 		try {
 			const content = await fs.promises.readFile(this.constantsFile, "utf8");
 			const data = JSON.parse(content);
-			// {name: description} 형태를 배열로 변환
-			return Object.entries(data).map(([name, description]) => ({
-				name,
-				description: description as string,
-			}));
+			// FolItem[] 형태로 저장/로드
+			if (Array.isArray(data)) {
+				return data;
+			}
+			loggers.fol.error("constants.json is not an array", { data });
+			return [];
 		} catch (error) {
 			loggers.fol.error("Failed to load constants.json:", { error });
 			return [];
 		}
 	}
 
-	private async loadPredicates(): Promise<
-		{ name: string; description: string }[]
-	> {
+	private async loadPredicates(): Promise<FolItem[]> {
 		if (!fs.existsSync(this.predicatesFile)) {
 			return [];
 		}
 		try {
 			const content = await fs.promises.readFile(this.predicatesFile, "utf8");
 			const data = JSON.parse(content);
-			// {name: description} 형태를 배열로 변환
-			return Object.entries(data).map(([name, description]) => ({
-				name,
-				description: description as string,
-			}));
+			if (Array.isArray(data)) {
+				return data;
+			}
+			loggers.fol.error("predicates.json is not an array", { data });
+			return [];
 		} catch (error) {
 			loggers.fol.error("Failed to load predicates.json:", { error });
 			return [];
 		}
 	}
 
-	private async loadAllFacts(): Promise<
-		{ name: string; description: string }[]
-	> {
+	private async loadAllFacts(): Promise<FactItem[]> {
 		if (!fs.existsSync(this.factsFile)) {
 			return [];
 		}
 		try {
 			const content = await fs.promises.readFile(this.factsFile, "utf8");
 			const data = JSON.parse(content);
-			// {name: description} 형태를 배열로 변환
-			return Object.entries(data).map(([name, description]) => ({
-				name,
-				description: description as string,
-			}));
+			const predicates = await this.loadPredicates();
+			const predicateNames = predicates
+				.map((p) => (typeof p.value === "string" ? p.value : ""))
+				.filter(Boolean);
+			if (Array.isArray(data)) {
+				return data.map((item: Record<string, unknown>) => {
+					const value = typeof item.value === "string" ? item.value : "";
+					const description =
+						typeof item.description === "string" ? item.description : "";
+					let predicate = "";
+					let args: string[] = [];
+					// predicates 목록과 매칭
+					const matched = predicateNames.find((pred) =>
+						value.startsWith(`${pred}(`),
+					);
+					if (matched) {
+						predicate = matched;
+						const argMatch = value.match(/^.+\(([^)]*)\)$/);
+						if (argMatch) {
+							args = argMatch[1]
+								.split(",")
+								.map((s) => s.trim())
+								.filter(Boolean);
+						}
+					}
+					return {
+						value,
+						description,
+						predicate,
+						arguments: args,
+						updatedAt:
+							typeof item.updatedAt === "string" ? item.updatedAt : undefined,
+					};
+				});
+			}
+			loggers.fol.error("facts.json is not an array", { data });
+			return [];
 		} catch (error) {
 			loggers.fol.error("Failed to load facts.json:", { error });
 			return [];
 		}
 	}
 
-	private async loadIntentMapping(): Promise<{ [intent: string]: string[] }> {
-		if (!fs.existsSync(this.intentFile)) {
-			return {};
-		}
-		try {
-			const content = await fs.promises.readFile(this.intentFile, "utf8");
-			return JSON.parse(content);
-		} catch (error) {
-			loggers.fol.error("Failed to load intent.json:", { error });
-			return {};
-		}
-	}
-
-	private async saveConstants(
-		constants: { name: string; description: string }[],
-	): Promise<void> {
-		// 배열을 {name: description} 형태로 변환
-		const data: { [key: string]: string } = {};
-		constants.forEach(({ name, description }) => {
-			data[name] = description;
-		});
-
+	private async saveConstants(constants: FolItem[]): Promise<void> {
+		// FolItem[] 형태로 저장
 		await fs.promises.writeFile(
 			this.constantsFile,
-			JSON.stringify(data, null, 2),
+			JSON.stringify(constants, null, 2),
 			"utf8",
 		);
 	}
 
-	private async savePredicates(
-		predicates: { name: string; description: string }[],
-	): Promise<void> {
-		// 배열을 {name: description} 형태로 변환
-		const data: { [key: string]: string } = {};
-		predicates.forEach(({ name, description }) => {
-			data[name] = description;
-		});
-
+	private async savePredicates(predicates: FolItem[]): Promise<void> {
+		// FolItem[] 형태로 저장
 		await fs.promises.writeFile(
 			this.predicatesFile,
-			JSON.stringify(data, null, 2),
+			JSON.stringify(predicates, null, 2),
 			"utf8",
 		);
 	}
 
-	private async saveAllFacts(
-		facts: { name: string; description: string }[],
-	): Promise<void> {
-		// 배열을 {name: description} 형태로 변환
-		const data: { [key: string]: string } = {};
-		facts.forEach(({ name, description }) => {
-			data[name] = description;
-		});
-
+	private async saveAllFacts(facts: FactItem[]): Promise<void> {
+		// predicates 목록을 불러와서 value에서 predicate/arguments 추출
+		const predicates = await this.loadPredicates();
+		const predicateNames = predicates
+			.map((p) => (typeof p.value === "string" ? p.value : ""))
+			.filter(Boolean);
 		await fs.promises.writeFile(
 			this.factsFile,
-			JSON.stringify(data, null, 2),
+			JSON.stringify(
+				facts.map((fact) => {
+					const value = fact.value;
+					const description = fact.description;
+					let predicate = "";
+					let args: string[] = [];
+					const matched = predicateNames.find((pred) =>
+						value.startsWith(`${pred}(`),
+					);
+					if (matched) {
+						predicate = matched;
+						const argMatch = value.match(/^.+\(([^)]*)\)$/);
+						if (argMatch) {
+							args = argMatch[1]
+								.split(",")
+								.map((s) => s.trim())
+								.filter(Boolean);
+						}
+					}
+					return {
+						value,
+						description,
+						predicate,
+						arguments: args,
+						...(fact.updatedAt ? { updatedAt: fact.updatedAt } : {}),
+					};
+				}),
+				null,
+				2,
+			),
 			"utf8",
 		);
 	}
 
-	private async saveIntentMapping(intentMapping: {
-		[intent: string]: string[];
-	}): Promise<void> {
-		await fs.promises.writeFile(
-			this.intentFile,
-			JSON.stringify(intentMapping, null, 2),
-			"utf8",
-		);
-	}
-
-	async saveFacts(intent: string, facts: Facts): Promise<void> {
+	async saveFacts(fols: Fols): Promise<void> {
 		try {
 			// Constants와 Predicates는 전역으로 저장 (기존 데이터와 병합)
 			const existingConstants = await this.loadConstants();
 			const existingPredicates = await this.loadPredicates();
 			const existingFacts = await this.loadAllFacts();
 
-			// 중복 제거하여 병합 (name 기준)
-			const constantsMap = new Map<string, string>();
-			existingConstants.forEach(({ name, description }) => {
-				constantsMap.set(name, description);
+			// 중복 제거하여 병합 (value 기준)
+			const constantsMap = new Map<string, FolItem>();
+			existingConstants.forEach((item) => {
+				constantsMap.set(item.value, item);
 			});
-			facts.constants.forEach(({ name, description }) => {
-				constantsMap.set(name, description);
-			});
-
-			const predicatesMap = new Map<string, string>();
-			existingPredicates.forEach(({ name, description }) => {
-				predicatesMap.set(name, description);
-			});
-			facts.predicates.forEach(({ name, description }) => {
-				predicatesMap.set(name, description);
+			fols.constants.forEach((item) => {
+				constantsMap.set(item.value, item);
 			});
 
-			const factsMap = new Map<string, string>();
-			existingFacts.forEach(({ name, description }) => {
-				factsMap.set(name, description);
+			const predicatesMap = new Map<string, FolItem>();
+			existingPredicates.forEach((item) => {
+				predicatesMap.set(item.value, item);
 			});
-			facts.facts.forEach(({ name, description }) => {
-				factsMap.set(name, description);
+			fols.predicates.forEach((item) => {
+				predicatesMap.set(item.value, item);
+			});
+
+			const factsMap = new Map<string, FactItem>();
+			// value를 key로 하되, 최신 정보로 병합 (description, predicate, arguments, updatedAt)
+			existingFacts.forEach((item) => {
+				factsMap.set(item.value, item);
+			});
+			fols.facts.forEach((item) => {
+				const prev = factsMap.get(item.value);
+				factsMap.set(item.value, {
+					value: item.value,
+					description: item.description,
+					predicate: item.predicate,
+					arguments: item.arguments,
+					updatedAt: new Date().toISOString(),
+					...(prev ? { ...prev, ...item } : {}),
+				});
 			});
 
 			// Map을 배열로 변환
-			const mergedConstants = Array.from(constantsMap.entries()).map(
-				([name, description]) => ({
-					name,
-					description,
-				}),
-			);
-			const mergedPredicates = Array.from(predicatesMap.entries()).map(
-				([name, description]) => ({
-					name,
-					description,
-				}),
-			);
-			const mergedFacts = Array.from(factsMap.entries()).map(
-				([name, description]) => ({
-					name,
-					description,
-				}),
-			);
+			const mergedConstants = Array.from(constantsMap.values());
+			const mergedPredicates = Array.from(predicatesMap.values());
+			const mergedFacts = Array.from(factsMap.values());
 
 			await this.saveConstants(mergedConstants);
 			await this.savePredicates(mergedPredicates);
 			await this.saveAllFacts(mergedFacts);
 
-			// Intent mapping 저장
-			const intentMapping = await this.loadIntentMapping();
-			intentMapping[intent] = facts.facts.map((fact) => fact.name);
-			await this.saveIntentMapping(intentMapping);
-
-			loggers.fol.info(`FOL data updated (intent: ${intent})`);
+			loggers.fol.info(
+				`FOL data updated (facts: ${JSON.stringify(mergedFacts)})`,
+			);
 		} catch (error) {
 			loggers.fol.error("saveFacts execution error:", { error });
 			throw error;
 		}
 	}
 
-	async retrieveFacts(intent: string): Promise<Facts | null> {
+	async retrieveConstantsByQuery(query?: string): Promise<FolItem[]> {
 		try {
 			const constants = await this.loadConstants();
-			const predicates = await this.loadPredicates();
-			const allFacts = await this.loadAllFacts();
-			const intentMapping = await this.loadIntentMapping();
-
-			const intentFactNames = intentMapping[intent] || [];
-
-			// intent에 해당하는 facts만 필터링
-			const intentFacts = allFacts.filter((fact) =>
-				intentFactNames.includes(fact.name),
-			);
-
-			return {
-				constants,
-				predicates,
-				facts: intentFacts,
-			};
+			if (!query) {
+				return constants;
+			}
+			return constants.filter((item) => item.value.includes(query));
 		} catch (error) {
-			loggers.fol.error(`Failed to retrieve FOL (intent: ${intent}):`, {
+			loggers.fol.error(`Failed to retrieve constants by query (${query}):`, {
 				error,
 			});
-			return null;
+			return [];
 		}
 	}
 
-	async getAllFacts(): Promise<{ [intent: string]: Facts }> {
-		const result: { [intent: string]: Facts } = {};
+	async retrievePredicatesByQuery(query?: string): Promise<FolItem[]> {
+		try {
+			const predicates = await this.loadPredicates();
+			if (!query) {
+				return predicates;
+			}
+			return predicates.filter((item) => item.value.includes(query));
+		} catch (error) {
+			loggers.fol.error(`Failed to retrieve predicates by query (${query}):`, {
+				error,
+			});
+			return [];
+		}
+	}
 
+	async retrieveFactsByQuery(query: string): Promise<FactItem[]> {
+		try {
+			const facts = await this.loadAllFacts();
+			// 단순히 fact의 value에 query가 포함되는지로 필터링
+			return facts.filter((fact) => fact.value.includes(query));
+		} catch (error) {
+			loggers.fol.error(`Failed to retrieve facts by query (${query}):`, {
+				error,
+			});
+			return [];
+		}
+	}
+
+	async getAllFols(): Promise<Fols> {
 		try {
 			const constants = await this.loadConstants();
 			const predicates = await this.loadPredicates();
-			const allFacts = await this.loadAllFacts();
-			const intentMapping = await this.loadIntentMapping();
-
-			for (const [intent, factNames] of Object.entries(intentMapping)) {
-				const intentFacts = allFacts.filter((fact) =>
-					factNames.includes(fact.name),
-				);
-
-				result[intent] = {
-					constants,
-					predicates,
-					facts: intentFacts,
-				};
-			}
-
-			return result;
+			const facts = await this.loadAllFacts();
+			return {
+				constants,
+				predicates,
+				facts,
+			};
 		} catch (error) {
-			loggers.fol.error("Failed to getAllFacts:", { error });
-			return {};
+			loggers.fol.error("Failed to getAllFols:", { error });
+			return createEmptyFols();
 		}
 	}
 }
