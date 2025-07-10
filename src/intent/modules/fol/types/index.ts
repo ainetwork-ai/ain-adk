@@ -15,7 +15,7 @@ export type FolItem = {
 export interface FactItem {
 	value: string;
 	description: string;
-	predicate: string;
+	predicates: string[];
 	arguments: string[];
 	updatedAt?: string;
 }
