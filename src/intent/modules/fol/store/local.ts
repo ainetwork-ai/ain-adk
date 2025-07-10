@@ -16,6 +16,22 @@ export class FOLLocalStore extends FOLStore {
 	private predicatesFile: string;
 	private factsFile: string;
 
+	private parseFactValue(value: string): {
+		predicates: string[];
+		args: string[];
+	} {
+		const match = value.trim().match(/^\s*([^\s(]+)\s*\(([^)]*)\)/);
+		if (match) {
+			const pred = match[1].trim();
+			const args = match[2]
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean);
+			return { predicates: pred ? [pred] : [], args };
+		}
+		return { predicates: [], args: [] };
+	}
+
 	constructor(storePath: string) {
 		super();
 		this.storePath = storePath;
@@ -75,35 +91,16 @@ export class FOLLocalStore extends FOLStore {
 		try {
 			const content = await fs.promises.readFile(this.factsFile, "utf8");
 			const data = JSON.parse(content);
-			const predicates = await this.loadPredicates();
-			const predicateNames = predicates
-				.map((p) => (typeof p.value === "string" ? p.value : ""))
-				.filter(Boolean);
 			if (Array.isArray(data)) {
 				return data.map((item: Record<string, unknown>) => {
 					const value = typeof item.value === "string" ? item.value : "";
 					const description =
 						typeof item.description === "string" ? item.description : "";
-					let predicatesArr: string[] = [];
-					let args: string[] = [];
-					// predicates 목록과 매칭
-					const matched = predicateNames.find((pred) =>
-						value.startsWith(`${pred}(`),
-					);
-					if (matched) {
-						predicatesArr = [matched];
-						const argMatch = value.match(/^.+\(([^)]*)\)$/);
-						if (argMatch) {
-							args = argMatch[1]
-								.split(",")
-								.map((s) => s.trim())
-								.filter(Boolean);
-						}
-					}
+					const { predicates, args } = this.parseFactValue(value);
 					return {
 						value,
 						description,
-						predicates: predicatesArr,
+						predicates,
 						arguments: args,
 						updatedAt:
 							typeof item.updatedAt === "string" ? item.updatedAt : undefined,
@@ -137,36 +134,17 @@ export class FOLLocalStore extends FOLStore {
 	}
 
 	private async saveAllFacts(facts: FactItem[]): Promise<void> {
-		// predicates 목록을 불러와서 value에서 predicate/arguments 추출
-		const predicates = await this.loadPredicates();
-		const predicateNames = predicates
-			.map((p) => (typeof p.value === "string" ? p.value : ""))
-			.filter(Boolean);
 		await fs.promises.writeFile(
 			this.factsFile,
 			JSON.stringify(
 				facts.map((fact) => {
 					const value = fact.value;
 					const description = fact.description;
-					let predicatesArr: string[] = [];
-					let args: string[] = [];
-					const matched = predicateNames.find((pred) =>
-						value.startsWith(`${pred}(`),
-					);
-					if (matched) {
-						predicatesArr = [matched];
-						const argMatch = value.match(/^.+\(([^)]*)\)$/);
-						if (argMatch) {
-							args = argMatch[1]
-								.split(",")
-								.map((s) => s.trim())
-								.filter(Boolean);
-						}
-					}
+					const { predicates, args } = this.parseFactValue(value);
 					return {
 						value,
 						description,
-						predicates: predicatesArr,
+						predicates,
 						arguments: args,
 						...(fact.updatedAt ? { updatedAt: fact.updatedAt } : {}),
 					};
@@ -209,11 +187,17 @@ export class FOLLocalStore extends FOLStore {
 			});
 			fols.facts.forEach((item) => {
 				const prev = factsMap.get(item.value);
+				const parsed = this.parseFactValue(item.value);
+				// 새 fact에서 추출한 predicate가 기존 목록에 없으면 추가
+				const pred = parsed.predicates[0];
+				if (pred && !predicatesMap.has(pred)) {
+					predicatesMap.set(pred, { value: pred, description: "" });
+				}
 				factsMap.set(item.value, {
 					value: item.value,
 					description: item.description,
-					predicates: item.predicates,
-					arguments: item.arguments,
+					predicates: parsed.predicates,
+					arguments: parsed.args,
 					updatedAt: new Date().toISOString(),
 					...(prev ? { ...prev, ...item } : {}),
 				});
