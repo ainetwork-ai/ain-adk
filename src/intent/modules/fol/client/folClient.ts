@@ -36,7 +36,7 @@ export class FOLClient {
 			const existingFactsStr = existingFacts.facts
 				.map(
 					(f) =>
-						`${f.value}: ${f.description} [${f.predicate}(${(
+						`${f.value}: ${f.description} [${(f.predicates || []).join(",")}(${(
 							f.arguments || []
 						).join(", ")})]`,
 				)
@@ -203,7 +203,7 @@ ${predicatesStr}
 			const factsStr = facts
 				.map(
 					(f) =>
-						`${f.value}: ${f.description} [${f.predicate}(${(
+						`${f.value}: ${f.description} [${(f.predicates || []).join(",")}(${(
 							f.arguments || []
 						).join(", ")})]`,
 				)
