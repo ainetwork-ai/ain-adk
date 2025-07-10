@@ -1,31 +1,30 @@
 import "dotenv/config";
 
-import AzureOpenAI from "../src/models/openai.js";
 import { FOLClient, FOLLocalStore } from "../src/intent/modules/fol/index.js";
+import GeminiModel from "../src/models/gemini.js";
 
-const model = new AzureOpenAI(
-  process.env.AZURE_OPENAI_PTU_BASE_URL!,
-  process.env.AZURE_OPENAI_PTU_API_KEY!,
-  process.env.AZURE_OPENAI_PTU_API_VERSION!,
-  process.env.AZURE_OPENAI_MODEL_NAME!,
+const model = new GeminiModel(
+  process.env.GEMINI_API_KEY!,
+  process.env.GEMINI_MODEL_NAME!
 );
 
 const folStore = new FOLLocalStore("fol-store");
 const folClient = new FOLClient(model, folStore);
 
+const INTENT = "test";
+const FACT_TEXT = "John is a student and likes math";
+const TEST_QUERY = "Who is a student?";
+
 console.log("debug", "start");
 
-await folClient.updateFacts("test", "John is a student and likes math");
+await folClient.updateFacts(INTENT, FACT_TEXT);
 
 console.log("debug", "updateFacts");
 
-const facts = await folClient.retrieveFacts("test");
+const facts = await folClient.retrieveFacts(INTENT);
 
 console.log("debug", facts);
 
-const queryResult = await folClient.queryFacts(
-  "test",
-  "누가 수학을 좋아하나요?"
-);
+const queryResult = await folClient.queryFacts(INTENT, TEST_QUERY);
 
 console.log(queryResult);
