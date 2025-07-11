@@ -18,18 +18,31 @@ export class FOLLocalStore extends FOLStore {
 
 	private parseFactValue(value: string): {
 		predicates: string[];
-		args: string[];
+		contants: string[];
 	} {
-		const match = value.trim().match(/^\s*([^\s(]+)\s*\(([^)]*)\)/);
-		if (match) {
-			const pred = match[1].trim();
-			const args = match[2]
-				.split(",")
-				.map((s) => s.trim())
-				.filter(Boolean);
-			return { predicates: pred ? [pred] : [], args };
+		const predicates = new Set<string>();
+		const contants = new Set<string>();
+
+		const variables = new Set<string>();
+		for (const match of value.matchAll(/[∀∃]\s*([a-z][A-Za-z0-9_]*)/g)) {
+			variables.add(match[1]);
 		}
-		return { predicates: [], args: [] };
+
+		for (const match of value.matchAll(/([A-Z][A-Za-z0-9_]*)\s*\(/g)) {
+			predicates.add(match[1]);
+		}
+
+		for (const match of value.matchAll(/\b([a-z][A-Za-z0-9_]*)\b/g)) {
+			const token = match[1];
+			if (!variables.has(token)) {
+				contants.add(token);
+			}
+		}
+
+		return {
+			predicates: Array.from(predicates),
+			contants: Array.from(contants),
+		};
 	}
 
 	constructor(storePath: string) {
@@ -96,12 +109,12 @@ export class FOLLocalStore extends FOLStore {
 					const value = typeof item.value === "string" ? item.value : "";
 					const description =
 						typeof item.description === "string" ? item.description : "";
-					const { predicates, args } = this.parseFactValue(value);
+					const { predicates, contants } = this.parseFactValue(value);
 					return {
 						value,
 						description,
 						predicates,
-						arguments: args,
+						contants,
 						updatedAt:
 							typeof item.updatedAt === "string" ? item.updatedAt : undefined,
 					};
@@ -140,12 +153,12 @@ export class FOLLocalStore extends FOLStore {
 				facts.map((fact) => {
 					const value = fact.value;
 					const description = fact.description;
-					const { predicates, args } = this.parseFactValue(value);
+					const { predicates, contants } = this.parseFactValue(value);
 					return {
 						value,
 						description,
 						predicates,
-						arguments: args,
+						contants,
 						...(fact.updatedAt ? { updatedAt: fact.updatedAt } : {}),
 					};
 				}),
@@ -181,7 +194,7 @@ export class FOLLocalStore extends FOLStore {
 			});
 
 			const factsMap = new Map<string, FactItem>();
-			// value를 key로 하되, 최신 정보로 병합 (description, predicates, arguments, updatedAt)
+			// value를 key로 하되, 최신 정보로 병합 (description, predicates, contants, updatedAt)
 			existingFacts.forEach((item) => {
 				factsMap.set(item.value, item);
 			});
@@ -197,7 +210,7 @@ export class FOLLocalStore extends FOLStore {
 					value: item.value,
 					description: item.description,
 					predicates: parsed.predicates,
-					arguments: parsed.args,
+					contants: parsed.contants,
 					updatedAt: new Date().toISOString(),
 					...(prev ? { ...prev, ...item } : {}),
 				});

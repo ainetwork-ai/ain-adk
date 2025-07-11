@@ -37,7 +37,7 @@ export class FOLClient {
 				.map(
 					(f) =>
 						`${f.value}: ${f.description} [${(f.predicates || []).join(",")}(${(
-							f.arguments || []
+							f.contants || []
 						).join(", ")})]`,
 				)
 				.join(", ");
@@ -204,7 +204,7 @@ ${predicatesStr}
 				.map(
 					(f) =>
 						`${f.value}: ${f.description} [${(f.predicates || []).join(",")}(${(
-							f.arguments || []
+							f.contants || []
 						).join(", ")})]`,
 				)
 				.join(", ");
