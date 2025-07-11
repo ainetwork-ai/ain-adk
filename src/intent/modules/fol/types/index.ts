@@ -16,7 +16,7 @@ export interface FactItem {
 	value: string;
 	description: string;
 	predicates: string[];
-	arguments: string[];
+	contants: string[];
 	updatedAt?: string;
 }
 
