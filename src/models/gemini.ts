@@ -8,7 +8,8 @@ import type { A2ATool } from "@/intent/modules/a2a/tool.js";
 import type { AgentTool } from "@/intent/modules/common/tool.js";
 import { PROTOCOL_TYPE } from "@/intent/modules/common/types.js";
 import type { MCPTool } from "@/intent/modules/mcp/tool.js";
-import { BaseModel, type FetchResponse, type ToolCall } from "./base.js";
+import { ChatRole, type SessionObject } from "@/session/BaseSession.js";
+import { BaseModel, type FetchResponse, type ToolCall } from "./BaseModel.js";
 
 export default class GeminiModel extends BaseModel<
 	Content,
@@ -23,14 +24,38 @@ export default class GeminiModel extends BaseModel<
 		this.modelName = modelName;
 	}
 
-	generateMessages(queries: string[], systemPrompt?: string): Content[] {
+	private getMessageRole(role: ChatRole) {
+		switch (role) {
+			case ChatRole.USER:
+				return "user";
+			case ChatRole.MODEL:
+			case ChatRole.SYSTEM:
+				return "model";
+			default:
+				return "model"; /*FIXME*/
+		}
+	}
+
+	generateMessages(
+		sessionHistory: SessionObject,
+		query: string,
+		systemPrompt?: string,
+	): Content[] {
 		const messages: Content[] = !systemPrompt
 			? []
 			: [{ role: "model", parts: [{ text: systemPrompt.trim() }] }];
-		const userContent: Content[] = queries.map((query: string) => {
-			return { role: "user", parts: [{ text: query }] };
-		});
-		return messages.concat(userContent);
+		const sessionContent: Content[] = Object.keys(sessionHistory).map(
+			(messageId: string) => {
+				const message = sessionHistory[messageId];
+				// TODO: check message.content.type
+				return {
+					role: this.getMessageRole(message.role),
+					parts: [{ text: message.content.parts[0] }],
+				};
+			},
+		);
+		const userContent: Content = { role: "user", parts: [{ text: query }] };
+		return messages.concat(sessionContent).concat(userContent);
 	}
 
 	expandMessages(messages: Content[], message: string): void {

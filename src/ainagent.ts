@@ -5,6 +5,7 @@ import type { IntentAnalyzer } from "@/intent/analyzer.js";
 import type { BaseAuth } from "@/middleware/auth/base.js";
 import { loggers } from "@/utils/logger.js";
 import { A2ARouter } from "./router/a2a/router.js";
+import type { BaseSession } from "./session/BaseSession.js";
 import type { AINAgentInfo } from "./types/index.js";
 
 export class AINAgent {
@@ -13,6 +14,7 @@ export class AINAgent {
 
 	// Modules
 	private authScheme?: BaseAuth;
+	private sessionManager?: BaseSession;
 	private intentAnalyzer: IntentAnalyzer;
 	private a2aRouter?: A2ARouter;
 
@@ -69,10 +71,18 @@ export class AINAgent {
 		});
 
 		this.app.post("/query", async (req, res) => {
-			const { message } = req.body;
+			const { message, sessionId } = req.body;
+
+			// load session memory
+			const sessionHistory =
+				(await this.sessionManager?.getSessionHistory(sessionId)) || {};
 
 			// TODO: Handle query type
-			const response = await this.intentAnalyzer?.handleQuery(message);
+			const response = await this.intentAnalyzer?.handleQueryWithSession(
+				message,
+				sessionId,
+				sessionHistory,
+			);
 			res.json(response);
 		});
 

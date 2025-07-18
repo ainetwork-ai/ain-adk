@@ -1,4 +1,5 @@
-import type { IBaseModel } from "@/models/base.js";
+import type { IBaseModel } from "@/models/BaseModel.js";
+import type { SessionObject } from "@/session/BaseSession.js";
 import { loggers } from "@/utils/logger.js";
 import type { A2AModule } from "./modules/a2a/index.js";
 import type { A2ATool } from "./modules/a2a/tool.js";
@@ -36,21 +37,42 @@ export class IntentAnalyzer {
 	}
 
 	public async handleQuery(query: string): Promise<any> {
-		const threadId = "aaaa-bbbb-cccc-dddd"; // FIXME
 		// 1. intent triggering
 		// TODO: Extract the user's intent using query, context, and FOL
 		const intent = query; // FIXME
 
 		// 2. intent fulfillment
 		// Using the extracted intent, generate a response.
-		const response = (await this.generate(intent, threadId)).response;
+		const response = (await this.generate(intent, "", {})).response;
+		return {
+			content: response,
+		};
+	}
+
+	public async handleQueryWithSession(
+		query: string,
+		sessionId: string,
+		sessionHistory: SessionObject,
+	): Promise<any> {
+		// 1. intent triggering
+		// TODO: Extract the user's intent using query, context, and FOL
+		const intent = query; // FIXME
+
+		// 2. intent fulfillment
+		// Using the extracted intent, generate a response.
+		const response = (await this.generate(intent, sessionId, sessionHistory))
+			.response;
 
 		return {
 			content: response,
 		};
 	}
 
-	public async generate(query: string, threadId: string) {
+	public async generate(
+		query: string,
+		sessionId: string,
+		sessionHistory: SessionObject,
+	) {
 		// FIXME(yoojin): Need general system prompt for MCP tool search
 		const systemMessage = `
 Today is ${new Date().toLocaleDateString()}.
@@ -97,7 +119,11 @@ tool 실행 후에는 반드시 최종 응답 메시지를 작성해야한다.
 </A2A_Tool>
 `;
 
-		const messages = this.model.generateMessages([query], systemMessage.trim());
+		const messages = this.model.generateMessages(
+			sessionHistory,
+			query,
+			systemMessage.trim(),
+		);
 
 		const tools: AgentTool[] = [];
 		if (this.mcp) {
@@ -127,7 +153,7 @@ tool 실행 후에는 반드시 최종 응답 메시지를 작성해야한다.
 			loggers.intent.debug("tool_calls", { ...toolCalls });
 
 			if (toolCalls) {
-				const messagePayload = this.a2a?.getMessagePayload(query, threadId);
+				const messagePayload = this.a2a?.getMessagePayload(query, sessionId);
 
 				for (const toolCall of toolCalls) {
 					const toolName = toolCall.name;
@@ -151,7 +177,7 @@ tool 실행 후에는 반드시 최종 응답 메시지를 작성해야한다.
 						const result = await this.a2a.useTool(
 							selectedTool as A2ATool,
 							messagePayload!,
-							threadId,
+							sessionId,
 						);
 						toolResult = `[Bot Called A2A Tool ${toolName}]\n${result.join("\n")}`;
 					} else {

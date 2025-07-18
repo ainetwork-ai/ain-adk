@@ -11,14 +11,14 @@ import {
 import { loggers } from "@/utils/logger.js";
 import { A2ATool } from "./tool.js";
 
-interface A2AThread {
+interface A2ASession {
 	taskId: string | undefined;
 	contextId: string | undefined;
 }
 
 export class A2AModule {
 	private a2aServers: Map<string, A2ATool | null> = new Map();
-	private threads: Map<string, A2AThread> = new Map();
+	private a2aSessions: Map<string, A2ASession> = new Map(); // Map from session ID to A2A ids
 
 	public async addA2AServer(url: string): Promise<void> {
 		this.a2aServers.set(url, null);
@@ -49,23 +49,26 @@ export class A2AModule {
 		return tools;
 	}
 
-	private getThreadWithId = (threadId: string): A2AThread => {
-		const thread = this.threads.get(threadId) ?? {
+	private getA2ASessionWithId = (sessionId: string): A2ASession => {
+		const a2aSession = this.a2aSessions.get(sessionId) ?? {
 			taskId: undefined,
 			contextId: undefined,
 		};
-		if (!this.threads.has(threadId)) {
-			this.threads.set(threadId, thread);
+		if (!this.a2aSessions.has(sessionId)) {
+			this.a2aSessions.set(sessionId, a2aSession);
 		}
 
-		return thread;
+		return a2aSession;
 	};
 
-	public getMessagePayload(query: string, threadId: string): Message {
+	public getMessagePayload(query: string, sessionId: string): Message {
 		const messagePayload: Message = {
 			messageId: randomUUID(),
 			kind: "message",
 			role: "user", // FIXME: it could be 'agent'
+			metadata: {
+				sessionId,
+			},
 			parts: [
 				{
 					kind: "text",
@@ -74,12 +77,12 @@ export class A2AModule {
 			],
 		};
 
-		const thread = this.getThreadWithId(threadId);
-		if (thread.taskId) {
-			messagePayload.taskId = thread.taskId;
+		const a2aSession = this.getA2ASessionWithId(sessionId);
+		if (a2aSession.taskId) {
+			messagePayload.taskId = a2aSession.taskId;
 		}
-		if (thread.contextId) {
-			messagePayload.contextId = thread.contextId;
+		if (a2aSession.contextId) {
+			messagePayload.contextId = a2aSession.contextId;
 		}
 
 		return messagePayload;
@@ -88,14 +91,14 @@ export class A2AModule {
 	public async useTool(
 		tool: A2ATool,
 		messagePayload: Message,
-		threadId: string,
+		sessionId: string,
 	): Promise<string[]> {
 		const finalText: string[] = [];
 		const client = tool.client;
 		const params: MessageSendParams = {
 			message: messagePayload,
 		};
-		const thread = this.getThreadWithId(threadId);
+		const a2aSession = this.getA2ASessionWithId(sessionId);
 
 		try {
 			const stream = client.sendMessageStream(params);
@@ -106,7 +109,7 @@ export class A2AModule {
 						typedEvent.final &&
 						typedEvent.status.state !== "input-required"
 					) {
-						thread.taskId = undefined;
+						a2aSession.taskId = undefined;
 					}
 					// TODO: handle 'file', 'data' parts
 					const texts = typedEvent.status.message?.parts
@@ -119,20 +122,20 @@ export class A2AModule {
 				} else if (event.kind === "message") {
 					// FIXME: handling text in 'message'?
 					const msg = event as Message;
-					if (msg.taskId && msg.taskId !== thread.taskId) {
-						thread.taskId = msg.taskId;
+					if (msg.taskId && msg.taskId !== a2aSession.taskId) {
+						a2aSession.taskId = msg.taskId;
 					}
-					if (msg.contextId && msg.contextId !== thread.contextId) {
-						thread.contextId = msg.contextId;
+					if (msg.contextId && msg.contextId !== a2aSession.contextId) {
+						a2aSession.contextId = msg.contextId;
 					}
 				} else if (event.kind === "task") {
 					// FIXME: handling text in 'task'?
 					const task = event as Task;
-					if (task.id !== thread.taskId) {
-						thread.taskId = task.id;
+					if (task.id !== a2aSession.taskId) {
+						a2aSession.taskId = task.id;
 					}
-					if (task.contextId && task.contextId !== thread.contextId) {
-						thread.contextId = task.contextId;
+					if (task.contextId && task.contextId !== a2aSession.contextId) {
+						a2aSession.contextId = task.contextId;
 					}
 				} else {
 					loggers.a2a.warn("Received unknown event structure from stream:", {

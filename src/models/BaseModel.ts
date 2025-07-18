@@ -1,3 +1,4 @@
+import type { SessionObject } from "@/session/BaseSession.js";
 import type { AgentTool } from "../intent/modules/common/tool.js";
 
 export interface ToolCall {
@@ -10,7 +11,11 @@ export interface FetchResponse {
 }
 
 export interface IBaseModel {
-	generateMessages<M>(queries: string[], systemPrompt?: string): M[];
+	generateMessages<M>(
+		sessionHistory: SessionObject,
+		query: string,
+		systemPrompt?: string,
+	): M[];
 	expandMessages<M>(messages: M[], message: string): void;
 	convertToolsToFunctions<F>(tools: AgentTool[]): F[];
 	fetch<M>(messages: M[]): Promise<FetchResponse>;
@@ -22,7 +27,8 @@ export interface IBaseModel {
 
 export abstract class BaseModel<MessageType, FunctionType> {
 	abstract generateMessages(
-		queries: string[],
+		sessionHistory: SessionObject,
+		query: string,
 		systemPrompt?: string,
 	): MessageType[];
 

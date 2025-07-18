@@ -7,8 +7,9 @@ import type {
 import type { A2ATool } from "@/intent/modules/a2a/tool.js";
 import { PROTOCOL_TYPE } from "@/intent/modules/common/types.js";
 import type { MCPTool } from "@/intent/modules/mcp/tool.js";
+import { ChatRole, type SessionObject } from "@/session/BaseSession.js";
 import type { AgentTool } from "../intent/modules/common/tool.js";
-import { BaseModel, type FetchResponse, type ToolCall } from "./base.js";
+import { BaseModel, type FetchResponse, type ToolCall } from "./BaseModel.js";
 
 export default class AzureOpenAI extends BaseModel<
 	CCMessageParam,
@@ -32,14 +33,37 @@ export default class AzureOpenAI extends BaseModel<
 		this.modelName = modelName;
 	}
 
-	generateMessages(queries: string[], systemPrompt?: string): CCMessageParam[] {
+	private getMessageRole(role: ChatRole) {
+		switch (role) {
+			case ChatRole.USER:
+				return "user";
+			case ChatRole.MODEL:
+			case ChatRole.SYSTEM:
+				return "system";
+			default:
+				return "system"; /*FIXME*/
+		}
+	}
+
+	generateMessages(
+		sessionHistory: SessionObject,
+		query: string,
+		systemPrompt?: string,
+	): CCMessageParam[] {
 		const messages: CCMessageParam[] = !systemPrompt
 			? []
 			: [{ role: "system", content: systemPrompt.trim() }];
-		const userContent: CCMessageParam[] = queries.map((query: string) => {
-			return { role: "user", content: query };
-		});
-		return messages.concat(userContent);
+		const sessionContent: CCMessageParam[] = Object.keys(sessionHistory).map(
+			(messageId: string) => {
+				const message = sessionHistory[messageId];
+				return {
+					role: this.getMessageRole(message.role),
+					content: message.content.parts[0],
+				};
+			},
+		);
+		const userContent: CCMessageParam = { role: "user", content: query };
+		return messages.concat(sessionContent).concat(userContent);
 	}
 
 	expandMessages(messages: CCMessageParam[], message: string): void {
