@@ -4,12 +4,16 @@ import {
 	type FunctionDeclaration,
 	GoogleGenAI,
 } from "@google/genai";
-import type { A2ATool } from "@/intent/modules/a2a/tool.js";
-import type { AgentTool } from "@/intent/modules/common/tool.js";
-import { PROTOCOL_TYPE } from "@/intent/modules/common/types.js";
-import type { MCPTool } from "@/intent/modules/mcp/tool.js";
-import { ChatRole, type SessionObject } from "@/session/BaseSession.js";
-import { BaseModel, type FetchResponse, type ToolCall } from "./BaseModel.js";
+import { ChatRole, type SessionObject } from "@/types/memory.js";
+import type {
+	FetchResponse,
+	IA2ATool,
+	IAgentTool,
+	IMCPTool,
+	ToolCall,
+} from "@/types/tool.js";
+import { TOOL_PROTOCOL_TYPE } from "@/types/tool.js";
+import { BaseModel } from "./model.module.js";
 
 export default class GeminiModel extends BaseModel<
 	Content,
@@ -110,14 +114,14 @@ export default class GeminiModel extends BaseModel<
 		return await this.fetch(messages);
 	}
 
-	convertToolsToFunctions(tools: AgentTool[]): FunctionDeclaration[] {
+	convertToolsToFunctions(tools: IAgentTool[]): FunctionDeclaration[] {
 		const functions: FunctionDeclaration[] = [];
 		for (const tool of tools) {
 			if (!tool.enabled) {
 				continue;
 			}
-			if (tool.protocol === PROTOCOL_TYPE.MCP) {
-				const { mcpTool, id } = tool as MCPTool;
+			if (tool.protocol === TOOL_PROTOCOL_TYPE.MCP) {
+				const { mcpTool, id } = tool as IMCPTool;
 				functions.push({
 					name: id,
 					description: mcpTool.description,
@@ -125,7 +129,7 @@ export default class GeminiModel extends BaseModel<
 				});
 			} else {
 				// PROTOCOL_TYPE.A2A
-				const { id, card } = tool as A2ATool;
+				const { id, card } = tool as IA2ATool;
 				functions.push({
 					name: id,
 					description: card.description,

@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-import AzureOpenAI from "../src/models/openai.js";
+import AzureOpenAI from "../src/modules/models/openai.js";
 import { FOLClient, FOLLocalStore } from "../src/intent/modules/fol/index.js";
 
 const model = new AzureOpenAI(

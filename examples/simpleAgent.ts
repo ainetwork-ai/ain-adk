@@ -1,29 +1,31 @@
 import "dotenv/config";
 
 import { getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { AINAgent } from "../src/ainagent.js";
-import { IntentAnalyzer } from "../src/intent/analyzer.js";
-import { MCPModule } from "../src/intent/modules/mcp/index.js";
-import AzureOpenAI from "../src/models/openai.js";
-import GeminiModel from "../src/models/gemini.js";
-import { AINAgentInfo } from "../src/types/index.js";
+import AzureOpenAI from "../src/modules/models/openai.js";
+import GeminiModel from "../src/modules/models/gemini.js";
+import { MCPModule, MemoryModule, ModelModule } from "../src/modules/index.js";
+import InMemoryMemory from "../src/modules/memory/inmemory.js";
+import { AinAgentManifest } from "../src/types/index.js";
+import AINAgent from "../src/app.js";
 
-/*
+const PORT = Number(process.env.PORT) || 9100;
+
+const modelModule = new ModelModule();
 const model = new AzureOpenAI(
 	process.env.AZURE_OPENAI_PTU_BASE_URL!,
 	process.env.AZURE_OPENAI_PTU_API_KEY!,
 	process.env.AZURE_OPENAI_PTU_API_VERSION!,
 	process.env.AZURE_OPENAI_MODEL_NAME!,
 );
-*/
+modelModule.addModel('azure-gpt-4o', model);
+/*
 const model = new GeminiModel(
 	process.env.GEMINI_API_KEY!,
 	process.env.GEMINI_MODEL_NAME!,
 );
-const intentAnalyzer = new IntentAnalyzer(model);
-const mcp = new MCPModule();
-
-await mcp.addMCPConfig({
+*/
+const mcpModule = new MCPModule();
+await mcpModule.addMCPConfig({
 	notionApi: {
 		command: "npx",
 		args: ["-y", "@notionhq/notion-mcp-server"],
@@ -34,17 +36,18 @@ await mcp.addMCPConfig({
 	},
 });
 
-intentAnalyzer.addMCPModule(mcp);
+const inMemoryMemory = new InMemoryMemory("");
+const memoryModule = new MemoryModule(inMemoryMemory);
 
-const info: AINAgentInfo = {
+const manifest: AinAgentManifest = {
   name: "ComCom Agent",
   description: "An agent that can provide answers by referencing the contents of ComCom Notion.",
   version: "0.0.2", // Incremented version
+	url: `http://localhost:${PORT}`
 };
 const agent = new AINAgent(
-  intentAnalyzer,
-  info,
-  "http://localhost:3100"
+  manifest,
+	{ modelModule, mcpModule, memoryModule }
 );
 
-agent.start(Number(process.env.PORT) || 3100);
+agent.start(PORT);

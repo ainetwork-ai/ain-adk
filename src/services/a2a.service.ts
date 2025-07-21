@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
 	AgentExecutor,
 	ExecutionEventBus,
@@ -5,16 +6,19 @@ import type {
 	TaskStatusUpdateEvent,
 } from "@a2a-js/sdk";
 import type { AgentExecutionEvent } from "@a2a-js/sdk/build/src/server/events/execution_event_bus.js";
-import { v4 as uuidv4 } from "uuid";
-import type { IntentAnalyzer } from "@/intent/analyzer.js";
 import { loggers } from "@/utils/logger.js";
+import type { QueryService } from "./query.service.js";
 
-export class AINAgentExecutor implements AgentExecutor {
-	private intentAnalyzer: IntentAnalyzer;
+/**
+ * Implements the AgentExecutor interface from the a2a-js-sdk.
+ * This service is responsible for the core business logic of executing an A2A task.
+ */
+export class A2AService implements AgentExecutor {
+	private queryService: QueryService;
 	private canceledTasks: Set<string> = new Set<string>();
 
-	constructor(intentAnalyzer: IntentAnalyzer) {
-		this.intentAnalyzer = intentAnalyzer;
+	constructor(queryService: QueryService) {
+		this.queryService = queryService;
 	}
 
 	public cancelTask = async (
@@ -40,7 +44,7 @@ export class AINAgentExecutor implements AgentExecutor {
 					? {
 							kind: "message",
 							role: "agent",
-							messageId: uuidv4(),
+							messageId: randomUUID(),
 							parts: [{ kind: "text", text: message }],
 							taskId: taskId,
 							contextId: contextId,
@@ -57,13 +61,13 @@ export class AINAgentExecutor implements AgentExecutor {
 		eventBus: ExecutionEventBus,
 	): Promise<void> {
 		const userMessage = requestContext.userMessage;
+		const { sessionId } = userMessage.metadata as { sessionId: string };
 		const existingTask = requestContext.task;
 
-		const taskId = existingTask?.id || uuidv4();
+		const taskId = existingTask?.id || randomUUID();
 		const contextId =
-			userMessage.contextId || existingTask?.contextId || uuidv4();
+			userMessage.contextId || existingTask?.contextId || randomUUID();
 
-		// 1. Publish initial Task event if it's a new task
 		if (!existingTask) {
 			const initialTask: AgentExecutionEvent = {
 				kind: "task",
@@ -80,7 +84,6 @@ export class AINAgentExecutor implements AgentExecutor {
 			eventBus.publish(initialTask);
 		}
 
-		// 2. Publish "working" status update
 		const workingStatusUpdate = this.createTaskStatusUpdateEvent(
 			taskId,
 			contextId,
@@ -88,10 +91,6 @@ export class AINAgentExecutor implements AgentExecutor {
 		);
 		eventBus.publish(workingStatusUpdate);
 
-		// 3. Prepare message for intent analyzer
-		// TODO: Multi-modal (part.kind === 'file' || part.kind === 'data')
-		// TODO: Context history management
-		// TODO: anything else?
 		const message: string = userMessage.parts
 			.filter((part) => part.kind === "text")
 			.map((part) => part.text)
@@ -108,9 +107,8 @@ export class AINAgentExecutor implements AgentExecutor {
 			return;
 		}
 
-		// 4. Handle query using intent analyzer
 		try {
-			const response = await this.intentAnalyzer.handleQuery(message);
+			const response = await this.queryService.handleQuery(message, sessionId);
 
 			if (this.canceledTasks.has(taskId)) {
 				loggers.server.info(`Task ${taskId} was canceled.`);
@@ -127,7 +125,7 @@ export class AINAgentExecutor implements AgentExecutor {
 				taskId,
 				contextId,
 				"completed",
-				response.content, // FIXME: only for Azure OpenAI fetch
+				response.content,
 			);
 			eventBus.publish(finalUpdate);
 			loggers.server.info(`Task ${taskId} completed successfully.`);
@@ -140,7 +138,6 @@ export class AINAgentExecutor implements AgentExecutor {
 				`Agent error: ${error.message}`,
 			);
 			eventBus.publish(errorUpdate);
-			return;
 		}
 	}
 }

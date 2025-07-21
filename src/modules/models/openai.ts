@@ -4,12 +4,16 @@ import type {
 	ChatCompletionMessageToolCall,
 	ChatCompletionTool,
 } from "openai/resources";
-import type { A2ATool } from "@/intent/modules/a2a/tool.js";
-import { PROTOCOL_TYPE } from "@/intent/modules/common/types.js";
-import type { MCPTool } from "@/intent/modules/mcp/tool.js";
-import { ChatRole, type SessionObject } from "@/session/BaseSession.js";
-import type { AgentTool } from "../intent/modules/common/tool.js";
-import { BaseModel, type FetchResponse, type ToolCall } from "./BaseModel.js";
+import { ChatRole, type SessionObject } from "@/types/memory.js";
+import type {
+	FetchResponse,
+	IA2ATool,
+	IAgentTool,
+	IMCPTool,
+	ToolCall,
+} from "@/types/tool.js";
+import { TOOL_PROTOCOL_TYPE } from "@/types/tool.js";
+import { BaseModel } from "./model.module.js";
 
 export default class AzureOpenAI extends BaseModel<
 	CCMessageParam,
@@ -54,11 +58,11 @@ export default class AzureOpenAI extends BaseModel<
 			? []
 			: [{ role: "system", content: systemPrompt.trim() }];
 		const sessionContent: CCMessageParam[] = Object.keys(sessionHistory).map(
-			(messageId: string) => {
-				const message = sessionHistory[messageId];
+			(chatId: string) => {
+				const chat = sessionHistory[chatId];
 				return {
-					role: this.getMessageRole(message.role),
-					content: message.content.parts[0],
+					role: this.getMessageRole(chat.role),
+					content: chat.content.parts[0],
 				};
 			},
 		);
@@ -116,14 +120,14 @@ export default class AzureOpenAI extends BaseModel<
 		return await this.fetch(messages);
 	}
 
-	convertToolsToFunctions(tools: AgentTool[]): ChatCompletionTool[] {
+	convertToolsToFunctions(tools: IAgentTool[]): ChatCompletionTool[] {
 		const functions: ChatCompletionTool[] = [];
 		for (const tool of tools) {
 			if (!tool.enabled) {
 				continue;
 			}
-			if (tool.protocol === PROTOCOL_TYPE.MCP) {
-				const { mcpTool, id } = tool as MCPTool;
+			if (tool.protocol === TOOL_PROTOCOL_TYPE.MCP) {
+				const { mcpTool, id } = tool as IMCPTool;
 				functions.push({
 					type: "function",
 					function: {
@@ -134,7 +138,7 @@ export default class AzureOpenAI extends BaseModel<
 				});
 			} else {
 				// PROTOCOL_TYPE.A2A
-				const { id, card } = tool as A2ATool;
+				const { id, card } = tool as IA2ATool;
 				functions.push({
 					type: "function",
 					function: {

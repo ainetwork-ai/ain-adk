@@ -9,25 +9,25 @@ import {
 	type TextPart,
 } from "@a2a-js/sdk";
 import { loggers } from "@/utils/logger.js";
-import { A2ATool } from "./tool.js";
+import { A2ATool } from "./a2a.tool.js";
 
 interface A2ASession {
 	taskId: string | undefined;
 	contextId: string | undefined;
 }
 
-export class A2AModule {
-	private a2aServers: Map<string, A2ATool | null> = new Map();
+export default class A2AModule {
+	private a2aPeerServers: Map<string, A2ATool | null> = new Map();
 	private a2aSessions: Map<string, A2ASession> = new Map(); // Map from session ID to A2A ids
 
-	public async addA2AServer(url: string): Promise<void> {
-		this.a2aServers.set(url, null);
+	public async addA2APeerServer(url: string): Promise<void> {
+		this.a2aPeerServers.set(url, null);
 	}
 
 	public async getTools(): Promise<A2ATool[]> {
 		const tools: A2ATool[] = [];
-		for (const url of [...this.a2aServers.keys()]) {
-			const tool = this.a2aServers.get(url);
+		for (const url of [...this.a2aPeerServers.keys()]) {
+			const tool = this.a2aPeerServers.get(url);
 			if (!tool || !tool.enabled) {
 				try {
 					const client = new A2AClient(url);
