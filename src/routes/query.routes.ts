@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type AINAgent from "@/app.js";
+import type { AINAgent } from "@/app.js";
 import { QueryController } from "@/controllers/query.controller.js";
 import { QueryService } from "@/services/query.service.js";
 

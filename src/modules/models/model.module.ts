@@ -20,7 +20,7 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	): Promise<FetchResponse>;
 }
 
-export default class ModelModule {
+export class ModelModule {
 	private models: { [name: string]: BaseModel<unknown, unknown> } = {};
 	private defaultModelName?: string;
 

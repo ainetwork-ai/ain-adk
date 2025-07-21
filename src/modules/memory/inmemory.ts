@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ChatObject, SessionObject } from "@/types/memory.js";
 import { BaseMemory } from "./memory.module.js";
 
-export default class InMemoryMemory extends BaseMemory {
+export class InMemoryMemory extends BaseMemory {
 	public agentPrompt: string;
 	public sessionHistory: Map<string, SessionObject>;
 

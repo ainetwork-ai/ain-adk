@@ -16,7 +16,7 @@ interface A2ASession {
 	contextId: string | undefined;
 }
 
-export default class A2AModule {
+export class A2AModule {
 	private a2aPeerServers: Map<string, A2ATool | null> = new Map();
 	private a2aSessions: Map<string, A2ASession> = new Map(); // Map from session ID to A2A ids
 

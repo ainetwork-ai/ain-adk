@@ -16,7 +16,7 @@ export abstract class BaseMemory {
 	abstract updateAgentPrompt(newPrompt: string): Promise<void>;
 }
 
-export default class MemoryModule {
+export class MemoryModule {
 	private memory: BaseMemory;
 
 	constructor(memory: BaseMemory) {

@@ -15,10 +15,7 @@ import type {
 import { TOOL_PROTOCOL_TYPE } from "@/types/tool.js";
 import { BaseModel } from "./model.module.js";
 
-export default class GeminiModel extends BaseModel<
-	Content,
-	FunctionDeclaration
-> {
+export class GeminiModel extends BaseModel<Content, FunctionDeclaration> {
 	private client: GoogleGenAI;
 	private modelName: string;
 

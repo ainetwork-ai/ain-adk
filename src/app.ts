@@ -16,7 +16,7 @@ import { createA2ARouter } from "./routes/a2a.routes.js";
 import { createQueryRouter } from "./routes/query.routes.js";
 import type { AinAgentManifest } from "./types/index.js";
 
-export default class AINAgent {
+export class AINAgent {
 	public app: express.Application;
 	public manifest: AinAgentManifest;
 
