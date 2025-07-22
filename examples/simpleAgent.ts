@@ -38,7 +38,7 @@ async function main() {
 			args: ["-y", "@notionhq/notion-mcp-server"],
 			env: {
 				...getDefaultEnvironment(),
-				OPENAPI_MCP_HEADERS: `{\"Authorization\": \"Bearer ntn_${process.env.NOTION_API_KEY}\", \"Notion-Version\": \"2022-06-28\" }`,
+				OPENAPI_MCP_HEADERS: `{\"Authorization\": \"Bearer ${process.env.NOTION_API_KEY}\", \"Notion-Version\": \"2022-06-28\" }`,
 			},
 		},
 	});
