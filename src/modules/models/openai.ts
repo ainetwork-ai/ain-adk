@@ -54,15 +54,15 @@ export class AzureOpenAI extends BaseModel<CCMessageParam, ChatCompletionTool> {
 		const messages: CCMessageParam[] = !systemPrompt
 			? []
 			: [{ role: "system", content: systemPrompt.trim() }];
-		const sessionContent: CCMessageParam[] = Object.keys(sessionHistory).map(
-			(chatId: string) => {
-				const chat = sessionHistory.chats[chatId];
-				return {
-					role: this.getMessageRole(chat.role),
-					content: chat.content.parts[0],
-				};
-			},
-		);
+		const sessionContent: CCMessageParam[] = Object.keys(
+			sessionHistory.chats,
+		).map((chatId: string) => {
+			const chat = sessionHistory.chats[chatId];
+			return {
+				role: this.getMessageRole(chat.role),
+				content: chat.content.parts[0],
+			};
+		});
 		const userContent: CCMessageParam = { role: "user", content: query };
 		return messages.concat(sessionContent).concat(userContent);
 	}

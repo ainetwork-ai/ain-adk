@@ -45,13 +45,13 @@ export class GeminiModel extends BaseModel<Content, FunctionDeclaration> {
 		const messages: Content[] = !systemPrompt
 			? []
 			: [{ role: "model", parts: [{ text: systemPrompt.trim() }] }];
-		const sessionContent: Content[] = Object.keys(sessionHistory).map(
-			(messageId: string) => {
-				const message = sessionHistory.chats[messageId];
+		const sessionContent: Content[] = Object.keys(sessionHistory.chats).map(
+			(chatId: string) => {
+				const chat = sessionHistory.chats[chatId];
 				// TODO: check message.content.type
 				return {
-					role: this.getMessageRole(message.role),
-					parts: [{ text: message.content.parts[0] }],
+					role: this.getMessageRole(chat.role),
+					parts: [{ text: chat.content.parts[0] }],
 				};
 			},
 		);
