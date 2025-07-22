@@ -4,6 +4,7 @@ import type {
 	MemoryModule,
 	ModelModule,
 } from "@/modules/index.js";
+import type { AinAgentPrompts } from "@/types/index.js";
 import { ChatRole, type SessionObject } from "@/types/memory.js";
 import {
 	type IA2ATool,
@@ -18,17 +19,20 @@ export class QueryService {
 	private a2aModule?: A2AModule;
 	private mcpModule?: MCPModule;
 	private memoryModule?: MemoryModule;
+	private prompts?: AinAgentPrompts;
 
 	constructor(
 		modelModule: ModelModule,
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		memoryModule?: MemoryModule,
+		prompts?: AinAgentPrompts,
 	) {
 		this.modelModule = modelModule;
 		this.a2aModule = a2aModule;
 		this.mcpModule = mcpModule;
 		this.memoryModule = memoryModule;
+		this.prompts = prompts;
 	}
 
 	private async intentTriggering(query: string) {
@@ -42,13 +46,12 @@ export class QueryService {
 		sessionHistory: SessionObject,
 	) {
 		// 1. Load agent / system prompt from memory
-		const memoryInstance = this.memoryModule?.getMemory();
 		const systemPrompt = `
 Today is ${new Date().toLocaleDateString()}.
 
-${await memoryInstance?.getAgentPrompt()}
+${this.prompts?.agent || ""}
 
-${await memoryInstance?.getSystemPrompt()}
+${this.prompts?.system || ""}
     `;
 
 		const modelInstance = this.modelModule.getModel();

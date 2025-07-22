@@ -11,9 +11,6 @@ export abstract class BaseMemory {
 		intent: string,
 		sessionId: string,
 	): Promise<void>;
-	abstract getAgentPrompt(): Promise<string>;
-	abstract getSystemPrompt(): Promise<string>;
-	abstract updateAgentPrompt(newPrompt: string): Promise<void>;
 }
 
 export class MemoryModule {
