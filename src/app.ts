@@ -6,6 +6,7 @@ import { StatusCodes } from "http-status-codes";
 import type { BaseAuth } from "@/middlewares/auth/base.js";
 import { loggers } from "@/utils/logger.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
+import type { FOLModule } from "./modules/fol/fol.module.js";
 import type {
 	A2AModule,
 	MCPModule,
@@ -46,17 +47,12 @@ export class AINAgent {
 	/** Agent manifest containing metadata and configuration */
 	public manifest: AinAgentManifest;
 
-	/** Module for managing AI model integrations (OpenAI, Gemini, etc.) */
+	/** Modules */
 	public modelModule: ModelModule;
-
-	/** Optional module for Agent-to-Agent (A2A) protocol communication */
 	public a2aModule?: A2AModule;
-
-	/** Optional module for Model Context Protocol (MCP) client connections */
 	public mcpModule?: MCPModule;
-
-	/** Optional module for session and memory management */
 	public memoryModule?: MemoryModule;
+	public folModule?: FOLModule;
 
 	/** Optional authentication scheme for securing endpoints */
 	public authScheme?: BaseAuth;
@@ -70,6 +66,7 @@ export class AINAgent {
 	 * @param modules.a2aModule - Optional module for A2A protocol support
 	 * @param modules.mcpModule - Optional module for MCP server connections
 	 * @param modules.memoryModule - Optional module for memory management
+	 * @param modules.folModule - Optional module for fol management
 	 * @param authScheme - Optional authentication middleware for securing endpoints
 	 */
 	constructor(
@@ -79,6 +76,7 @@ export class AINAgent {
 			a2aModule?: A2AModule;
 			mcpModule?: MCPModule;
 			memoryModule?: MemoryModule;
+			folModule?: FOLModule;
 		},
 		authScheme?: BaseAuth,
 	) {
@@ -92,6 +90,7 @@ export class AINAgent {
 		this.a2aModule = modules.a2aModule;
 		this.mcpModule = modules.mcpModule;
 		this.memoryModule = modules.memoryModule;
+		this.folModule = modules.folModule;
 
 		this.authScheme = authScheme;
 

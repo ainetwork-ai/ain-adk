@@ -1,30 +1,33 @@
 import "dotenv/config";
 
-import AzureOpenAI from "../src/models/openai.js";
-import { AINAgent } from "../src/ainagent.js";
-import { IntentAnalyzer } from "../src/intent/analyzer.js";
-import { FOLClient, FOLLocalStore } from "../src/intent/modules/fol/index.js";
-import { AINAgentInfo } from "../src/types/index.js";
+import { AzureOpenAI } from "../src/modules/models/openai.js";
+import { AINAgent } from "../src/app.js";
+import { FOLModule } from "../src/modules/fol/fol.module.js";
+import { FOLLocalStore } from "../src/modules/fol/store/index.js";
+import { AinAgentManifest } from "../src/types/index.js";
+import { ModelModule } from "../src/modules/index.js";
 
+const modelModule = new ModelModule();
 const model = new AzureOpenAI(
   process.env.AZURE_OPENAI_PTU_BASE_URL!,
   process.env.AZURE_OPENAI_PTU_API_KEY!,
   process.env.AZURE_OPENAI_PTU_API_VERSION!,
   process.env.AZURE_OPENAI_MODEL_NAME!,
 );
-const intentAnalyzer = new IntentAnalyzer(model);
+modelModule.addModel('azure-gpt-4o', model);
 
 const folStore = new FOLLocalStore("fol-store");
-const folClient = new FOLClient(model, folStore);
+const folModule = new FOLModule(model, folStore);
 
-intentAnalyzer.addFOLModule(folClient);
-
-const info: AINAgentInfo = {
+const manifest: AinAgentManifest = {
   name: "FOL Agent",
   description: "Agent for FOL",
   version: "0.0.3", // Incremented version
 };
 
-const agent = new AINAgent(intentAnalyzer, info);
+const agent = new AINAgent(
+  manifest,
+  { modelModule, folModule }
+);
 
 agent.start(Number(process.env.PORT) || 3100);

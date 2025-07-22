@@ -1,12 +1,9 @@
-import dotenv from "dotenv";
 import type { BaseModel } from "@/modules/models/model.module.js";
+import type { Facts } from "@/types/fol.js";
 import { loggers } from "@/utils/logger.js";
-import type { FOLStore } from "../store/index.js";
-import type { Facts } from "../types/index.js";
+import type { FOLStore } from "./store/index.js";
 
-dotenv.config();
-
-export class FOLClient {
+export class FOLModule {
 	private model: BaseModel<unknown, unknown>;
 	private folStore: FOLStore;
 

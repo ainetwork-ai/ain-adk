@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { Facts } from "@/types/fol.js";
 import { loggers } from "@/utils/logger.js";
-import type { Facts } from "../types/index.js";
 import { FOLStore } from "./base.js";
 
 export class FOLLocalStore extends FOLStore {

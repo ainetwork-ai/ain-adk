@@ -23,11 +23,16 @@
  * };
  * ```
  */
-export interface Facts {
+export type FactElement = {
+	name: string;
+	description: string;
+};
+
+export type Facts = {
 	/** Constants represent individual objects or entities in the domain */
-	constants: { name: string; description: string }[];
+	constants: FactElement[];
 	/** Predicates represent properties or relationships between constants */
-	predicates: { name: string; description: string }[];
+	predicates: FactElement[];
 	/** Facts are specific instances of predicates applied to constants */
-	facts: { name: string; description: string }[];
-}
+	facts: FactElement[];
+};

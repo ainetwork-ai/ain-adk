@@ -1,4 +1,4 @@
-import type { Facts } from "../types/index.js";
+import type { Facts } from "@/types/fol.js";
 
 export abstract class FOLStore {
 	abstract saveFacts(intent: string, facts: Facts): Promise<void>;
