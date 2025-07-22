@@ -1,50 +1,68 @@
 import "dotenv/config";
+import { readFile } from "fs/promises";
 
 import { getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { AINAgent } from "../src/ainagent.js";
-import { IntentAnalyzer } from "../src/intent/analyzer.js";
-import { MCPModule } from "../src/intent/modules/mcp/index.js";
-import AzureOpenAI from "../src/models/openai.js";
-import GeminiModel from "../src/models/gemini.js";
-import { AINAgentInfo } from "../src/types/index.js";
+import { AzureOpenAI } from "../src/modules/models/openai.js";
+import { GeminiModel } from "../src/modules/models/gemini.js";
+import { MCPModule, MemoryModule, ModelModule } from "../src/modules/index.js";
+import { InMemoryMemory } from "../src/modules/memory/inmemory.js";
+import { AinAgentManifest } from "../src/types/index.js";
+import { AINAgent } from "../src/app.js";
 
-/*
-const model = new AzureOpenAI(
-	process.env.AZURE_OPENAI_PTU_BASE_URL!,
-	process.env.AZURE_OPENAI_PTU_API_KEY!,
-	process.env.AZURE_OPENAI_PTU_API_VERSION!,
-	process.env.AZURE_OPENAI_MODEL_NAME!,
-);
-*/
-const model = new GeminiModel(
-	process.env.GEMINI_API_KEY!,
-	process.env.GEMINI_MODEL_NAME!,
-);
-const intentAnalyzer = new IntentAnalyzer(model);
-const mcp = new MCPModule();
+const PORT = Number(process.env.PORT) || 9100;
 
-await mcp.addMCPConfig({
-	notionApi: {
-		command: "npx",
-		args: ["-y", "@notionhq/notion-mcp-server"],
-		env: {
-			...getDefaultEnvironment(),
-			OPENAPI_MCP_HEADERS: `{\"Authorization\": \"Bearer ntn_${process.env.NOTION_API_KEY}\", \"Notion-Version\": \"2022-06-28\" }`,
+async function readFileAsync(path: string): Promise<string> {
+	const content: string = await readFile(path, 'utf-8');
+	return content;
+}
+
+async function main() {
+	const modelModule = new ModelModule();
+	const model = new AzureOpenAI(
+		process.env.AZURE_OPENAI_PTU_BASE_URL!,
+		process.env.AZURE_OPENAI_PTU_API_KEY!,
+		process.env.AZURE_OPENAI_PTU_API_VERSION!,
+		process.env.AZURE_OPENAI_MODEL_NAME!,
+	);
+	modelModule.addModel('azure-gpt-4o', model);
+	/*
+	const model = new GeminiModel(
+		process.env.GEMINI_API_KEY!,
+		process.env.GEMINI_MODEL_NAME!,
+	);
+	*/
+	const mcpModule = new MCPModule();
+	await mcpModule.addMCPConfig({
+		notionApi: {
+			command: "npx",
+			args: ["-y", "@notionhq/notion-mcp-server"],
+			env: {
+				...getDefaultEnvironment(),
+				OPENAPI_MCP_HEADERS: `{\"Authorization\": \"Bearer ${process.env.NOTION_API_KEY}\", \"Notion-Version\": \"2022-06-28\" }`,
+			},
 		},
-	},
-});
+	});
 
-intentAnalyzer.addMCPModule(mcp);
+	const inMemoryMemory = new InMemoryMemory();
+	const memoryModule = new MemoryModule(inMemoryMemory);
 
-const info: AINAgentInfo = {
-  name: "ComCom Agent",
-  description: "An agent that can provide answers by referencing the contents of ComCom Notion.",
-  version: "0.0.2", // Incremented version
-};
-const agent = new AINAgent(
-  intentAnalyzer,
-  info,
-  "http://localhost:3100"
-);
+	const systemPrompt = await readFileAsync("./examples/sampleSystem.prompt");
+	const manifest: AinAgentManifest = {
+		name: "ComCom Agent",
+		description: "An agent that can provide answers by referencing the contents of ComCom Notion.",
+		version: "0.0.2", // Incremented version
+		url: `http://localhost:${PORT}`,
+		prompts: {
+			agent: "",
+			system: systemPrompt,
+		}
+	};
+	const agent = new AINAgent(
+		manifest,
+		{ modelModule, mcpModule, memoryModule }
+	);
 
-agent.start(Number(process.env.PORT) || 3100);
+	agent.start(PORT);
+}
+
+main();

@@ -1,7 +1,8 @@
 import "dotenv/config";
 
-import AzureOpenAI from "../src/models/openai.js";
-import { FOLClient, FOLLocalStore } from "../src/intent/modules/fol/index.js";
+import { AzureOpenAI } from "../src/modules/models/openai.js";
+import { FOLModule } from "../src/modules/fol/fol.module.js";
+import { FOLLocalStore } from "../src/modules/fol/store/index.js";
 
 const model = new AzureOpenAI(
   process.env.AZURE_OPENAI_PTU_BASE_URL!,
@@ -11,7 +12,7 @@ const model = new AzureOpenAI(
 );
 
 const folStore = new FOLLocalStore("fol-store");
-const folClient = new FOLClient(model, folStore);
+const folClient = new FOLModule(model, folStore);
 
 console.log("debug", "start");
 
