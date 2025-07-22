@@ -67,7 +67,7 @@ export class AzureOpenAI extends BaseModel<CCMessageParam, ChatCompletionTool> {
 		return messages.concat(sessionContent).concat(userContent);
 	}
 
-	expandMessages(messages: CCMessageParam[], message: string): void {
+	appendMessages(messages: CCMessageParam[], message: string): void {
 		messages.push({
 			role: "user",
 			content: message,

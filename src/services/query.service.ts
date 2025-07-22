@@ -164,7 +164,7 @@ ${this.prompts?.system || ""}
 					loggers.intent.debug("toolResult", { toolResult });
 
 					processList.push(toolResult);
-					modelInstance.expandMessages(messages, toolResult);
+					modelInstance.appendMessages(messages, toolResult);
 				}
 			} else if (content) {
 				processList.push(content);

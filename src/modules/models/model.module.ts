@@ -32,7 +32,7 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	 * @param messages - Existing message array to expand
 	 * @param message - New message content to append
 	 */
-	abstract expandMessages(messages: MessageType[], message: string): void;
+	abstract appendMessages(messages: MessageType[], message: string): void;
 
 	/**
 	 * Converts protocol-agnostic tools to model-specific function format.
