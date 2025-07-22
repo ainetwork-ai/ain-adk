@@ -2,7 +2,10 @@
 
 A TypeScript library for building AI agents with multi-protocol support including MCP (Model Context Protocol) and A2A (Agent-to-Agent) communication.
 
-## Features
+# NOTE
+IMPORTANT: This project is currently under active development. Features may be incomplete, and there might be significant changes in future updates. Please be aware that some functionalities may not work as expected or might change without prior notice.
+
+# Features
 
 - **Multi-Protocol Support**: Integrate with MCP servers and A2A agents
 - **Modular Architecture**: Flexible module system for models, memory, MCP, and A2A
