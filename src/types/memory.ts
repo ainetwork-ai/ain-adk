@@ -12,7 +12,8 @@ export type ChatContentObject = {
 export type ChatObject = {
 	role: ChatRole;
 	content: ChatContentObject;
-	metadata?: any;
+	timestamp: number;
+	metadata?: { [key: string]: unknown };
 };
 
 export type SessionObject = {

@@ -153,6 +153,7 @@ ${await memoryInstance?.getSystemPrompt()}
 
 	public async handleQuery(query: string, sessionId: string) {
 		// 1. Load session history with sessionId
+		const queryStartAt = Date.now();
 		const memoryInstance = this.memoryModule?.getMemory();
 		const sessionHistory =
 			(await memoryInstance?.getSessionHistory(sessionId)) || {};
@@ -169,10 +170,12 @@ ${await memoryInstance?.getSystemPrompt()}
 		if (sessionId) {
 			await memoryInstance?.updateSessionHistory(sessionId, {
 				role: ChatRole.USER,
+				timestamp: queryStartAt,
 				content: { type: "text", parts: [query] },
 			});
 			await memoryInstance?.updateSessionHistory(sessionId, {
 				role: ChatRole.MODEL,
+				timestamp: Date.now(),
 				content: { type: "text", parts: [result.response] },
 			});
 		}
