@@ -14,6 +14,13 @@ import {
 } from "@/types/tool.js";
 import { loggers } from "@/utils/logger.js";
 
+/**
+ * Service for processing user queries through the agent's AI pipeline.
+ *
+ * Orchestrates the query processing workflow including intent detection,
+ * model inference, tool execution, and response generation. Manages
+ * conversation context and coordinates between different modules.
+ */
 export class QueryService {
 	private modelModule: ModelModule;
 	private a2aModule?: A2AModule;
@@ -35,11 +42,32 @@ export class QueryService {
 		this.prompts = prompts;
 	}
 
+	/**
+	 * Detects the intent from a user query.
+	 *
+	 * @param query - The user's input query
+	 * @returns The detected intent (currently returns the query as-is)
+	 * @todo Implement actual intent detection logic
+	 */
 	private async intentTriggering(query: string) {
 		/* TODO */
 		return query;
 	}
 
+	/**
+	 * Fulfills the detected intent by generating a response.
+	 *
+	 * Manages the complete inference loop including:
+	 * - Loading prompts and conversation history
+	 * - Collecting available tools from modules
+	 * - Executing model inference with tool support
+	 * - Processing tool calls iteratively until completion
+	 *
+	 * @param query - The user's input query
+	 * @param sessionId - Session identifier for context
+	 * @param sessionHistory - Previous conversation history
+	 * @returns Object containing process steps and final response
+	 */
 	private async intentFulfilling(
 		query: string,
 		sessionId: string,
@@ -154,12 +182,26 @@ ${this.prompts?.system || ""}
 		return botResponse;
 	}
 
+	/**
+	 * Main entry point for processing user queries.
+	 *
+	 * Handles the complete query lifecycle:
+	 * 1. Loads session history from memory
+	 * 2. Detects intent from the query
+	 * 3. Fulfills the intent with AI response
+	 * 4. Updates conversation history
+	 *
+	 * @param query - The user's input query
+	 * @param sessionId - Unique session identifier
+	 * @returns Object containing the AI-generated response
+	 */
 	public async handleQuery(query: string, sessionId: string) {
 		// 1. Load session history with sessionId
 		const queryStartAt = Date.now();
 		const memoryInstance = this.memoryModule?.getMemory();
-		const sessionHistory =
-			(await memoryInstance?.getSessionHistory(sessionId)) || {};
+		const sessionHistory = (await memoryInstance?.getSessionHistory(
+			sessionId,
+		)) || { chats: {} } /* FIXME */;
 
 		// 2. intent triggering
 		const intent = this.intentTriggering(query);

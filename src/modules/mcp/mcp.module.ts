@@ -4,11 +4,45 @@ import type { MCPConfig } from "@/types/mcp.js";
 import { loggers } from "@/utils/logger.js";
 import { MCPTool } from "./mcp.tool.js";
 
+/**
+ * Module for managing Model Context Protocol (MCP) server connections.
+ *
+ * This module handles the lifecycle of MCP client connections, discovers
+ * available tools from connected servers, and provides an interface for
+ * executing those tools. Multiple MCP servers can be connected simultaneously.
+ *
+ * @example
+ * ```typescript
+ * const mcpModule = new MCPModule();
+ * await mcpModule.addMCPConfig({
+ *   "filesystem": {
+ *     command: "npx",
+ *     args: ["@modelcontextprotocol/server-filesystem", "/path/to/files"]
+ *   }
+ * });
+ *
+ * const tools = mcpModule.getTools();
+ * const result = await mcpModule.useTool(tools[0], { path: "/example.txt" });
+ * ```
+ */
 export class MCPModule {
+	/** Map of MCP server names to their client instances */
 	private mcpMap: Map<string, Client> = new Map();
+	/** Map of MCP server names to their transport instances */
 	private transportMap: Map<string, StdioClientTransport> = new Map();
+	/** Array of all discovered tools from connected MCP servers */
 	private tools: MCPTool[] = [];
 
+	/**
+	 * Connects to MCP servers based on the provided configuration.
+	 *
+	 * For each server in the config, establishes a connection, discovers
+	 * available tools, and adds them to the module's tool collection.
+	 * Skips servers that are already connected.
+	 *
+	 * @param mcpConfig - Configuration object mapping server names to connection details
+	 * @throws Error if connection to any MCP server fails
+	 */
 	async addMCPConfig(mcpConfig: MCPConfig) {
 		try {
 			for (const [name, conf] of Object.entries(mcpConfig)) {
@@ -37,10 +71,23 @@ export class MCPModule {
 		}
 	}
 
+	/**
+	 * Returns all available tools from connected MCP servers.
+	 *
+	 * @returns Array of MCPTool instances representing available tools
+	 */
 	getTools() {
 		return this.tools;
 	}
 
+	/**
+	 * Executes a tool on its corresponding MCP server.
+	 *
+	 * @param tool - The MCPTool instance to execute
+	 * @param _args - Arguments to pass to the tool
+	 * @returns Promise resolving to the tool's execution result
+	 * @throws Error if the MCP server for the tool is not found
+	 */
 	async useTool(tool: MCPTool, _args?: any): Promise<any> {
 		const { serverName, mcpTool } = tool;
 		const toolName = mcpTool.name;
@@ -62,6 +109,12 @@ export class MCPModule {
 		return result;
 	}
 
+	/**
+	 * Closes all MCP client connections.
+	 *
+	 * Should be called when shutting down the application to ensure
+	 * all MCP connections are properly closed.
+	 */
 	async cleanup() {
 		this.mcpMap.forEach((mcp: Client) => {
 			mcp.close();

@@ -16,7 +16,7 @@ export class InMemoryMemory extends BaseMemory {
 	}
 
 	public async getSessionHistory(sessionId: string): Promise<SessionObject> {
-		return this.sessionHistory.get(sessionId) || {};
+		return this.sessionHistory.get(sessionId) || { chats: {} };
 	}
 
 	public async updateSessionHistory(
@@ -24,8 +24,8 @@ export class InMemoryMemory extends BaseMemory {
 		chat: ChatObject,
 	): Promise<void> {
 		const newChatId = randomUUID();
-		const history = this.sessionHistory.get(sessionId) || {};
-		history[newChatId] = chat;
+		const history = await this.getSessionHistory(sessionId);
+		history.chats[newChatId] = chat;
 		this.sessionHistory.set(sessionId, history);
 	}
 

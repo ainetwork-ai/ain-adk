@@ -16,18 +16,62 @@ import { createA2ARouter } from "./routes/a2a.routes.js";
 import { createQueryRouter } from "./routes/query.routes.js";
 import type { AinAgentManifest } from "./types/index.js";
 
+/**
+ * Main class for AI Network Agent Development Kit (AIN-ADK).
+ *
+ * AINAgent orchestrates all modules and provides an Express server for handling
+ * agent interactions through both standard query endpoints and A2A protocol endpoints.
+ *
+ * @example
+ * ```typescript
+ * const manifest = {
+ *   name: "MyAgent",
+ *   description: "An example AI agent",
+ *   version: "1.0.0"
+ * };
+ *
+ * const agent = new AINAgent(manifest, {
+ *   modelModule: new ModelModule(),
+ *   a2aModule: new A2AModule(),
+ *   mcpModule: new MCPModule()
+ * });
+ *
+ * agent.start(3000);
+ * ```
+ */
 export class AINAgent {
+	/** Express application instance */
 	public app: express.Application;
+
+	/** Agent manifest containing metadata and configuration */
 	public manifest: AinAgentManifest;
 
-	// Modules
+	/** Module for managing AI model integrations (OpenAI, Gemini, etc.) */
 	public modelModule: ModelModule;
+
+	/** Optional module for Agent-to-Agent (A2A) protocol communication */
 	public a2aModule?: A2AModule;
+
+	/** Optional module for Model Context Protocol (MCP) client connections */
 	public mcpModule?: MCPModule;
+
+	/** Optional module for session and memory management */
 	public memoryModule?: MemoryModule;
 
+	/** Optional authentication scheme for securing endpoints */
 	public authScheme?: BaseAuth;
 
+	/**
+	 * Creates a new AINAgent instance.
+	 *
+	 * @param manifest - Agent manifest containing name, description, version, and optional URL
+	 * @param modules - Required and optional modules for the agent
+	 * @param modules.modelModule - Required module for AI model integrations
+	 * @param modules.a2aModule - Optional module for A2A protocol support
+	 * @param modules.mcpModule - Optional module for MCP server connections
+	 * @param modules.memoryModule - Optional module for memory management
+	 * @param authScheme - Optional authentication middleware for securing endpoints
+	 */
 	constructor(
 		manifest: AinAgentManifest,
 		modules: {
@@ -56,6 +100,10 @@ export class AINAgent {
 		this.app.use(errorMiddleware);
 	}
 
+	/**
+	 * Initializes Express middlewares for security, CORS, and body parsing.
+	 * Also applies authentication middleware if configured.
+	 */
 	private initializeMiddlewares(): void {
 		this.app.use(helmet());
 		this.app.use(cors());
@@ -67,6 +115,12 @@ export class AINAgent {
 		}
 	}
 
+	/**
+	 * Validates if a string is a valid HTTP or HTTPS URL.
+	 *
+	 * @param urlString - The URL string to validate
+	 * @returns true if the URL is valid HTTP/HTTPS, false otherwise
+	 */
 	private isValidUrl(urlString: string | undefined): boolean {
 		if (!urlString) {
 			return false;
@@ -80,6 +134,15 @@ export class AINAgent {
 		}
 	}
 
+	/**
+	 * Generates an A2A protocol agent card for discovery.
+	 *
+	 * The agent card contains metadata about the agent's capabilities,
+	 * supported input/output modes, and connection information.
+	 *
+	 * @returns AgentCard object with agent metadata and capabilities
+	 * @throws Error if manifest URL is invalid or missing
+	 */
 	public generateAgentCard = (): AgentCard => {
 		const _url = new URL(this.manifest.url || "");
 		_url.pathname = "a2a";
@@ -101,6 +164,16 @@ export class AINAgent {
 		};
 	};
 
+	/**
+	 * Initializes all HTTP routes including health check, agent discovery,
+	 * query endpoints, and optional A2A endpoints.
+	 *
+	 * Routes initialized:
+	 * - GET / - Health check endpoint
+	 * - GET /.well-known/agent.json - Agent card discovery endpoint
+	 * - /query/* - Query processing endpoints
+	 * - /a2a/* - A2A protocol endpoints (only if valid URL is configured)
+	 */
 	private initializeRoutes = (): void => {
 		this.app.get("/", async (_, res: Response) => {
 			const { name, description, version } = this.manifest;
@@ -128,6 +201,11 @@ export class AINAgent {
 		}
 	};
 
+	/**
+	 * Starts the Express server on the specified port.
+	 *
+	 * @param port - The port number to listen on
+	 */
 	public start(port: number): void {
 		this.app.listen(port, () => {
 			loggers.agent.info(`AINAgent is running on port ${port}`);

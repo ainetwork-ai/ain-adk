@@ -11,19 +11,56 @@ import {
 import { loggers } from "@/utils/logger.js";
 import { A2ATool } from "./a2a.tool.js";
 
+/**
+ * Represents an active A2A communication session.
+ */
 interface A2ASession {
+	/** Current task ID for multi-turn conversations */
 	taskId: string | undefined;
+	/** Context ID for maintaining conversation state */
 	contextId: string | undefined;
 }
 
+/**
+ * Module for managing Agent-to-Agent (A2A) protocol connections.
+ *
+ * This module handles connections to other A2A-compatible agents, manages
+ * conversation sessions, and provides an interface for inter-agent communication.
+ * Supports multi-turn conversations with task and context tracking.
+ *
+ * @example
+ * ```typescript
+ * const a2aModule = new A2AModule();
+ * await a2aModule.addA2APeerServer("https://api.example.com/agent");
+ *
+ * const tools = await a2aModule.getTools();
+ * const message = a2aModule.getMessagePayload("Hello", "session-123");
+ * const response = await a2aModule.useTool(tools[0], message, "session-123");
+ * ```
+ */
 export class A2AModule {
+	/** Map of A2A server URLs to their corresponding tool instances */
 	private a2aPeerServers: Map<string, A2ATool | null> = new Map();
-	private a2aSessions: Map<string, A2ASession> = new Map(); // Map from session ID to A2A ids
+	/** Map of session IDs to their A2A session state */
+	private a2aSessions: Map<string, A2ASession> = new Map();
 
+	/**
+	 * Registers a new A2A peer server URL for connection.
+	 *
+	 * @param url - The URL of the A2A-compatible agent to connect to
+	 */
 	public async addA2APeerServer(url: string): Promise<void> {
 		this.a2aPeerServers.set(url, null);
 	}
 
+	/**
+	 * Retrieves tools from all registered A2A peer servers.
+	 *
+	 * Attempts to connect to each registered server, fetch their agent cards,
+	 * and create tool instances. Disables tools for unreachable servers.
+	 *
+	 * @returns Promise resolving to array of available A2A tools
+	 */
 	public async getTools(): Promise<A2ATool[]> {
 		const tools: A2ATool[] = [];
 		for (const url of [...this.a2aPeerServers.keys()]) {
@@ -49,6 +86,12 @@ export class A2AModule {
 		return tools;
 	}
 
+	/**
+	 * Gets or creates an A2A session for the given session ID.
+	 *
+	 * @param sessionId - The session identifier
+	 * @returns A2ASession object with task and context IDs
+	 */
 	private getA2ASessionWithId = (sessionId: string): A2ASession => {
 		const a2aSession = this.a2aSessions.get(sessionId) ?? {
 			taskId: undefined,
@@ -61,6 +104,16 @@ export class A2AModule {
 		return a2aSession;
 	};
 
+	/**
+	 * Constructs a message payload for A2A communication.
+	 *
+	 * Includes session context (task ID and context ID) if available
+	 * for maintaining conversation continuity.
+	 *
+	 * @param query - The message content to send
+	 * @param sessionId - The session identifier
+	 * @returns Formatted Message object for A2A protocol
+	 */
 	public getMessagePayload(query: string, sessionId: string): Message {
 		const messagePayload: Message = {
 			messageId: randomUUID(),
@@ -88,6 +141,17 @@ export class A2AModule {
 		return messagePayload;
 	}
 
+	/**
+	 * Executes an A2A tool by sending a message to the remote agent.
+	 *
+	 * Handles streaming responses, maintains session state, and extracts
+	 * text content from various event types in the response stream.
+	 *
+	 * @param tool - The A2ATool instance to use
+	 * @param messagePayload - The message to send to the agent
+	 * @param sessionId - The session identifier for context tracking
+	 * @returns Promise resolving to array of text responses from the agent
+	 */
 	public async useTool(
 		tool: A2ATool,
 		messagePayload: Message,

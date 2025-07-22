@@ -47,7 +47,7 @@ export class GeminiModel extends BaseModel<Content, FunctionDeclaration> {
 			: [{ role: "model", parts: [{ text: systemPrompt.trim() }] }];
 		const sessionContent: Content[] = Object.keys(sessionHistory).map(
 			(messageId: string) => {
-				const message = sessionHistory[messageId];
+				const message = sessionHistory.chats[messageId];
 				// TODO: check message.content.type
 				return {
 					role: this.getMessageRole(message.role),
