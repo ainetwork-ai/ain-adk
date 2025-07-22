@@ -11,6 +11,7 @@ export const createQueryRouter = (agent: AINAgent): Router => {
 		agent.a2aModule,
 		agent.mcpModule,
 		agent.memoryModule,
+		agent.manifest.prompts,
 	);
 	const queryController = new QueryController(queryService);
 	router.post("/query", queryController.handleQueryRequest);
