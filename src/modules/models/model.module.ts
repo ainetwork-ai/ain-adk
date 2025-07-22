@@ -128,7 +128,7 @@ export class ModelModule {
 	 */
 	public getModelList() {
 		return {
-			models: this.models,
+			models: Object.keys(this.models),
 			defaultModelName: this.defaultModelName,
 		};
 	}
