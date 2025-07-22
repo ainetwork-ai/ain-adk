@@ -6,7 +6,6 @@ import { IntentAnalyzer } from "../src/intent/analyzer.js";
 import { MCPModule } from "../src/intent/modules/mcp/index.js";
 import GeminiModel from "../src/models/gemini.js";
 import { AINAgentInfo } from "../src/types/index.js";
-import { json } from "stream/consumers";
 
 const model = new GeminiModel(process.env.GEMINI_API_KEY!, process.env.GEMINI_MODEL_NAME!);
 
