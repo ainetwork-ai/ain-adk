@@ -90,7 +90,9 @@ import { A2AModule } from '@ainetwork/adk/modules';
 
 // Define agent manifest
 const manifest: AinAgentManifest = {
-  ...,
+  name: "My Agent",
+  description: "An intelligent AI agent",
+  version: "0.0.1",
   url: "<AGENT_ENDPOINT_URL>"   // configure manifest.url
 };
 
