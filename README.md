@@ -54,7 +54,6 @@ const manifest: AinAgentManifest = {
   name: "My Agent",
   description: "An intelligent AI agent",
   version: "0.0.1",
-  url: "http://localhost:3000"
 };
 
 // Create and start agent
@@ -89,17 +88,17 @@ const agent = new AINAgent(manifest, { modelModule, mcpModule, memoryModule });
 ```typescript
 import { A2AModule } from '@ainetwork/adk/modules';
 
-// Create A2A module
-const a2aModule = new A2AModule();
+// Define agent manifest
+const manifest: AinAgentManifest = {
+  name: "My Agent",
+  description: "An intelligent AI agent",
+  version: "0.0.1",
+  url: "<AGENT_ENDPOINT_URL>"   // configure manifest.url
+};
 
-// Add other agents
-await a2aModule.addA2AAgent('http://localhost:3100');
-
-// Pass to agent constructor (with isA2AServer=true for server mode)
 const agent = new AINAgent(
-  manifest, 
+  manifest,
   { modelModule, a2aModule, memoryModule },
-  true // Enable A2A server mode
 );
 ```
 
@@ -223,7 +222,7 @@ modelLogger.error('Model API error');
   - Request: `{ message: string, sessionId?: string }`
   - Response: `{ content: string }`
 
-### A2A Server Endpoints (when `isA2AServer=true`)
+### A2A Server Endpoints (when `manifest.url` is configured)
 - `GET /agent-card` - Get agent card information
 - `GET /.well-known/agent.json` - Agent discovery endpoint  
 - `POST /a2a` - A2A communication endpoint
