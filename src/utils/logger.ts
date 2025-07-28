@@ -4,7 +4,7 @@ const { combine, timestamp, printf, colorize, errors } = winston.format;
 
 const createLogger = (service: string) => {
 	const logger = winston.createLogger({
-		level: process.env.LOG_LEVEL || "info",
+		level: (process.env.LOG_LEVEL || "info").toLowerCase(),
 		format: combine(
 			errors({ stack: true }),
 			colorize(),
