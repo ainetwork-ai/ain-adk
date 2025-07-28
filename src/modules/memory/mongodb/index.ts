@@ -1,16 +1,57 @@
+import mongoose from "mongoose";
 import type { ChatObject, SessionObject } from "@/types/memory.js";
+import { loggers } from "@/utils/logger.js";
 import { BaseMemory } from "../memory.module.js";
-import { ChatDocument, ChatModel, ChatRole } from "./models/chats.model.js";
+import {
+	type ChatDocument,
+	ChatModel,
+	ChatRole,
+} from "./models/chats.model.js";
 
 export class MongoDBMemory extends BaseMemory {
-	constructor() {
+	private isConnected = false;
+
+	constructor(uri: string) {
 		super();
+		this.connect(uri);
+	}
+
+	public async connect(uri: string): Promise<void> {
+		if (this.isConnected) {
+			return;
+		}
+
+		try {
+			await mongoose.connect(uri);
+			this.isConnected = true;
+			loggers.agent.info("MongoDB connected successfully");
+		} catch (error) {
+			loggers.agent.error("Failed to connect to MongoDB:", error);
+			throw error;
+		}
+	}
+
+	public async disconnect(): Promise<void> {
+		if (!this.isConnected) {
+			return;
+		}
+
+		try {
+			await mongoose.disconnect();
+			this.isConnected = false;
+			loggers.agent.info("MongoDB disconnected successfully");
+		} catch (error) {
+			loggers.agent.error("Failed to disconnect from MongoDB:", error);
+			throw error;
+		}
 	}
 
 	public async getSessionHistory(sessionId: string): Promise<SessionObject> {
 		const chats = await ChatModel.find({ sessionId }).sort({
 			timestamp: 1,
 		});
+
+		loggers.agent.info(`Found ${chats.length} chats for session ${sessionId}`);
 
 		const sessionObject: SessionObject = { chats: {} };
 		chats.forEach((chat: ChatDocument) => {
@@ -30,6 +71,9 @@ export class MongoDBMemory extends BaseMemory {
 		sessionId: string,
 		chat: ChatObject,
 	): Promise<void> {
+		loggers.agent.info(`Updating session history for session ${sessionId}`);
+		loggers.agent.info(`Chat: ${JSON.stringify(chat)}`);
+
 		await ChatModel.create({
 			sessionId,
 			role: chat.role,

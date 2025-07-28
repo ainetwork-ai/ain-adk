@@ -5,7 +5,8 @@ import { getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js
 import { AzureOpenAI } from "../src/modules/models/openai.js";
 import { GeminiModel } from "../src/modules/models/gemini.js";
 import { MCPModule, MemoryModule, ModelModule } from "../src/modules/index.js";
-import { InMemoryMemory } from "../src/modules/memory/inmemory.js";
+// import { InMemoryMemory } from "../src/modules/memory/inmemory.js";
+import { MongoDBMemory } from "../src/modules/memory/mongodb/index.js";
 import { AinAgentManifest } from "../src/types/index.js";
 import { AINAgent } from "../src/app.js";
 
@@ -44,8 +45,10 @@ async function main() {
 		},
 	});
 
-	const inMemoryMemory = new InMemoryMemory();
-	const memoryModule = new MemoryModule(inMemoryMemory);
+	// const inMemoryMemory = new InMemoryMemory();
+	// const memoryModule = new MemoryModule(inMemoryMemory);
+	const mongodbMemory = new MongoDBMemory(process.env.MONGODB_URI!);
+	const memoryModule = new MemoryModule(mongodbMemory);
 
 	const systemPrompt = await readFileAsync("./examples/sampleSystem.prompt");
 	const manifest: AinAgentManifest = {
