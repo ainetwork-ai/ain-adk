@@ -83,11 +83,11 @@ ${this.prompts?.system || ""}
     `;
 
 		const modelInstance = this.modelModule.getModel();
-		const messages = modelInstance.generateMessages(
-			sessionHistory,
+		const messages = modelInstance.generateMessages({
 			query,
-			systemPrompt.trim(),
-		);
+			sessionHistory,
+			systemPrompt: systemPrompt.trim(),
+		});
 
 		const tools: IAgentTool[] = [];
 		if (this.mcpModule) {

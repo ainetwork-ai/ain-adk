@@ -37,24 +37,25 @@ export class GeminiModel extends BaseModel<Content, FunctionDeclaration> {
 		}
 	}
 
-	generateMessages(
-		sessionHistory: SessionObject,
-		query: string,
-		systemPrompt?: string,
-	): Content[] {
+	generateMessages(params: {
+		query: string;
+		sessionHistory?: SessionObject;
+		systemPrompt?: string;
+	}): Content[] {
+		const { query, sessionHistory, systemPrompt } = params;
 		const messages: Content[] = !systemPrompt
 			? []
 			: [{ role: "model", parts: [{ text: systemPrompt.trim() }] }];
-		const sessionContent: Content[] = Object.keys(sessionHistory.chats).map(
-			(chatId: string) => {
-				const chat = sessionHistory.chats[chatId];
-				// TODO: check message.content.type
-				return {
-					role: this.getMessageRole(chat.role),
-					parts: [{ text: chat.content.parts[0] }],
-				};
-			},
-		);
+		const sessionContent: Content[] = !sessionHistory
+			? []
+			: Object.keys(sessionHistory.chats).map((chatId: string) => {
+					const chat = sessionHistory.chats[chatId];
+					// TODO: check message.content.type
+					return {
+						role: this.getMessageRole(chat.role),
+						parts: [{ text: chat.content.parts[0] }],
+					};
+				});
 		const userContent: Content = { role: "user", parts: [{ text: query }] };
 		return messages.concat(sessionContent).concat(userContent);
 	}

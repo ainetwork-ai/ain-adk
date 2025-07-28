@@ -20,11 +20,11 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	 * @param systemPrompt - Optional system prompt to set context
 	 * @returns Array of messages formatted for the specific model API
 	 */
-	abstract generateMessages(
-		sessionHistory: SessionObject,
-		query: string,
-		systemPrompt?: string,
-	): MessageType[];
+	abstract generateMessages(params: {
+		query: string;
+		sessionHistory?: SessionObject;
+		systemPrompt?: string;
+	}): MessageType[];
 
 	/**
 	 * Appends a new message to the existing message array.
