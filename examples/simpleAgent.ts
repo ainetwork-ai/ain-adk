@@ -18,19 +18,20 @@ async function readFileAsync(path: string): Promise<string> {
 
 async function main() {
 	const modelModule = new ModelModule();
-	const model = new AzureOpenAI(
+	const azureModel = new AzureOpenAI(
 		process.env.AZURE_OPENAI_PTU_BASE_URL!,
 		process.env.AZURE_OPENAI_PTU_API_KEY!,
 		process.env.AZURE_OPENAI_PTU_API_VERSION!,
 		process.env.AZURE_OPENAI_MODEL_NAME!,
 	);
-	modelModule.addModel('azure-gpt-4o', model);
-	/*
-	const model = new GeminiModel(
+	modelModule.addModel('azure-gpt-4o', azureModel);
+
+	const geminiModel = new GeminiModel(
 		process.env.GEMINI_API_KEY!,
 		process.env.GEMINI_MODEL_NAME!,
 	);
-	*/
+	modelModule.addModel('gemini-2.5', geminiModel);
+
 	const mcpModule = new MCPModule();
 	await mcpModule.addMCPConfig({
 		notionApi: {

@@ -13,8 +13,11 @@ import type {
 	MemoryModule,
 	ModelModule,
 } from "./modules/index.js";
-import { createA2ARouter } from "./routes/a2a.routes.js";
-import { createQueryRouter } from "./routes/query.routes.js";
+import {
+	createA2ARouter,
+	createApiRouter,
+	createQueryRouter,
+} from "./routes/index.js";
 import type { AinAgentManifest } from "./types/index.js";
 
 /**
@@ -195,6 +198,7 @@ export class AINAgent {
 		});
 
 		this.app.use(createQueryRouter(this));
+		this.app.use(createApiRouter(this));
 		if (this.isValidUrl(this.manifest.url)) {
 			this.app.use(createA2ARouter(this));
 		}
