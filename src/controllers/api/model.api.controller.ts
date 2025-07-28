@@ -8,7 +8,7 @@ export class ModelApiController {
 		this.modelModule = modelModule;
 	}
 
-	public handleModelList = async (
+	public handleModelList = (
 		_req: Request,
 		res: Response,
 		next: NextFunction,
