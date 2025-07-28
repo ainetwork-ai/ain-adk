@@ -1,12 +1,9 @@
 import type { NextFunction, Request, Response } from "express";
+import type { AinHttpError } from "@/types/index.js";
 import { logger } from "@/utils/logger.js";
 
-export interface HttpException extends Error {
-	status?: number;
-}
-
 export const errorMiddleware = (
-	error: HttpException,
+	error: AinHttpError,
 	req: Request,
 	res: Response,
 	next: NextFunction,
