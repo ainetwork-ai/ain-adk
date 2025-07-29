@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
-import type { AinHttpError } from "@/types/index.js";
-import { logger } from "@/utils/logger.js";
+import type { AinHttpError } from "@/types";
+import { logger } from "@/utils/logger";
 
 export const errorMiddleware = (
 	error: AinHttpError,

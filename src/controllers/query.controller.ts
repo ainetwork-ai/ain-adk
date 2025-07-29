@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import type { QueryService } from "@/services/query.service.js";
+import type { QueryService } from "@/services";
 
 export class QueryController {
 	private queryService;
