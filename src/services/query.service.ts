@@ -4,7 +4,7 @@ import type {
 	MemoryModule,
 	ModelModule,
 } from "@/modules/index.js";
-import type { AinAgentPrompts } from "@/types/index.js";
+import type { AinAgentPrompts } from "@/types/agent.js";
 import { ChatRole, type SessionObject } from "@/types/memory.js";
 import {
 	type IA2ATool,
