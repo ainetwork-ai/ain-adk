@@ -2,10 +2,10 @@
 
 A TypeScript library for building AI agents with multi-protocol support including MCP (Model Context Protocol) and A2A (Agent-to-Agent) communication.
 
-# NOTE
-IMPORTANT: This project is currently under active development. Features may be incomplete, and there might be significant changes in future updates. Please be aware that some functionalities may not work as expected or might change without prior notice.
+## NOTE
+**IMPORTANT: This project is currently under active development. Features may be incomplete, and there might be significant changes in future updates. Please be aware that some functionalities may not work as expected or might change without prior notice.**
 
-# Features
+## Features
 
 - **Multi-Protocol Support**: Integrate with MCP servers and A2A agents
 - **Modular Architecture**: Flexible module system for models, memory, MCP, and A2A
@@ -17,93 +17,25 @@ IMPORTANT: This project is currently under active development. Features may be i
 
 ## Installation
 
+#### **npm**
 ```bash
 npm install @ainetwork/adk
 ```
+#### **yarn**
+```bash
+yarn add @ainetwork/adk
+```
 
-## Requirements
+### Requirements
 
 - Node.js >= 20
 - TypeScript >= 5.8
 
-## Quick Start
+## Getting Start
 
-### Basic Agent Setup
+To see how to use this package in your project, check out our comprehensive examples:
 
-```typescript
-import { AINAgent } from '@ainetwork/adk/app';
-import { ModelModule, MCPModule, MemoryModule } from '@ainetwork/adk/modules';
-import { AzureOpenAI } from '@ainetwork/adk/modules/models/providers/openai';
-import { InMemoryMemory } from '@ainetwork/adk/modules/memory/providers/inmemory';
-import { AinAgentManifest } from '@ainetwork/adk/types';
-
-// Initialize modules
-const modelModule = new ModelModule();
-const model = new AzureOpenAI(
-  process.env.AZURE_OPENAI_BASE_URL!,
-  process.env.AZURE_OPENAI_API_KEY!,
-  process.env.AZURE_OPENAI_API_VERSION!,
-  process.env.AZURE_OPENAI_MODEL_NAME!
-);
-modelModule.addModel('azure-gpt-4o', model);
-
-const memoryModule = new MemoryModule(new InMemoryMemory(""));
-
-// Define agent manifest
-const manifest: AinAgentManifest = {
-  name: "My Agent",
-  description: "An intelligent AI agent",
-  version: "0.0.1",
-};
-
-// Create and start agent
-const agent = new AINAgent(manifest, { modelModule, memoryModule });
-agent.start(3000);
-```
-
-### Adding MCP Support
-
-```typescript
-import { MCPModule } from '@ainetwork/adk/modules';
-
-const mcpModule = new MCPModule();
-
-// Add MCP server configuration
-await mcpModule.addMCPConfig({
-  notionApi: {
-    command: 'npx',
-    args: ['-y', '@notionhq/notion-mcp-server'],
-    env: {
-      NOTION_API_KEY: process.env.NOTION_API_KEY!
-    }
-  }
-});
-
-// Pass to agent constructor
-const agent = new AINAgent(
-  manifest,
-  { modelModule, mcpModule, memoryModule }
-);
-```
-
-### Adding A2A Support
-
-```typescript
-import { A2AModule } from '@ainetwork/adk/modules';
-
-// Define agent manifest
-const manifest: AinAgentManifest = {
-  name: "My Agent",
-  description: "An intelligent AI agent",
-  version: "0.0.1",
-  url: "<AGENT_ENDPOINT_URL>"   // configure manifest.url
-};
-
-const agent = new AINAgent(
-  manifest,
-  { modelModule, a2aModule, memoryModule },
-);
-```
+👉 **[View Examples](https://github.com/ainetwork-ai/ain-adk-providers/tree/main/examples)**
 
 ## Architecture
 

@@ -14,7 +14,7 @@ import type {
 	ModelModule,
 } from "./modules";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
-import type { AinAgentManifest } from "./types";
+import type { AinAgentManifest } from "./types/agent";
 
 /**
  * Main class for AI Network Agent Development Kit (AIN-ADK).

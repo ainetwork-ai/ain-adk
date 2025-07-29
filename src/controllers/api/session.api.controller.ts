@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { MemoryModule } from "@/modules/index.js";
-import { AinHttpError } from "@/types/index.js";
+import { AinHttpError } from "@/types/agent.js";
 export class SessionApiController {
 	private memoryModule: MemoryModule;
 

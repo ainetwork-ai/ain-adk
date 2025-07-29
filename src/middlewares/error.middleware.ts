@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import type { AinHttpError } from "@/types";
+import type { AinHttpError } from "@/types/agent";
 import { logger } from "@/utils/logger";
 
 export const errorMiddleware = (

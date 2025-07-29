@@ -1,6 +1,6 @@
 {
 	"name": "@ainetwork/adk",
-	"version": "0.1.0",
+	"version": "0.1.2",
 	"description": "AI Network Agent Development Kit",
 	"repository": "git@github.com:ainetwork-ai/ain-adk.git",
 	"author": "AI Network (https://ainetwork.ai)",
@@ -18,11 +18,23 @@
 			"require": "./dist/cjs/index.js",
 			"default": "./dist/esm/index.js"
 		},
-		"./*": {
-			"types": "./dist/esm/*.d.ts",
-			"import": "./dist/esm/*.js",
-			"require": "./dist/cjs/*.js",
-			"default": "./dist/esm/*.js"
+		"./modules": {
+			"types": "./dist/esm/modules/index.d.ts",
+			"import": "./dist/esm/modules/index.js",
+			"require": "./dist/cjs/modules/index.js",
+			"default": "./dist/esm/modules/index.js"
+		},
+		"./types/*": {
+			"types": "./dist/esm/types/*.d.ts",
+			"import": "./dist/esm/types/*.js",
+			"require": "./dist/cjs/types/*.js",
+			"default": "./dist/esm/types/*.js"
+		},
+		"./utils/*": {
+			"types": "./dist/esm/utils/*.d.ts",
+			"import": "./dist/esm/utils/*.js",
+			"require": "./dist/cjs/utils/*.js",
+			"default": "./dist/esm/utils/*.js"
 		}
 	},
 	"files": [
@@ -30,6 +42,7 @@
 	],
 	"scripts": {
 		"build": "tsup",
+		"clean": "rm -rf dist",
 		"biome": "npx @biomejs/biome check",
 		"biome:write": "npx @biomejs/biome check --write",
 		"test": "jest --passWithNoTests",

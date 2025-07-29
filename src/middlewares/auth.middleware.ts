@@ -1,7 +1,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { BaseAuth } from "@/modules/auth/base.auth";
-import { AinHttpError } from "@/types";
+import { AinHttpError } from "@/types/agent";
 
 export class AuthMiddleware {
 	private auth: BaseAuth;
