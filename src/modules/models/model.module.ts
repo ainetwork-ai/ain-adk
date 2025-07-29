@@ -1,6 +1,6 @@
 import type { BaseModel } from "./base.model.js";
 
-/**
+/*
  * Module for managing multiple AI model implementations.
  *
  * Allows registration of multiple models and provides a unified interface

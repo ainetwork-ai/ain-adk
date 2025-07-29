@@ -33,8 +33,8 @@ npm install @ainetwork/adk
 ```typescript
 import { AINAgent } from '@ainetwork/adk/app';
 import { ModelModule, MCPModule, MemoryModule } from '@ainetwork/adk/modules';
-import { AzureOpenAI } from '@ainetwork/adk/modules/models/openai';
-import { InMemoryMemory } from '@ainetwork/adk/modules/memory/inmemory';
+import { AzureOpenAI } from '@ainetwork/adk/modules/models/providers/openai';
+import { InMemoryMemory } from '@ainetwork/adk/modules/memory/providers/inmemory';
 import { AinAgentManifest } from '@ainetwork/adk/types';
 
 // Initialize modules

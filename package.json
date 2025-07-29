@@ -49,7 +49,7 @@
 		"typescript-eslint": "^8.34.1"
 	},
 	"dependencies": {
-		"@a2a-js/sdk": "0.2.2",
+		"@a2a-js/sdk": "^0.2.4",
 		"@google/genai": "^1.6.0",
 		"@modelcontextprotocol/sdk": "^1.12.3",
 		"cors": "^2.8.5",
