@@ -13,7 +13,7 @@ import type {
 	ToolCall,
 } from "@/types/tool.js";
 import { TOOL_PROTOCOL_TYPE } from "@/types/tool.js";
-import { BaseModel } from "./model.module.js";
+import { BaseModel } from "../base/index.js";
 
 export class GeminiModel extends BaseModel<Content, FunctionDeclaration> {
 	private client: GoogleGenAI;

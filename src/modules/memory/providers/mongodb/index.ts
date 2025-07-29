@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import type { ChatObject, SessionObject } from "@/types/memory.js";
 import { loggers } from "@/utils/logger.js";
-import { BaseMemory } from "../memory.module.js";
+import { BaseMemory } from "../../base/index.js";
 import {
 	type ChatDocument,
 	ChatModel,

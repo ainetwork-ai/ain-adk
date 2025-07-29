@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-import { AzureOpenAI } from "../src/modules/models/openai.js";
+import { AzureOpenAI } from "../src/modules/models/providers/openai.js";
 import { FOLModule } from "../src/modules/fol/fol.module.js";
 import { FOLLocalStore } from "../src/modules/fol/store/index.js";
 

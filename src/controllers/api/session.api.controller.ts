@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
+import { StatusCodes } from "http-status-codes";
 import type { MemoryModule } from "@/modules/index.js";
-
+import { AinHttpError } from "@/types/index.js";
 export class SessionApiController {
 	private memoryModule: MemoryModule;
 
@@ -16,6 +17,13 @@ export class SessionApiController {
 		try {
 			const { id: sessionId } = req.params;
 			const memoryInstance = this.memoryModule.getMemory();
+			if (!memoryInstance) {
+				const error = new AinHttpError(
+					StatusCodes.SERVICE_UNAVAILABLE,
+					"Memory module is not initialized",
+				);
+				throw error;
+			}
 			const session = await memoryInstance.getSessionHistory(sessionId);
 			res.json(session);
 		} catch (error) {

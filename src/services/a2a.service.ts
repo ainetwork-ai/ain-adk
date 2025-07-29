@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto";
+import type { Task, TaskStatusUpdateEvent } from "@a2a-js/sdk";
 import type {
 	AgentExecutor,
 	ExecutionEventBus,
 	RequestContext,
-	TaskStatusUpdateEvent,
-} from "@a2a-js/sdk";
-import type { AgentExecutionEvent } from "@a2a-js/sdk/build/src/server/events/execution_event_bus.js";
+} from "@a2a-js/sdk/server";
 import { loggers } from "@/utils/logger.js";
 import type { QueryService } from "./query.service.js";
 
@@ -69,7 +68,7 @@ export class A2AService implements AgentExecutor {
 			userMessage.contextId || existingTask?.contextId || randomUUID();
 
 		if (!existingTask) {
-			const initialTask: AgentExecutionEvent = {
+			const initialTask: Task = {
 				kind: "task",
 				id: taskId,
 				contextId: contextId,

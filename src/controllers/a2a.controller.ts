@@ -1,18 +1,20 @@
 import type {
 	A2AResponse,
 	AgentCard,
-	AgentExecutor,
-	ExecutionEventBusManager,
 	JSONRPCErrorResponse,
 	JSONRPCSuccessResponse,
-	TaskStore,
 } from "@a2a-js/sdk";
+import type {
+	AgentExecutor,
+	ExecutionEventBusManager,
+	TaskStore,
+} from "@a2a-js/sdk/server";
 import {
 	A2AError,
 	DefaultExecutionEventBusManager,
 	DefaultRequestHandler,
 	JsonRpcTransportHandler,
-} from "@a2a-js/sdk";
+} from "@a2a-js/sdk/server";
 import type { Request, Response } from "express";
 import type { A2AService } from "@/services/a2a.service.js";
 import { loggers } from "@/utils/logger.js";

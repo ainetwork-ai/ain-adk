@@ -1,4 +1,4 @@
-import { InMemoryTaskStore } from "@a2a-js/sdk";
+import { InMemoryTaskStore } from "@a2a-js/sdk/server";
 import { Router } from "express";
 import type { AINAgent } from "@/app.js";
 import { QueryService } from "@/services/query.service.js";

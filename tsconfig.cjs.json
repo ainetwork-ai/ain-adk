@@ -3,7 +3,12 @@
 	"compilerOptions": {
 		"module": "commonjs",
 		"moduleResolution": "node",
-		"outDir": "./dist/cjs"
+		"outDir": "./dist/cjs",
+		"paths": {
+			"@/*": ["./src/*"],
+			"@a2a-js/sdk/client": ["./node_modules/@a2a-js/sdk/dist/client/index.d.ts"],
+			"@a2a-js/sdk/server": ["./node_modules/@a2a-js/sdk/dist/server/index.d.ts"]
+		}
 	},
-	"exclude": ["**/*.test.ts", "src/__mocks__/**/*"]
+	"exclude": ["**/*.test.ts", "src/__mocks__/**/*"],
 }

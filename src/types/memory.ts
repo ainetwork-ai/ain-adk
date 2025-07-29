@@ -1,3 +1,10 @@
+export enum MemoryType {
+	_DEFAULT = "_DEFAULT",
+	SESSION = "SESSION",
+	INTENT = "INTENT",
+	USER = "USER",
+}
+
 /**
  * Roles for participants in a chat conversation.
  */

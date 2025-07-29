@@ -1,4 +1,5 @@
-import type { A2AClient, AgentCard } from "@a2a-js/sdk";
+import type { AgentCard } from "@a2a-js/sdk";
+import type { A2AClient } from "@a2a-js/sdk/client";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
 /**
