@@ -3,7 +3,7 @@ import cors from "cors";
 import express, { type Response } from "express";
 import helmet from "helmet";
 import { StatusCodes } from "http-status-codes";
-import type { BaseAuth } from "@/middlewares/auth/base.js";
+import type { BaseAuth } from "@/middlewares/base.auth.middleware.js";
 import { loggers } from "@/utils/logger.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
 import type { FOLModule } from "./modules/fol/fol.module.js";

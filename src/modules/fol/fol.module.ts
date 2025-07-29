@@ -1,4 +1,4 @@
-import type { BaseModel } from "@/modules/models/base/index.js";
+import type { BaseModel } from "@/modules/models/base.model.js";
 import type { Facts } from "@/types/fol.js";
 import { loggers } from "@/utils/logger.js";
 import type { FOLStore } from "./store/index.js";

@@ -19,3 +19,5 @@ logs
 npm-debug.log*
 
 fol-store/
+
+.claude
