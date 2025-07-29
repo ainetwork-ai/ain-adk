@@ -2,10 +2,10 @@ import "dotenv/config";
 import { readFile } from "fs/promises";
 
 import { getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { AzureOpenAI } from "../src/modules/models/openai.js";
-import { GeminiModel } from "../src/modules/models/gemini.js";
+import { AzureOpenAI } from "../src/modules/models/providers/openai.js";
+import { GeminiModel } from "../src/modules/models/providers/gemini.js";
 import { MCPModule, MemoryModule, ModelModule } from "../src/modules/index.js";
-import { InMemoryMemory } from "../src/modules/memory/inmemory.js";
+import { InMemoryMemory } from "../src/modules/memory/providers/inmemory.js";
 import { AinAgentManifest } from "../src/types/index.js";
 import { AINAgent } from "../src/app.js";
 
