@@ -30,11 +30,11 @@
 			"require": "./dist/cjs/types/*.js",
 			"default": "./dist/esm/types/*.js"
 		},
-		"./utils/**/*": {
-			"types": "./dist/esm/utils/**/*.d.ts",
-			"import": "./dist/esm/utils/**/*.js",
-			"require": "./dist/cjs/utils/**/*.js",
-			"default": "./dist/esm/utils/**/*.js"
+		"./utils/*": {
+			"types": "./dist/esm/utils/*.d.ts",
+			"import": "./dist/esm/utils/*.js",
+			"require": "./dist/cjs/utils/*.js",
+			"default": "./dist/esm/utils/*.js"
 		}
 	},
 	"files": [
