@@ -80,7 +80,10 @@ await mcpModule.addMCPConfig({
 });
 
 // Pass to agent constructor
-const agent = new AINAgent(manifest, { modelModule, mcpModule, memoryModule });
+const agent = new AINAgent(
+  manifest,
+  { modelModule, mcpModule, memoryModule }
+);
 ```
 
 ### Adding A2A Support
@@ -155,28 +158,16 @@ Each module can be independently configured and passed to the agent constructor.
 ```bash
 # Build commands
 yarn build          # Build both ESM and CJS distributions
-yarn build:esm      # Build ESM format only  
-yarn build:cjs      # Build CJS format only
 
 # Development
 yarn dev            # Run TypeScript directly with tsx
 
 # Code quality
-yarn lint           # Run linting with Biome
-yarn format         # Format code with Biome
-yarn check          # Check code with Biome
+yarn biome          # Check code with Biome
 yarn check:write    # Check and auto-fix with Biome
 
 # Testing
 yarn test           # Run Jest tests
-```
-
-### Examples
-
-```bash
-# Run example applications
-npx tsx examples/simpleAgent.ts
-npx tsx examples/a2aClientAgent.ts
 ```
 
 ## Logging System
@@ -236,27 +227,6 @@ The project supports dual build output:
 - **ESM** (`dist/esm/`): ES Module format with `{"type": "module"}`
 - **CJS** (`dist/cjs/`): CommonJS format with `{"type": "commonjs"}`
 
-Import paths use `@/` alias for `src/` directory.
-
-## Models Support
-
-### Built-in Models
-- **OpenAI/Azure OpenAI**: Full support for GPT models
-- **Google Gemini**: Support for Gemini models
-
-### Custom Models
-Extend the `BaseModel` class to add support for other AI models:
-
-```typescript
-import { BaseModel } from '@ainetwork/adk/modules/models/base';
-
-class MyCustomModel extends BaseModel {
-  async generateResponse(messages: any[], tools?: any[]): Promise<any> {
-    // Implement your model logic
-  }
-}
-```
-
 ## Error Handling
 
 The library includes comprehensive error handling:
@@ -276,16 +246,16 @@ All errors are logged with appropriate context for debugging.
 The library supports optional authentication middleware:
 
 ```typescript
-import { BaseAuth } from '@ainetwork/adk/middlewares/auth/base';
+import { BaseAuth } from '@ainetwork/adk/modules';
 
 class MyAuth extends BaseAuth {
-  async authenticate(req: Request): Promise<boolean> {
+  async authenticate(req: Request, res: Response): Promise<boolean> {
     // Implement your auth logic
     return true;
   }
 }
 
-const agent = new AINAgent(manifest, modules, false, new MyAuth());
+const agent = new AINAgent(manifest, modules, new MyAuth());
 ```
 
 ## Contributing
@@ -293,7 +263,7 @@ const agent = new AINAgent(manifest, modules, false, new MyAuth());
 1. Follow the established code conventions
 2. Use TypeScript strict mode
 3. Add appropriate service-specific logging
-4. Run `yarn check:write` and `yarn test` before submitting
+4. Run `yarn biome:write` and `yarn test` before submitting
 5. Maintain the modular architecture
 
 ## License

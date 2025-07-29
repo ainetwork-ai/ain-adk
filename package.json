@@ -30,8 +30,8 @@
 	],
 	"scripts": {
 		"build": "tsup",
-		"check": "npx @biomejs/biome check",
-		"check:write": "npx @biomejs/biome check --write",
+		"biome": "npx @biomejs/biome check",
+		"biome:write": "npx @biomejs/biome check --write",
 		"test": "jest --passWithNoTests",
 		"prepare": "husky"
 	},
