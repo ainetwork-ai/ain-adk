@@ -1,4 +1,4 @@
-import type { BaseModel } from "./base/index.js";
+import type { BaseModel } from "./base.model.js";
 
 /**
  * Module for managing multiple AI model implementations.

@@ -1,5 +1,5 @@
 import { MemoryType } from "@/types/memory.js";
-import type { BaseMemory } from "./base/index.js";
+import type { BaseMemory } from "./base.memory.js";
 /**
  * Module wrapper for memory storage implementations.
  *
