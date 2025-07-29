@@ -3,9 +3,9 @@
 echo "🔍 Running pre-commit checks..."
 
 echo "📋 Checking code formatting and linting..."
-if ! npm run check; then
+if ! npm run biome; then
   echo "❌ Code formatting/linting failed!"
-  echo "PLEASE RUN: npm run check:write"
+  echo "PLEASE RUN: npm run biome:write"
   exit 1
 fi
 

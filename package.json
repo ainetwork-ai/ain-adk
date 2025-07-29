@@ -1,6 +1,6 @@
 {
 	"name": "@ainetwork/adk",
-	"version": "0.0.2",
+	"version": "0.1.0",
 	"description": "AI Network Agent Development Kit",
 	"repository": "git@github.com:ainetwork-ai/ain-adk.git",
 	"author": "AI Network (https://ainetwork.ai)",
@@ -8,23 +8,30 @@
 	"engines": {
 		"node": ">=20"
 	},
+	"main": "./dist/cjs/index.js",
+	"module": "./dist/esm/index.js",
+	"types": "./dist/esm/index.d.ts",
 	"exports": {
+		".": {
+			"types": "./dist/esm/index.d.ts",
+			"import": "./dist/esm/index.js",
+			"require": "./dist/cjs/index.js",
+			"default": "./dist/esm/index.js"
+		},
 		"./*": {
-			"import": "./dist/esm/*",
-			"require": "./dist/cjs/*"
+			"types": "./dist/esm/*.d.ts",
+			"import": "./dist/esm/*.js",
+			"require": "./dist/cjs/*.js",
+			"default": "./dist/esm/*.js"
 		}
 	},
 	"files": [
 		"dist"
 	],
 	"scripts": {
-		"build": "npm run build:esm && npm run build:cjs",
-		"build:esm": "tsc -p tsconfig.esm.json && tsc-alias -p tsconfig.esm.json && echo '{\"type\": \"module\"}' > dist/esm/package.json",
-		"build:cjs": "tsc -p tsconfig.cjs.json && tsc-alias -p tsconfig.cjs.json && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json",
-		"format": "npx @biomejs/biome format --write",
-		"lint": "npx @biomejs/biome lint --write",
-		"check": "npx @biomejs/biome check",
-		"check:write": "npx @biomejs/biome check --write",
+		"build": "tsup",
+		"biome": "npx @biomejs/biome check",
+		"biome:write": "npx @biomejs/biome check --write",
 		"test": "jest --passWithNoTests",
 		"prepare": "husky"
 	},
@@ -43,7 +50,7 @@
 		"jest": "^30.0.0",
 		"ts-jest": "^29.4.0",
 		"ts-node": "^10.9.2",
-		"tsc-alias": "^1.8.16",
+		"tsup": "^8.5.0",
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",
 		"typescript-eslint": "^8.34.1"
@@ -55,7 +62,6 @@
 		"dotenv": "^16.5.0",
 		"express": "^5.1.0",
 		"http-status-codes": "^2.3.0",
-		"openai": "^5.3.0",
 		"uuid": "^11.1.0",
 		"winston": "^3.17.0"
 	}

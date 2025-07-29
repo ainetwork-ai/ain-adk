@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { AINAgent } from "@/app.js";
+import type { AINAgent } from "@/index.js";
 
 import { createModelApiRouter } from "./api/models.routes.js";
 import { createSessionApiRouter } from "./api/sessions.routes.js";
