@@ -60,7 +60,7 @@ export class GeminiModel extends BaseModel<Content, FunctionDeclaration> {
 		return messages.concat(sessionContent).concat(userContent);
 	}
 
-	expandMessages(messages: Content[], message: string): void {
+	appendMessages(messages: Content[], message: string): void {
 		messages.push({
 			role: "user",
 			parts: [{ text: message }],
