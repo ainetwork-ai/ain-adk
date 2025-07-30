@@ -4,6 +4,7 @@ import type {
 	MemoryModule,
 	ModelModule,
 } from "@/modules/index.js";
+import type { IntentModule } from "@/modules/intent/intent.module";
 import type { AinAgentPrompts } from "@/types/agent.js";
 import { ChatRole, type SessionObject } from "@/types/memory.js";
 import {
@@ -26,6 +27,7 @@ export class QueryService {
 	private a2aModule?: A2AModule;
 	private mcpModule?: MCPModule;
 	private memoryModule?: MemoryModule;
+	private intentModule?: IntentModule;
 	private prompts?: AinAgentPrompts;
 
 	constructor(
@@ -33,12 +35,14 @@ export class QueryService {
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		memoryModule?: MemoryModule,
+		intentModule?: IntentModule,
 		prompts?: AinAgentPrompts,
 	) {
 		this.modelModule = modelModule;
 		this.a2aModule = a2aModule;
 		this.mcpModule = mcpModule;
 		this.memoryModule = memoryModule;
+		this.intentModule = intentModule;
 		this.prompts = prompts;
 	}
 
@@ -49,9 +53,70 @@ export class QueryService {
 	 * @returns The detected intent (currently returns the query as-is)
 	 * @todo Implement actual intent detection logic
 	 */
-	private async intentTriggering(query: string) {
-		/* TODO */
-		return query;
+	private async intentTriggering(
+		query: string,
+		sessionHistory: SessionObject,
+	): Promise<string> {
+		const modelInstance = this.modelModule.getModel();
+
+		if (!this.intentModule) {
+			loggers.intent.warn(
+				"No intent module available, returning query as intent",
+			);
+			throw new Error("No intent module available");
+		}
+
+		// 인텐트 목록 가져오기
+		const intents = await this.intentModule.getIntents();
+		const intentList = intents
+			.map((intent) => `- ${intent.name}: ${intent.description}`)
+			.join("\n");
+
+		// 세션 히스토리를 문자열로 변환
+		const historyMessages = Object.entries(sessionHistory.chats)
+			.sort(([, a], [, b]) => a.timestamp - b.timestamp)
+			.map(([chatId, chat]) => {
+				const role =
+					chat.role === "USER"
+						? "사용자"
+						: chat.role === "MODEL"
+							? "어시스턴트"
+							: "시스템";
+				const content = Array.isArray(chat.content.parts)
+					? chat.content.parts.join(" ")
+					: String(chat.content.parts);
+				return `${role}: """${content}"""`;
+			})
+			.join("\n");
+
+		const systemPrompt = `당신은 사용자의 의도를 정확히 파악하는 전문가입니다.
+
+사용 가능한 의도 목록:
+${intentList}
+
+위의 의도 목록 중에서만 선택하여 답변하세요. 
+정확히 일치하는 의도 이름만 반환하세요. 다른 설명이나 추가 텍스트는 포함하지 마세요.`;
+
+		const userMessage = `다음은 사용자와의 대화 기록입니다:
+
+${historyMessages}
+
+마지막 사용자 질문: "${query}"
+
+위의 대화 기록을 바탕으로 마지막 사용자 질문의 의도가 무엇인지 판단해주세요. 
+사용 가능한 의도 목록 중에서 가장 적절한 하나를 선택하여 의도 이름만 답변하세요.`;
+
+		const messages = modelInstance.generateMessages({
+			query: userMessage,
+			systemPrompt,
+		});
+
+		const response = await modelInstance.fetch(messages);
+		if (!response.content) {
+			throw new Error("No intent detected");
+		}
+		const intentName = response.content.trim();
+		return intentName;
 	}
 
 	/**
@@ -204,7 +269,8 @@ ${this.prompts?.system || ""}
 		)) || { chats: {} } /* FIXME */;
 
 		// 2. intent triggering
-		const intent = this.intentTriggering(query);
+		const intent = await this.intentTriggering(query, sessionHistory);
+		loggers.intent.debug("intent", { intent });
 
 		// 3. intent fulfillment
 		const result = await this.intentFulfilling(

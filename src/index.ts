@@ -13,6 +13,7 @@ import type {
 	MemoryModule,
 	ModelModule,
 } from "./modules";
+import type { IntentModule } from "./modules/intent/intent.module";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import type { AinAgentManifest } from "./types/agent";
 
@@ -51,6 +52,7 @@ export class AINAgent {
 	public a2aModule?: A2AModule;
 	public mcpModule?: MCPModule;
 	public memoryModule?: MemoryModule;
+	public intentModule?: IntentModule;
 
 	/** Optional authentication scheme for securing endpoints */
 	public authScheme?: BaseAuth;

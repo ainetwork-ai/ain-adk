@@ -23,6 +23,7 @@ export const createA2ARouter = (agent: AINAgent): Router => {
 		agent.a2aModule,
 		agent.mcpModule,
 		agent.memoryModule,
+		agent.intentModule,
 		agent.manifest.prompts,
 	);
 	const a2aService = new A2AService(queryService);
