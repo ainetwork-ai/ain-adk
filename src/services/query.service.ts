@@ -71,7 +71,7 @@ export class QueryService {
 	private async intentFulfilling(
 		query: string,
 		sessionId: string,
-		sessionHistory: SessionObject,
+		sessionHistory: SessionObject | undefined,
 	) {
 		// 1. Load agent / system prompt from memory
 		const systemPrompt = `
@@ -198,10 +198,8 @@ ${this.prompts?.system || ""}
 	public async handleQuery(query: string, sessionId: string) {
 		// 1. Load session history with sessionId
 		const queryStartAt = Date.now();
-		const memoryInstance = this.memoryModule?.getMemory();
-		const sessionHistory = (await memoryInstance?.getSessionHistory(
-			sessionId,
-		)) || { chats: {} } /* FIXME */;
+		const sessionMemory = this.memoryModule?.getSessionMemory();
+		const sessionHistory = await sessionMemory?.getSession(sessionId);
 
 		// 2. intent triggering
 		const intent = this.intentTriggering(query);
@@ -213,12 +211,12 @@ ${this.prompts?.system || ""}
 			sessionHistory,
 		);
 		if (sessionId) {
-			await memoryInstance?.updateSessionHistory(sessionId, {
+			await sessionMemory?.addChatToSession(sessionId, {
 				role: ChatRole.USER,
 				timestamp: queryStartAt,
 				content: { type: "text", parts: [query] },
 			});
-			await memoryInstance?.updateSessionHistory(sessionId, {
+			await sessionMemory?.addChatToSession(sessionId, {
 				role: ChatRole.MODEL,
 				timestamp: Date.now(),
 				content: { type: "text", parts: [result.response] },

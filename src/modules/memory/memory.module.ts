@@ -1,49 +1,67 @@
-import { MemoryType } from "@/types/memory.js";
-import type { BaseMemory } from "./base.memory.js";
-/**
- * Module wrapper for memory storage implementations.
- *
- * Provides a consistent interface for accessing memory storage
- * functionality throughout the application. Currently supports
- * a single memory implementation but designed for future extensibility.
- *
- * @example
- * ```typescript
- * const inMemoryStorage = new InMemoryStorage();
- * const memoryModule = new MemoryModule(inMemoryStorage);
- *
- * const memory = memoryModule.getMemory();
- * await memory.updateSessionHistory("session-123", chatMessage);
- * ```
- */
-export class MemoryModule {
-	/** The memory storage implementation */
-	private memoryMap: Map<MemoryType, BaseMemory>;
+import type {
+	IAgentMemory,
+	IIntentMemory,
+	ISessionMemory,
+} from "./base.memory.js";
 
-	/**
-	 * Creates a new MemoryModule with the specified storage implementation.
-	 *
-	 * @param memory - The memory storage implementation to use
-	 */
-	constructor(memory: BaseMemory) {
-		this.memoryMap = new Map();
-		this.memoryMap.set(MemoryType._DEFAULT, memory);
+export interface MemoryConfig {
+	agent?: IAgentMemory;
+	session?: ISessionMemory;
+	intent?: IIntentMemory;
+}
+
+export class MemoryModule {
+	private agentMemory?: IAgentMemory;
+	private sessionMemory?: ISessionMemory;
+	private intentMemory?: IIntentMemory;
+
+	constructor(config: MemoryConfig) {
+		this.agentMemory = config.agent;
+		this.sessionMemory = config.session;
+		this.intentMemory = config.intent;
 	}
 
-	/**
-	 * Returns the current memory storage implementation.
-	 *
-	 * @returns The active memory storage instance
-	 */
-	public getMemory(type?: MemoryType): BaseMemory | undefined {
-		if (!type) {
-			return this.memoryMap.get(MemoryType._DEFAULT);
+	async initialize(): Promise<void> {
+		const connectPromises: Promise<void>[] = [];
+
+		if (this.agentMemory) {
+			connectPromises.push(this.agentMemory.connect());
+		}
+		if (this.sessionMemory) {
+			connectPromises.push(this.sessionMemory.connect());
+		}
+		if (this.intentMemory) {
+			connectPromises.push(this.intentMemory.connect());
 		}
 
-		const memory = this.memoryMap.get(type);
-		if (!memory) {
-			return this.memoryMap.get(MemoryType._DEFAULT);
+		await Promise.all(connectPromises);
+	}
+
+	async shutdown(): Promise<void> {
+		const disconnectPromises: Promise<void>[] = [];
+
+		if (this.agentMemory && this.agentMemory.isConnected()) {
+			disconnectPromises.push(this.agentMemory.disconnect());
 		}
-		return memory;
+		if (this.sessionMemory && this.sessionMemory.isConnected()) {
+			disconnectPromises.push(this.sessionMemory.disconnect());
+		}
+		if (this.intentMemory && this.intentMemory.isConnected()) {
+			disconnectPromises.push(this.intentMemory.disconnect());
+		}
+
+		await Promise.all(disconnectPromises);
+	}
+
+	public getAgentMemory(): IAgentMemory | undefined {
+		return this.agentMemory;
+	}
+
+	public getSessionMemory(): ISessionMemory | undefined {
+		return this.sessionMemory;
+	}
+
+	public getIntentMemory(): IIntentMemory | undefined {
+		return this.intentMemory;
 	}
 }
