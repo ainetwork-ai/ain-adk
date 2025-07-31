@@ -1,7 +1,7 @@
 export enum MemoryType {
-	_DEFAULT = "_DEFAULT",
 	SESSION = "SESSION",
 	INTENT = "INTENT",
+	AGENT = "AGENT",
 	USER = "USER",
 }
 
@@ -78,3 +78,8 @@ export type SessionObject = {
 		[chatId: string]: ChatObject;
 	};
 };
+
+export interface Intent {
+	name: string;
+	description: string;
+}

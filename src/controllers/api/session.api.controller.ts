@@ -16,15 +16,15 @@ export class SessionApiController {
 	) => {
 		try {
 			const { id: sessionId } = req.params;
-			const memoryInstance = this.memoryModule.getMemory();
-			if (!memoryInstance) {
+			const sessionMemory = this.memoryModule.getSessionMemory();
+			if (!sessionMemory) {
 				const error = new AinHttpError(
 					StatusCodes.SERVICE_UNAVAILABLE,
 					"Memory module is not initialized",
 				);
 				throw error;
 			}
-			const session = await memoryInstance.getSessionHistory(sessionId);
+			const session = await sessionMemory.getSession(sessionId);
 			res.json(session);
 		} catch (error) {
 			next(error);
