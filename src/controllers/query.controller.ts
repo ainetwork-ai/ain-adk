@@ -40,11 +40,7 @@ export class QueryController {
 			throw new Error("This Agent does not support stream query");
 		}
 		try {
-			const stream = this.queryStreamService.handleQuery(
-				message,
-				sessionId,
-				res,
-			);
+			await this.queryStreamService.handleQuery(message, sessionId, res);
 		} catch (error) {
 			next(error);
 		}
