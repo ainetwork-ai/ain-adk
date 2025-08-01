@@ -25,7 +25,7 @@ export class SessionApiController {
 				);
 				throw error;
 			}
-			const session = await sessionMemory.getSession(sessionId, userId);
+			const session = await sessionMemory.getSession(userId, sessionId);
 			res.json(session);
 		} catch (error) {
 			next(error);
