@@ -202,7 +202,7 @@ ${this.prompts?.system || ""}
 		const sessionMemory = this.memoryModule?.getSessionMemory();
 		const session = !userId
 			? undefined
-			: await sessionMemory?.getSession(sessionId, userId);
+			: await sessionMemory?.getSession(userId, sessionId);
 
 		// 2. intent triggering
 		const intent = this.intentTriggering(query);
@@ -210,24 +210,16 @@ ${this.prompts?.system || ""}
 		// 3. intent fulfillment
 		const result = await this.intentFulfilling(query, sessionId, session);
 		if (userId) {
-			await sessionMemory?.addChatToSession(
-				sessionId,
-				{
-					role: ChatRole.USER,
-					timestamp: queryStartAt,
-					content: { type: "text", parts: [query] },
-				},
-				userId,
-			);
-			await sessionMemory?.addChatToSession(
-				sessionId,
-				{
-					role: ChatRole.MODEL,
-					timestamp: Date.now(),
-					content: { type: "text", parts: [result.response] },
-				},
-				userId,
-			);
+			await sessionMemory?.addChatToSession(userId, sessionId, {
+				role: ChatRole.USER,
+				timestamp: queryStartAt,
+				content: { type: "text", parts: [query] },
+			});
+			await sessionMemory?.addChatToSession(userId, sessionId, {
+				role: ChatRole.MODEL,
+				timestamp: Date.now(),
+				content: { type: "text", parts: [result.response] },
+			});
 		}
 
 		return { content: result.response };

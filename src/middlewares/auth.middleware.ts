@@ -3,6 +3,7 @@ import { StatusCodes } from "http-status-codes";
 import type { BaseAuth } from "@/modules/auth/base.auth";
 import { AinHttpError } from "@/types/agent";
 import type { AuthResponse } from "@/types/auth";
+import { loggers } from "@/utils/logger";
 
 export class AuthMiddleware {
 	private auth: BaseAuth;
