@@ -193,24 +193,23 @@ ${this.prompts?.system || ""}
 	 *
 	 * @param query - The user's input query
 	 * @param sessionId - Unique session identifier
+	 * @param userId - Unique user identifier
 	 * @returns Object containing the AI-generated response
 	 */
 	public async handleQuery(query: string, sessionId: string, userId?: string) {
 		// 1. Load session history with sessionId
 		const queryStartAt = Date.now();
 		const sessionMemory = this.memoryModule?.getSessionMemory();
-		const sessionHistory = await sessionMemory?.getSession(sessionId, userId);
+		const session = !userId
+			? undefined
+			: await sessionMemory?.getSession(sessionId, userId);
 
 		// 2. intent triggering
 		const intent = this.intentTriggering(query);
 
 		// 3. intent fulfillment
-		const result = await this.intentFulfilling(
-			query,
-			sessionId,
-			sessionHistory,
-		);
-		if (sessionId) {
+		const result = await this.intentFulfilling(query, sessionId, session);
+		if (userId) {
 			await sessionMemory?.addChatToSession(
 				sessionId,
 				{

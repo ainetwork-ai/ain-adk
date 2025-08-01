@@ -15,15 +15,15 @@ export interface IMemory {
 export interface ISessionMemory extends IMemory {
 	getSession(
 		sessionId: string,
-		userId?: string,
+		userId: string,
 	): Promise<SessionObject | undefined>;
-	createSession(sessionId: string, userId?: string): Promise<void>;
+	createSession(sessionId: string, userId: string): Promise<void>;
 	addChatToSession(
 		sessionId: string,
 		chat: ChatObject,
-		userId?: string,
+		userId: string,
 	): Promise<void>;
-	deleteSession(sessionId: string, userId?: string): Promise<void>;
+	deleteSession(sessionId: string, userId: string): Promise<void>;
 	listSessions(userId: string): Promise<string[]>;
 }
 
