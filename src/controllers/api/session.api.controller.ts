@@ -16,6 +16,7 @@ export class SessionApiController {
 	) => {
 		try {
 			const { id: sessionId } = req.params;
+			const userId = res.locals.userId || "";
 			const sessionMemory = this.memoryModule.getSessionMemory();
 			if (!sessionMemory) {
 				const error = new AinHttpError(
@@ -24,7 +25,7 @@ export class SessionApiController {
 				);
 				throw error;
 			}
-			const session = await sessionMemory.getSession(sessionId);
+			const session = await sessionMemory.getSession(sessionId, userId);
 			res.json(session);
 		} catch (error) {
 			next(error);

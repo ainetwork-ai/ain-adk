@@ -195,11 +195,11 @@ ${this.prompts?.system || ""}
 	 * @param sessionId - Unique session identifier
 	 * @returns Object containing the AI-generated response
 	 */
-	public async handleQuery(query: string, sessionId: string) {
+	public async handleQuery(query: string, sessionId: string, userId?: string) {
 		// 1. Load session history with sessionId
 		const queryStartAt = Date.now();
 		const sessionMemory = this.memoryModule?.getSessionMemory();
-		const sessionHistory = await sessionMemory?.getSession(sessionId);
+		const sessionHistory = await sessionMemory?.getSession(sessionId, userId);
 
 		// 2. intent triggering
 		const intent = this.intentTriggering(query);
@@ -211,16 +211,24 @@ ${this.prompts?.system || ""}
 			sessionHistory,
 		);
 		if (sessionId) {
-			await sessionMemory?.addChatToSession(sessionId, {
-				role: ChatRole.USER,
-				timestamp: queryStartAt,
-				content: { type: "text", parts: [query] },
-			});
-			await sessionMemory?.addChatToSession(sessionId, {
-				role: ChatRole.MODEL,
-				timestamp: Date.now(),
-				content: { type: "text", parts: [result.response] },
-			});
+			await sessionMemory?.addChatToSession(
+				sessionId,
+				{
+					role: ChatRole.USER,
+					timestamp: queryStartAt,
+					content: { type: "text", parts: [query] },
+				},
+				userId,
+			);
+			await sessionMemory?.addChatToSession(
+				sessionId,
+				{
+					role: ChatRole.MODEL,
+					timestamp: Date.now(),
+					content: { type: "text", parts: [result.response] },
+				},
+				userId,
+			);
 		}
 
 		return { content: result.response };

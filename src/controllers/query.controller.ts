@@ -15,8 +15,13 @@ export class QueryController {
 	) => {
 		try {
 			const { message, sessionId } = req.body;
+			const userId = res.locals.userId || "";
 
-			const result = await this.queryService.handleQuery(message, sessionId);
+			const result = await this.queryService.handleQuery(
+				userId,
+				message,
+				sessionId,
+			);
 
 			res.status(200).json(result);
 		} catch (error) {
