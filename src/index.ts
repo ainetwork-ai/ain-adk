@@ -204,7 +204,8 @@ export class AINAgent {
 	 *
 	 * @param port - The port number to listen on
 	 */
-	public start(port: number): void {
+	public async start(port: number): Promise<void> {
+		await this.memoryModule?.initialize();
 		this.app.listen(port, () => {
 			loggers.agent.info(`AINAgent is running on port ${port}`);
 		});

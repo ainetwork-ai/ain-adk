@@ -1,40 +1,44 @@
-import type { ChatObject, SessionObject } from "@/types/memory.js";
+import type { ChatObject, Intent, SessionObject } from "@/types/memory";
 
 /**
- * Abstract base class for memory storage implementations.
- *
- * Provides an interface for storing and retrieving conversation history
- * and query-intent pairs. Implementations can use various backends
- * such as in-memory storage, databases, or file systems.
+ * Base interface for all memory implementations
  */
-export abstract class BaseMemory {
-	/**
-	 * Retrieves the conversation history for a specific session.
-	 *
-	 * @param sessionId - Unique identifier for the session
-	 * @returns Promise resolving to the session's conversation history
-	 */
-	abstract getSessionHistory(sessionId: string): Promise<SessionObject>;
-	/**
-	 * Adds a new chat message to the session history.
-	 *
-	 * @param sessionId - Unique identifier for the session
-	 * @param chat - The chat object to add to the history
-	 */
-	abstract updateSessionHistory(
+export interface IMemory {
+	connect(): Promise<void>;
+	disconnect(): Promise<void>;
+	isConnected(): boolean;
+}
+
+/**
+ * Session memory interface
+ */
+export interface ISessionMemory extends IMemory {
+	getSession(
+		sessionId: string,
+		userId: string,
+	): Promise<SessionObject | undefined>;
+	createSession(sessionId: string, userId: string): Promise<void>;
+	addChatToSession(
 		sessionId: string,
 		chat: ChatObject,
+		userId: string,
 	): Promise<void>;
-	/**
-	 * Stores a query-intent pair for analysis or training purposes.
-	 *
-	 * @param query - The user's input query
-	 * @param intent - The detected intent for the query
-	 * @param sessionId - Unique identifier for the session
-	 */
-	abstract storeQueryAndIntent(
-		query: string,
-		intent: string,
-		sessionId: string,
-	): Promise<void>;
+	deleteSession(sessionId: string, userId: string): Promise<void>;
+	listSessions(userId: string): Promise<string[]>;
 }
+
+/**
+ * Intent memory interface
+ */
+export interface IIntentMemory extends IMemory {
+	getIntent(intentId: string): Promise<Intent | undefined>;
+	saveIntent(intent: Intent): Promise<void>;
+	updateIntent(intentId: string, intent: Intent): Promise<void>;
+	deleteIntent(intentId: string): Promise<void>;
+	listIntents(): Promise<Intent[]>;
+}
+
+/**
+ * Agent memory interface for storing agent configuration
+ */
+export interface IAgentMemory extends IMemory {}

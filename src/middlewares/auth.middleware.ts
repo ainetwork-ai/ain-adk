@@ -2,6 +2,7 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { BaseAuth } from "@/modules/auth/base.auth";
 import { AinHttpError } from "@/types/agent";
+import type { AuthResponse } from "@/types/auth";
 
 export class AuthMiddleware {
 	private auth: BaseAuth;
@@ -12,8 +13,9 @@ export class AuthMiddleware {
 	public middleware(): RequestHandler {
 		return async (req: Request, res: Response, next: NextFunction) => {
 			try {
-				const isAuthenticated = await this.auth.authenticate(req, res);
-				if (isAuthenticated) {
+				const authRes: AuthResponse = await this.auth.authenticate(req, res);
+				if (authRes.isAuthenticated) {
+					res.locals.userId = authRes.userId;
 					next();
 				} else {
 					const error: AinHttpError = new AinHttpError(
