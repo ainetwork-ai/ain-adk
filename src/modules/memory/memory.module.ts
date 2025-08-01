@@ -40,13 +40,13 @@ export class MemoryModule {
 	async shutdown(): Promise<void> {
 		const disconnectPromises: Promise<void>[] = [];
 
-		if (this.agentMemory && this.agentMemory.isConnected()) {
+		if (this.agentMemory?.isConnected()) {
 			disconnectPromises.push(this.agentMemory.disconnect());
 		}
-		if (this.sessionMemory && this.sessionMemory.isConnected()) {
+		if (this.sessionMemory?.isConnected()) {
 			disconnectPromises.push(this.sessionMemory.disconnect());
 		}
-		if (this.intentMemory && this.intentMemory.isConnected()) {
+		if (this.intentMemory?.isConnected()) {
 			disconnectPromises.push(this.intentMemory.disconnect());
 		}
 

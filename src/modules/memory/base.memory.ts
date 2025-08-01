@@ -13,11 +13,18 @@ export interface IMemory {
  * Session memory interface
  */
 export interface ISessionMemory extends IMemory {
-	getSession(sessionId: string): Promise<SessionObject | undefined>;
-	createSession(sessionId: string): Promise<void>;
-	addChatToSession(sessionId: string, chat: ChatObject): Promise<void>;
-	deleteSession(sessionId: string): Promise<void>;
-	listSessions(): Promise<string[]>;
+	getSession(
+		sessionId: string,
+		userId?: string,
+	): Promise<SessionObject | undefined>;
+	createSession(sessionId: string, userId?: string): Promise<void>;
+	addChatToSession(
+		sessionId: string,
+		chat: ChatObject,
+		userId?: string,
+	): Promise<void>;
+	deleteSession(sessionId: string, userId?: string): Promise<void>;
+	listSessions(userId: string): Promise<string[]>;
 }
 
 /**
