@@ -4,7 +4,7 @@ import type {
 	MemoryModule,
 	ModelModule,
 } from "@/modules/index.js";
-import type { AinAgentPrompts } from "@/types/index.js";
+import type { AinAgentPrompts } from "@/types/agent.js";
 import { ChatRole, type SessionObject } from "@/types/memory.js";
 import {
 	type IA2ATool,
@@ -71,7 +71,7 @@ export class QueryService {
 	private async intentFulfilling(
 		query: string,
 		sessionId: string,
-		sessionHistory: SessionObject,
+		sessionHistory: SessionObject | undefined,
 	) {
 		// 1. Load agent / system prompt from memory
 		const systemPrompt = `
@@ -83,11 +83,11 @@ ${this.prompts?.system || ""}
     `;
 
 		const modelInstance = this.modelModule.getModel();
-		const messages = modelInstance.generateMessages(
-			sessionHistory,
+		const messages = modelInstance.generateMessages({
 			query,
-			systemPrompt.trim(),
-		);
+			sessionHistory,
+			systemPrompt: systemPrompt.trim(),
+		});
 
 		const tools: IAgentTool[] = [];
 		if (this.mcpModule) {
@@ -193,36 +193,41 @@ ${this.prompts?.system || ""}
 	 *
 	 * @param query - The user's input query
 	 * @param sessionId - Unique session identifier
+	 * @param userId - Unique user identifier
 	 * @returns Object containing the AI-generated response
 	 */
-	public async handleQuery(query: string, sessionId: string) {
+	public async handleQuery(query: string, sessionId: string, userId?: string) {
 		// 1. Load session history with sessionId
 		const queryStartAt = Date.now();
-		const memoryInstance = this.memoryModule?.getMemory();
-		const sessionHistory = (await memoryInstance?.getSessionHistory(
-			sessionId,
-		)) || { chats: {} } /* FIXME */;
+		const sessionMemory = this.memoryModule?.getSessionMemory();
+		const session = !userId
+			? undefined
+			: await sessionMemory?.getSession(sessionId, userId);
 
 		// 2. intent triggering
 		const intent = this.intentTriggering(query);
 
 		// 3. intent fulfillment
-		const result = await this.intentFulfilling(
-			query,
-			sessionId,
-			sessionHistory,
-		);
-		if (sessionId) {
-			await memoryInstance?.updateSessionHistory(sessionId, {
-				role: ChatRole.USER,
-				timestamp: queryStartAt,
-				content: { type: "text", parts: [query] },
-			});
-			await memoryInstance?.updateSessionHistory(sessionId, {
-				role: ChatRole.MODEL,
-				timestamp: Date.now(),
-				content: { type: "text", parts: [result.response] },
-			});
+		const result = await this.intentFulfilling(query, sessionId, session);
+		if (userId) {
+			await sessionMemory?.addChatToSession(
+				sessionId,
+				{
+					role: ChatRole.USER,
+					timestamp: queryStartAt,
+					content: { type: "text", parts: [query] },
+				},
+				userId,
+			);
+			await sessionMemory?.addChatToSession(
+				sessionId,
+				{
+					role: ChatRole.MODEL,
+					timestamp: Date.now(),
+					content: { type: "text", parts: [result.response] },
+				},
+				userId,
+			);
 		}
 
 		return { content: result.response };

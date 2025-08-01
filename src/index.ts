@@ -3,19 +3,18 @@ import cors from "cors";
 import express, { type Response } from "express";
 import helmet from "helmet";
 import { StatusCodes } from "http-status-codes";
-import type { BaseAuth } from "@/middlewares/auth/base.js";
-import { loggers } from "@/utils/logger.js";
-import { errorMiddleware } from "./middlewares/error.middleware.js";
-import type { FOLModule } from "./modules/fol/fol.module.js";
+import { loggers } from "@/utils/logger";
+import { AuthMiddleware } from "./middlewares/auth.middleware";
+import { errorMiddleware } from "./middlewares/error.middleware";
 import type {
 	A2AModule,
+	BaseAuth,
 	MCPModule,
 	MemoryModule,
 	ModelModule,
-} from "./modules/index.js";
-import { createA2ARouter } from "./routes/a2a.routes.js";
-import { createQueryRouter } from "./routes/query.routes.js";
-import type { AinAgentManifest } from "./types/index.js";
+} from "./modules";
+import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
+import type { AinAgentManifest } from "./types/agent";
 
 /**
  * Main class for AI Network Agent Development Kit (AIN-ADK).
@@ -52,7 +51,6 @@ export class AINAgent {
 	public a2aModule?: A2AModule;
 	public mcpModule?: MCPModule;
 	public memoryModule?: MemoryModule;
-	public folModule?: FOLModule;
 
 	/** Optional authentication scheme for securing endpoints */
 	public authScheme?: BaseAuth;
@@ -76,7 +74,6 @@ export class AINAgent {
 			a2aModule?: A2AModule;
 			mcpModule?: MCPModule;
 			memoryModule?: MemoryModule;
-			folModule?: FOLModule;
 		},
 		authScheme?: BaseAuth,
 	) {
@@ -90,7 +87,6 @@ export class AINAgent {
 		this.a2aModule = modules.a2aModule;
 		this.mcpModule = modules.mcpModule;
 		this.memoryModule = modules.memoryModule;
-		this.folModule = modules.folModule;
 
 		this.authScheme = authScheme;
 
@@ -110,7 +106,8 @@ export class AINAgent {
 		this.app.use(express.urlencoded({ extended: true }));
 
 		if (this.authScheme) {
-			this.app.use(this.authScheme.middleware());
+			const auth = new AuthMiddleware(this.authScheme);
+			this.app.use(auth.middleware);
 		}
 	}
 
@@ -195,6 +192,7 @@ export class AINAgent {
 		});
 
 		this.app.use(createQueryRouter(this));
+		this.app.use(createApiRouter(this));
 		if (this.isValidUrl(this.manifest.url)) {
 			this.app.use(createA2ARouter(this));
 		}
@@ -205,7 +203,8 @@ export class AINAgent {
 	 *
 	 * @param port - The port number to listen on
 	 */
-	public start(port: number): void {
+	public async start(port: number): Promise<void> {
+		await this.memoryModule?.initialize();
 		this.app.listen(port, () => {
 			loggers.agent.info(`AINAgent is running on port ${port}`);
 		});

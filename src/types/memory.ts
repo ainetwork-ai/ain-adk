@@ -1,3 +1,10 @@
+export enum MemoryType {
+	SESSION = "SESSION",
+	INTENT = "INTENT",
+	AGENT = "AGENT",
+	USER = "USER",
+}
+
 /**
  * Roles for participants in a chat conversation.
  */
@@ -71,3 +78,8 @@ export type SessionObject = {
 		[chatId: string]: ChatObject;
 	};
 };
+
+export interface Intent {
+	name: string;
+	description: string;
+}

@@ -1,3 +1,5 @@
+import type { StatusCodes } from "http-status-codes";
+
 /**
  * Custom prompts configuration for the agent.
  *
@@ -42,3 +44,12 @@ export type AinAgentManifest = {
 	/** Optional custom prompts to configure agent behavior */
 	prompts?: AinAgentPrompts;
 };
+
+export class AinHttpError extends Error {
+	public status?: StatusCodes;
+
+	constructor(status: StatusCodes, message: string) {
+		super(message);
+		this.status = status;
+	}
+}

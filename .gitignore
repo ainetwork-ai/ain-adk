@@ -1,3 +1,6 @@
+# IDE
+.vscode/
+
 # Dependencies
 node_modules/
 
@@ -16,3 +19,5 @@ logs
 npm-debug.log*
 
 fol-store/
+
+.claude

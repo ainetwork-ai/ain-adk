@@ -1,6 +1,6 @@
 import { Router } from "express";
-import type { AINAgent } from "@/app.js";
 import { QueryController } from "@/controllers/query.controller.js";
+import type { AINAgent } from "@/index.js";
 import { QueryService } from "@/services/query.service.js";
 
 export const createQueryRouter = (agent: AINAgent): Router => {

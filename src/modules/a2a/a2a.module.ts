@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
-import {
-	A2AClient,
-	type AgentCard,
-	type Message,
-	type MessageSendParams,
-	type Task,
-	type TaskStatusUpdateEvent,
-	type TextPart,
+import type {
+	AgentCard,
+	Message,
+	MessageSendParams,
+	Task,
+	TaskStatusUpdateEvent,
+	TextPart,
 } from "@a2a-js/sdk";
+import { A2AClient } from "@a2a-js/sdk/client";
 import { loggers } from "@/utils/logger.js";
 import { A2ATool } from "./a2a.tool.js";
 

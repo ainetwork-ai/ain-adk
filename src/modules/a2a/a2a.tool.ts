@@ -1,4 +1,5 @@
-import type { A2AClient, AgentCard } from "@a2a-js/sdk";
+import type { AgentCard } from "@a2a-js/sdk";
+import type { A2AClient } from "@a2a-js/sdk/client";
 import { type IA2ATool, TOOL_PROTOCOL_TYPE } from "@/types/tool.js";
 
 export class A2ATool implements IA2ATool {
