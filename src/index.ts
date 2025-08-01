@@ -76,6 +76,7 @@ export class AINAgent {
 			memoryModule?: MemoryModule;
 		},
 		authScheme?: BaseAuth,
+		allowStream = false,
 	) {
 		this.app = express();
 
@@ -91,7 +92,7 @@ export class AINAgent {
 		this.authScheme = authScheme;
 
 		this.initializeMiddlewares();
-		this.initializeRoutes();
+		this.initializeRoutes(allowStream);
 		this.app.use(errorMiddleware);
 	}
 
@@ -170,7 +171,7 @@ export class AINAgent {
 	 * - /query/* - Query processing endpoints
 	 * - /a2a/* - A2A protocol endpoints (only if valid URL is configured)
 	 */
-	private initializeRoutes = (): void => {
+	private initializeRoutes = (allowStream = false): void => {
 		this.app.get("/", async (_, res: Response) => {
 			const { name, description, version } = this.manifest;
 			res.status(200).send(
@@ -191,7 +192,7 @@ export class AINAgent {
 			}
 		});
 
-		this.app.use(createQueryRouter(this));
+		this.app.use(createQueryRouter(this, allowStream));
 		this.app.use(createApiRouter(this));
 		if (this.isValidUrl(this.manifest.url)) {
 			this.app.use(createA2ARouter(this));
