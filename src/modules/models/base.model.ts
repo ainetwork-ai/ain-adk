@@ -1,5 +1,9 @@
 import type { SessionObject } from "@/types/memory.js";
-import type { FetchResponse, IAgentTool } from "@/types/tool.js";
+import type {
+	FetchResponse,
+	FetchStreamResponse,
+	IAgentTool,
+} from "@/types/tool.js";
 
 /**
  * Abstract base class for AI model implementations.
@@ -61,4 +65,9 @@ export abstract class BaseModel<MessageType, FunctionType> {
 		messages: MessageType[],
 		functions: FunctionType[],
 	): Promise<FetchResponse>;
+
+	abstract fetchStreamWithContextMessage(
+		messages: MessageType[],
+		functions: FunctionType[],
+	): AsyncGenerator<FetchStreamResponse>;
 }

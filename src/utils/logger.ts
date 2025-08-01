@@ -34,6 +34,7 @@ export const getLogger = (service: string) => createLogger(service);
 export const loggers = {
 	agent: getLogger("AINAgent"),
 	intent: getLogger("Intent"),
+	intentStream: getLogger("IntentStream"),
 	mcp: getLogger("MCPModule"),
 	a2a: getLogger("A2AModule"),
 	model: getLogger("Model"),

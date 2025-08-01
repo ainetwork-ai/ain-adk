@@ -35,6 +35,15 @@ export type FetchResponse = {
 	toolCalls?: ToolCall[];
 };
 
+export type FetchStreamResponse = {
+	delta?: {
+		role?: string;
+		content?: string;
+		tool_calls?: any[];
+	};
+	finish_reason?: string;
+};
+
 /**
  * MCP-specific tool implementation.
  *
