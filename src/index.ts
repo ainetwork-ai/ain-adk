@@ -108,7 +108,7 @@ export class AINAgent {
 
 		if (this.authScheme) {
 			const auth = new AuthMiddleware(this.authScheme);
-			this.app.use(auth.middleware);
+			this.app.use(auth.middleware());
 		}
 	}
 
