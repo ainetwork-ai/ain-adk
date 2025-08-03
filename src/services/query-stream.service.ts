@@ -119,6 +119,7 @@ ${this.prompts?.system || ""}
 			const processList: string[] = [];
 			const finalMessage = "";
 			let didCallTool = false;
+			loggers.intent.debug("intentFulfilling responseStream");
 
 			while (true) {
 				const responseStream =
@@ -138,6 +139,9 @@ ${this.prompts?.system || ""}
 				const toolCalls: any[] = [];
 
 				for await (const chunk of responseStream) {
+					loggers.intent.debug("intentFulfilling responseStream chunk", {
+						chunk,
+					});
 					const delta = chunk.delta;
 					if (delta?.tool_calls) {
 						didCallTool = true;
@@ -269,28 +273,43 @@ ${this.prompts?.system || ""}
 	 * @param sessionId - Unique session identifier
 	 * @returns Object containing the AI-generated response
 	 */
-	public async handleQuery(query: string, sessionId: string, res: Response) {
+	public async handleQuery(
+		query: string,
+		sessionId: string,
+		res: Response,
+		userId?: string,
+	) {
 		// 1. Load session history with sessionId
 		const queryStartAt = Date.now();
-		const memoryInstance = this.memoryModule?.getMemory();
-		const sessionHistory = (await memoryInstance?.getSessionHistory(
+		loggers.intent.info("handleQuery", {
+			query,
 			sessionId,
-		)) || { chats: {} } /* FIXME */;
+			userId,
+			queryStartAt,
+		});
+		const sessionMemory = this.memoryModule?.getSessionMemory();
+		const session = !userId
+			? undefined
+			: await sessionMemory?.getSession(sessionId, userId);
 
 		// 2. intent triggering
 		const intent = this.intentTriggering(query);
 
 		try {
 			// 3. intent fulfillment
+			loggers.intent.info("handleQuery intentFulfilling");
 			const stream = await this.intentFulfilling(
 				query,
 				sessionId,
-				sessionHistory,
+				session || { chats: {} },
 			);
 
 			let finalResponseText = "";
 			for await (const event of stream) {
 				if (event.event === "text_chunk" && event.data.delta) {
+					loggers.intent.info("handleQuery intentFulfilling text_chunk", {
+						event,
+					});
 					finalResponseText += event.data.delta;
 				}
 
