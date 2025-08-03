@@ -119,7 +119,6 @@ ${this.prompts?.system || ""}
 			const processList: string[] = [];
 			const finalMessage = "";
 			let didCallTool = false;
-			loggers.intent.debug("intentFulfilling responseStream");
 
 			while (true) {
 				const responseStream =
@@ -136,12 +135,8 @@ ${this.prompts?.system || ""}
 				}[] = [];
 
 				loggers.intentStream.debug("messages", { messages });
-				const toolCalls: any[] = [];
 
 				for await (const chunk of responseStream) {
-					loggers.intent.debug("intentFulfilling responseStream chunk", {
-						chunk,
-					});
 					const delta = chunk.delta;
 					if (delta?.tool_calls) {
 						didCallTool = true;
@@ -183,12 +178,12 @@ ${this.prompts?.system || ""}
 					}
 				}
 
-				if (didCallTool && toolCalls.length > 0) {
+				if (didCallTool && assembledToolCalls.length > 0) {
 					const messagePayload = this.a2aModule?.getMessagePayload(
 						query,
 						sessionId,
 					);
-					for (const toolCall of toolCalls) {
+					for (const toolCall of assembledToolCalls) {
 						const toolName = toolCall.function.name;
 						const toolArgs = JSON.parse(toolCall.function.arguments);
 						const selectedTool = tools.filter(
@@ -203,7 +198,7 @@ ${this.prompts?.system || ""}
 							this.mcpModule &&
 							selectedTool.protocol === TOOL_PROTOCOL_TYPE.MCP
 						) {
-							const toolArgs = toolCall.arguments as
+							const toolArgs = JSON.parse(toolCall.function.arguments) as
 								| { [x: string]: unknown }
 								| undefined;
 							loggers.intent.debug("MCP tool call", { toolName, toolArgs });
