@@ -2,8 +2,12 @@ import { Router } from "express";
 import { QueryController } from "@/controllers/query.controller.js";
 import type { AINAgent } from "@/index.js";
 import { QueryService } from "@/services/query.service.js";
+import { QueryStreamService } from "@/services/query-stream.service.js";
 
-export const createQueryRouter = (agent: AINAgent): Router => {
+export const createQueryRouter = (
+	agent: AINAgent,
+	allowStream = false,
+): Router => {
 	const router = Router();
 
 	const queryService = new QueryService(
@@ -13,8 +17,25 @@ export const createQueryRouter = (agent: AINAgent): Router => {
 		agent.memoryModule,
 		agent.manifest.prompts,
 	);
-	const queryController = new QueryController(queryService);
+
+	let queryStreamService: QueryStreamService | undefined;
+
+	if (allowStream) {
+		queryStreamService = new QueryStreamService(
+			agent.modelModule,
+			agent.a2aModule,
+			agent.mcpModule,
+			agent.memoryModule,
+			agent.manifest.prompts,
+		);
+	}
+
+	const queryController = new QueryController(queryService, queryStreamService);
 	router.post("/query", queryController.handleQueryRequest);
+
+	if (allowStream) {
+		router.post("/query-stream", queryController.handleQueryStreamRequest);
+	}
 
 	return router;
 };

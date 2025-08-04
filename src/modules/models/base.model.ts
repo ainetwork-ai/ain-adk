@@ -1,4 +1,5 @@
 import type { SessionObject } from "@/types/memory.js";
+import type { LLMStream } from "@/types/stream.js";
 import type { FetchResponse, IAgentTool } from "@/types/tool.js";
 
 /**
@@ -61,4 +62,20 @@ export abstract class BaseModel<MessageType, FunctionType> {
 		messages: MessageType[],
 		functions: FunctionType[],
 	): Promise<FetchResponse>;
+
+	/**
+	 * Fetches a streaming response from the model API with tool/function support.
+	 *
+	 * Returns a standardized LLMStream that can be used consistently across
+	 * different AI model providers. Each implementation should convert their
+	 * provider-specific stream format to the common StreamChunk interface.
+	 *
+	 * @param messages - Array of messages to send to the model
+	 * @param functions - Array of available functions/tools the model can call
+	 * @returns Promise resolving to an LLMStream for consistent iteration
+	 */
+	abstract fetchStreamWithContextMessage(
+		messages: MessageType[],
+		functions: FunctionType[],
+	): Promise<LLMStream>;
 }
