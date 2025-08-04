@@ -82,4 +82,6 @@ export type SessionObject = {
 export interface Intent {
 	name: string;
 	description: string;
+	prompt?: string;
+	llm?: string;
 }
