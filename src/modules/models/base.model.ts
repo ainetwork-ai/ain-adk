@@ -1,5 +1,6 @@
 import type { SessionObject } from "@/types/memory.js";
-import type { FetchResponse, IAgentTool, LLMStream } from "@/types/tool.js";
+import type { LLMStream } from "@/types/stream.js";
+import type { FetchResponse, IAgentTool } from "@/types/tool.js";
 
 /**
  * Abstract base class for AI model implementations.

@@ -6,7 +6,7 @@ import type {
 	ModelModule,
 } from "@/modules/index.js";
 import type { AinAgentPrompts } from "@/types/agent.js";
-import { ChatRole, type SessionObject } from "@/types/memory.js";
+import type { SessionObject } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import {
 	type IA2ATool,
@@ -56,21 +56,6 @@ export class QueryStreamService {
 		return query;
 	}
 
-	// [추가] 스트림 이벤트를 클라이언트로 전송하는 헬퍼 함수
-	private writeStreamEvent = (
-		res: Response,
-		eventName:
-			| "tool_start"
-			| "tool_output"
-			| "text_chunk"
-			| "stream_end"
-			| "error",
-		data: Record<string, any>,
-	) => {
-		res.write(`event: ${eventName}\n`);
-		res.write(`data: ${JSON.stringify(data)}\n\n`);
-	};
-
 	/**
 	 * Fulfills the detected intent by generating a response.
 	 *
@@ -90,7 +75,6 @@ export class QueryStreamService {
 		sessionId: string,
 		sessionHistory: SessionObject,
 	): AsyncGenerator<StreamEvent> {
-		// res 객체 제거
 		try {
 			const systemPrompt = `
 Today is ${new Date().toLocaleDateString()}.
@@ -143,7 +127,6 @@ ${this.prompts?.system || ""}
 						for (const toolCallDelta of delta.tool_calls) {
 							const index = toolCallDelta.index;
 
-							// 1. 해당 인덱스의 Tool Call 객체가 처음 나타나는 경우, 기본 구조를 생성합니다.
 							if (!assembledToolCalls[index]) {
 								assembledToolCalls[index] = {
 									id: "",
@@ -152,25 +135,21 @@ ${this.prompts?.system || ""}
 								};
 							}
 
-							// 2. ID 정보를 채웁니다 (보통 첫 조각에만 포함됨).
 							if (toolCallDelta.id) {
 								assembledToolCalls[index].id = toolCallDelta.id;
 							}
 
-							// 3. 함수 이름 정보를 채웁니다 (보통 첫 조각에만 포함됨).
 							if (toolCallDelta.function?.name) {
 								assembledToolCalls[index].function.name =
 									toolCallDelta.function.name;
 							}
 
-							// 4. 함수의 인자(arguments) 조각을 계속 이어 붙입니다.
 							if (toolCallDelta.function?.arguments) {
 								assembledToolCalls[index].function.arguments +=
 									toolCallDelta.function.arguments;
 							}
 						}
 					} else if (chunk.delta?.content) {
-						// [변경점] res.write 대신 yield 사용
 						yield {
 							event: "text_chunk",
 							data: { delta: chunk.delta.content },
@@ -241,7 +220,6 @@ ${this.prompts?.system || ""}
 			}
 		} catch (error) {
 			loggers.intent.error("Error in intentFulfilling generator", { error });
-			// [변경점] 에러도 yield로 전달하여 상위 핸들러가 처리하도록 함
 			if (error instanceof Error) {
 				yield {
 					event: "error",
@@ -308,7 +286,6 @@ ${this.prompts?.system || ""}
 					finalResponseText += event.data.delta;
 				}
 
-				// 3. 모든 이벤트를 클라이언트에 실시간으로 전송
 				const sseFormattedEvent = `event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`;
 				res.write(sseFormattedEvent);
 			}
