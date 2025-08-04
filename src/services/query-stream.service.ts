@@ -6,7 +6,7 @@ import type {
 	ModelModule,
 } from "@/modules/index.js";
 import type { AinAgentPrompts } from "@/types/agent.js";
-import type { SessionObject } from "@/types/memory.js";
+import { ChatRole, type SessionObject } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import {
 	type IA2ATool,
@@ -283,6 +283,19 @@ ${this.prompts?.system || ""}
 
 				const sseFormattedEvent = `event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`;
 				res.write(sseFormattedEvent);
+			}
+
+			if (userId) {
+				await sessionMemory?.addChatToSession(userId, sessionId, {
+					role: ChatRole.USER,
+					timestamp: queryStartAt,
+					content: { type: "text", parts: [query] },
+				});
+				await sessionMemory?.addChatToSession(userId, sessionId, {
+					role: ChatRole.MODEL,
+					timestamp: Date.now(),
+					content: { type: "text", parts: [finalResponseText] },
+				});
 			}
 		} catch (error) {
 			loggers.intent.error("Error in handleQuery", { error });
