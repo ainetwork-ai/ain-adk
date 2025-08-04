@@ -157,6 +157,10 @@ ${this.prompts?.system || ""}
 					}
 				}
 
+				loggers.intentStream.debug("assembledToolCalls", {
+					assembledToolCalls,
+				});
+
 				if (didCallTool && assembledToolCalls.length > 0) {
 					const messagePayload = this.a2aModule?.getMessagePayload(
 						query,
