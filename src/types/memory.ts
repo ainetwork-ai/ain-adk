@@ -59,6 +59,7 @@ export type ChatObject = {
 export type SessionMetadata = {
 	title?: string;
 	sessionId: string;
+	updatedAt: number;
 };
 
 /**
