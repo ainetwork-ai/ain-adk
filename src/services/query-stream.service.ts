@@ -250,7 +250,7 @@ ${this.prompts?.system || ""}
 	 * @param sessionId - Unique session identifier
 	 * @returns Object containing the AI-generated response
 	 */
-	public async handleQuery(
+	public async handleQueryStream(
 		query: string,
 		sessionId: string,
 		res: Response,
@@ -258,12 +258,6 @@ ${this.prompts?.system || ""}
 	) {
 		// 1. Load session history with sessionId
 		const queryStartAt = Date.now();
-		loggers.intent.info("handleQuery", {
-			query,
-			sessionId,
-			userId,
-			queryStartAt,
-		});
 		const sessionMemory = this.memoryModule?.getSessionMemory();
 		const session = !userId
 			? undefined
@@ -274,7 +268,6 @@ ${this.prompts?.system || ""}
 
 		try {
 			// 3. intent fulfillment
-			loggers.intent.info("handleQuery intentFulfilling");
 			const stream = await this.intentFulfilling(
 				query,
 				sessionId,
@@ -284,9 +277,7 @@ ${this.prompts?.system || ""}
 			let finalResponseText = "";
 			for await (const event of stream) {
 				if (event.event === "text_chunk" && event.data.delta) {
-					loggers.intent.info("handleQuery intentFulfilling text_chunk", {
-						event,
-					});
+					loggers.intentStream.debug("text_chunk", { event });
 					finalResponseText += event.data.delta;
 				}
 
