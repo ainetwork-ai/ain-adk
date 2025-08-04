@@ -71,7 +71,7 @@ export class QueryService {
 	private async intentFulfilling(
 		query: string,
 		sessionId: string,
-		sessionHistory: SessionObject | undefined,
+		sessionHistory?: SessionObject,
 	) {
 		// 1. Load agent / system prompt from memory
 		const systemPrompt = `

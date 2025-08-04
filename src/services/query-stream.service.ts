@@ -73,7 +73,7 @@ export class QueryStreamService {
 	public async *intentFulfilling(
 		query: string,
 		sessionId: string,
-		sessionHistory: SessionObject,
+		sessionHistory?: SessionObject,
 	): AsyncGenerator<StreamEvent> {
 		try {
 			const systemPrompt = `
@@ -268,11 +268,7 @@ ${this.prompts?.system || ""}
 
 		try {
 			// 3. intent fulfillment
-			const stream = await this.intentFulfilling(
-				query,
-				sessionId,
-				session || { chats: {} },
-			);
+			const stream = await this.intentFulfilling(query, sessionId, session);
 
 			let finalResponseText = "";
 			for await (const event of stream) {
