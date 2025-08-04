@@ -101,7 +101,6 @@ ${this.prompts?.system || ""}
 			const functions = modelInstance.convertToolsToFunctions(tools);
 
 			const processList: string[] = [];
-			const finalMessage = "";
 			let didCallTool = false;
 
 			while (true) {
