@@ -56,6 +56,12 @@ export type ChatObject = {
 	metadata?: { [key: string]: unknown };
 };
 
+export type SessionMetadata = {
+	title?: string;
+	sessionId: string;
+	updatedAt: number;
+};
+
 /**
  * Represents a conversation session containing multiple chat messages.
  *
@@ -73,6 +79,7 @@ export type ChatObject = {
  * ```
  */
 export type SessionObject = {
+	title?: string;
 	/** Collection of chat messages indexed by unique chat ID */
 	chats: {
 		[chatId: string]: ChatObject;
@@ -82,4 +89,6 @@ export type SessionObject = {
 export interface Intent {
 	name: string;
 	description: string;
+	prompt?: string;
+	llm?: string;
 }
