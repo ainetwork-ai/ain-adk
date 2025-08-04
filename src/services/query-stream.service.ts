@@ -15,6 +15,7 @@ import {
 	TOOL_PROTOCOL_TYPE,
 } from "@/types/tool.js";
 import { loggers } from "@/utils/logger.js";
+import { createUUID } from "@/utils/uuid";
 
 /**
  * Service for processing user queries through the agent's AI pipeline.
@@ -251,16 +252,26 @@ ${this.prompts?.system || ""}
 	 */
 	public async handleQueryStream(
 		query: string,
-		sessionId: string,
 		res: Response,
 		userId?: string,
+		_sessionId?: string,
 	) {
 		// 1. Load session history with sessionId
+		let sessionId = _sessionId;
 		const queryStartAt = Date.now();
 		const sessionMemory = this.memoryModule?.getSessionMemory();
-		const session = !userId
-			? undefined
-			: await sessionMemory?.getSession(sessionId, userId);
+		const session =
+			!userId || !sessionId
+				? undefined
+				: await sessionMemory?.getSession(sessionId, userId);
+
+		if (!sessionId) {
+			sessionId = createUUID();
+			loggers.intentStream.debug("Create new session id", { sessionId });
+			res.write(
+				`event: session_id\ndata: ${JSON.stringify({ sessionId })}\n\n`,
+			);
+		}
 
 		// 2. intent triggering
 		const intent = this.intentTriggering(query);
