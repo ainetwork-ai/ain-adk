@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Response } from "express";
 import type {
 	A2AModule,
@@ -19,7 +20,6 @@ import {
 	TOOL_PROTOCOL_TYPE,
 } from "@/types/tool.js";
 import { loggers } from "@/utils/logger.js";
-import { createUUID } from "@/utils/uuid";
 
 /**
  * Service for processing user queries through the agent's AI pipeline.
@@ -300,7 +300,7 @@ ${this.prompts?.system || ""}
 				: await sessionMemory?.getSession(sessionId, userId);
 
 		if (!sessionId) {
-			sessionId = createUUID();
+			sessionId = randomUUID();
 			loggers.intentStream.debug("Create new session id", { sessionId });
 
 			const title = await this.generateTitle(query);
