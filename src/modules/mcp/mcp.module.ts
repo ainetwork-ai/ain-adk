@@ -93,20 +93,26 @@ export class MCPModule {
 		const toolName = mcpTool.name;
 		const mcp = this.mcpMap.get(serverName);
 
-		if (!mcp) {
-			throw new Error(`Invalid MCP Tool ${serverName}-${mcpTool.name}`);
+		try {
+			if (!mcp) {
+				throw new Error(`Invalid MCP Tool ${serverName}-${mcpTool.name}`);
+			}
+
+			const result = await mcp.callTool({
+				name: toolName,
+				arguments: _args,
+			});
+			const toolResult =
+				`[Bot Called Tool ${toolName} with args ${JSON.stringify(_args)}]\n` +
+				JSON.stringify(result.content, null, 2);
+			return toolResult;
+		} catch (error) {
+			loggers.mcp.error("Failed to call tool", { error });
+			const toolResult =
+				`[Bot Called Tool ${toolName} with args ${JSON.stringify(_args)}]\n` +
+				JSON.stringify(error, null, 2);
+			throw toolResult;
 		}
-
-		const result = await mcp.callTool({
-			name: toolName,
-			arguments: _args,
-		});
-		const toolResult =
-			`[Bot Called Tool ${toolName} with args ${JSON.stringify(_args)}]\n` +
-			JSON.stringify(result.content, null, 2);
-
-		loggers.mcp.debug("MCP useTool result:", toolResult);
-		return result;
 	}
 
 	/**
