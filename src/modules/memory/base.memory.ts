@@ -1,4 +1,9 @@
-import type { ChatObject, Intent, SessionObject } from "@/types/memory";
+import type {
+	ChatObject,
+	Intent,
+	SessionMetadata,
+	SessionObject,
+} from "@/types/memory";
 
 /**
  * Base interface for all memory implementations
@@ -17,14 +22,18 @@ export interface ISessionMemory extends IMemory {
 		userId: string,
 		sessionId: string,
 	): Promise<SessionObject | undefined>;
-	createSession(userId: string, sessionId: string): Promise<void>;
+	createSession(
+		userId: string,
+		sessionId: string,
+		title?: string,
+	): Promise<void>;
 	addChatToSession(
 		userId: string,
 		sessionId: string,
 		chat: ChatObject,
 	): Promise<void>;
 	deleteSession(userId: string, sessionId: string): Promise<void>;
-	listSessions(userId: string): Promise<string[]>;
+	listSessions(userId: string): Promise<SessionMetadata[]>;
 }
 
 /**
