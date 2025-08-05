@@ -6,7 +6,11 @@ import type {
 	ModelModule,
 } from "@/modules/index.js";
 import type { AinAgentPrompts } from "@/types/agent.js";
-import { ChatRole, SessionMetadata, type SessionObject } from "@/types/memory.js";
+import {
+	ChatRole,
+	type SessionMetadata,
+	type SessionObject,
+} from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import {
 	type IA2ATool,
