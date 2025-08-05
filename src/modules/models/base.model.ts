@@ -78,17 +78,4 @@ export abstract class BaseModel<MessageType, FunctionType> {
 		messages: MessageType[],
 		functions: FunctionType[],
 	): Promise<LLMStream>;
-
-	/**
-	 * Generates a title for the conversation based on the query.
-	 *
-	 * This method is optional - implementations can override it to provide
-	 * custom title generation logic. Default implementation returns undefined.
-	 *
-	 * @param query - The user's input query
-	 * @returns Promise resolving to a generated title, or undefined if not supported
-	 */
-	async generateTitle(query: string): Promise<string> {
-		return "New Chat";
-	}
 }

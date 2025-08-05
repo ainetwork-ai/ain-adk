@@ -241,6 +241,36 @@ ${this.prompts?.system || ""}
 			}
 		}
 	}
+
+	/**
+	 * Generates a title for the conversation based on the query.
+	 *
+	 * @param query - The user's input query
+	 * @returns Promise resolving to a generated title
+	 */
+
+	private async generateTitle(query: string): Promise<string> {
+		const DEFAULT_TITLE = "New Chat";
+		try {
+			const modelInstance = this.modelModule.getModel();
+			const messages = modelInstance.generateMessages({
+				query,
+				systemPrompt: `You are a helpful assistant that generates titles for conversations.
+  Please analyze the user's query and create a concise title that accurately reflects the conversation's core topic.
+  The title must be no more than 5 words long.
+  Respond with only the title. Do not include any punctuation or extra explanations.`,
+			});
+			const response = await modelInstance.fetch(messages);
+			return response.content || DEFAULT_TITLE;
+		} catch (error) {
+			loggers.intentStream.error("Error generating title", {
+				error,
+				query,
+			});
+			return DEFAULT_TITLE;
+		}
+	}
+
 	/**
 	 * Main entry point for processing user queries.
 	 *
@@ -273,16 +303,7 @@ ${this.prompts?.system || ""}
 			sessionId = createUUID();
 			loggers.intentStream.debug("Create new session id", { sessionId });
 
-			const title = await this.modelModule
-				.getModel()
-				.generateTitle(query)
-				.catch((error) => {
-					loggers.intentStream.error("Error generating title", {
-						error,
-						query,
-					});
-					return "New Chat";
-				});
+			const title = await this.generateTitle(query);
 			const metadata: SessionMetadata = {
 				sessionId,
 				title,
