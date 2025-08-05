@@ -88,7 +88,7 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	 * @param query - The user's input query
 	 * @returns Promise resolving to a generated title, or undefined if not supported
 	 */
-	async generateTitle(query: string): Promise<string | undefined> {
-		return undefined;
+	async generateTitle(query: string): Promise<string> {
+		return "New Chat";
 	}
 }

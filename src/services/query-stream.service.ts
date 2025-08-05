@@ -269,10 +269,13 @@ ${this.prompts?.system || ""}
 			sessionId = createUUID();
 			loggers.intentStream.debug("Create new session id", { sessionId });
 
-			const title = await this.modelModule.getModel().generateTitle(query);
+			const title = await this.modelModule
+				.getModel()
+				.generateTitle(query)
+				.catch((_) => "New Chat");
 			const metadata = {
 				sessionId,
-				title: title ? title : "New Chat",
+				title,
 			};
 			res.write(`event: session_id\ndata: ${JSON.stringify(metadata)}\n\n`);
 		}
