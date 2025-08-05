@@ -12,7 +12,10 @@ export interface ToolCallDelta {
 	index: number;
 	id?: string;
 	type?: "function";
-	function?: ToolCall;
+	function?: {
+		name?: string;
+		arguments?: string;
+	};
 }
 
 /**
