@@ -25,7 +25,7 @@ export interface ISessionMemory extends IMemory {
 	createSession(
 		userId: string,
 		sessionId: string,
-		title?: string,
+		title: string,
 	): Promise<void>;
 	addChatToSession(
 		userId: string,

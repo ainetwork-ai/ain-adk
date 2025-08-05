@@ -286,8 +286,8 @@ ${this.prompts?.system || ""}
 	 */
 	public async handleQueryStream(
 		query: string,
+		userId: string,
 		res: Response,
-		userId?: string,
 		_sessionId?: string,
 	) {
 		// 1. Load session history with sessionId
@@ -303,11 +303,9 @@ ${this.prompts?.system || ""}
 			sessionId = randomUUID();
 			const title = await this.generateTitle(query);
 
-			const metadata: SessionMetadata = {
-				sessionId,
-				title,
-				updatedAt: Date.now(),
-			};
+			const metadata = this.memoryModule
+				?.getSessionMemory()
+				?.createSession(userId, sessionId, title);
 			loggers.intentStream.info("Create new session", { metadata });
 			res.write(`event: session_id\ndata: ${JSON.stringify(metadata)}\n\n`);
 		}
