@@ -276,7 +276,13 @@ ${this.prompts?.system || ""}
 			const title = await this.modelModule
 				.getModel()
 				.generateTitle(query)
-				.catch((_) => "New Chat");
+				.catch((error) => {
+					loggers.intentStream.error("Error generating title", {
+						error,
+						query,
+					});
+					return "New Chat";
+				});
 			const metadata: SessionMetadata = {
 				sessionId,
 				title,
