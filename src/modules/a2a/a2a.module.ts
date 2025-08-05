@@ -156,7 +156,7 @@ export class A2AModule {
 		tool: A2ATool,
 		messagePayload: Message,
 		sessionId: string,
-	): Promise<string[]> {
+	): Promise<string> {
 		const finalText: string[] = [];
 		const client = tool.client;
 		const params: MessageSendParams = {
@@ -207,12 +207,13 @@ export class A2AModule {
 					});
 				}
 			}
-		} catch (error: unknown) {
+		} catch (error) {
 			loggers.a2a.error("Error communicating with agent:", { error });
 			tool.disable();
-			// TODO: add failed & disabled text for next inference?
+			const toolResult = `[Bot Called A2A Tool ${tool.card.name}]\n${typeof error === "string" ? error : JSON.stringify(error, null, 2)}`;
+			return toolResult;
 		}
 
-		return finalText;
+		return `[Bot Called A2A Tool ${tool.card.name}]\n${finalText.join("\n")}`;
 	}
 }

@@ -88,7 +88,7 @@ export class MCPModule {
 	 * @returns Promise resolving to the tool's execution result
 	 * @throws Error if the MCP server for the tool is not found
 	 */
-	async useTool(tool: MCPTool, _args?: any): Promise<any> {
+	async useTool(tool: MCPTool, _args?: any): Promise<string> {
 		const { serverName, mcpTool } = tool;
 		const toolName = mcpTool.name;
 		const mcp = this.mcpMap.get(serverName);
@@ -108,10 +108,8 @@ export class MCPModule {
 			return toolResult;
 		} catch (error) {
 			loggers.mcp.error("Failed to call tool", { error });
-			const toolResult =
-				`[Bot Called Tool ${toolName} with args ${JSON.stringify(_args)}]\n` +
-				JSON.stringify(error, null, 2);
-			throw toolResult;
+			const toolResult = `[Bot Called Tool ${toolName} with args ${JSON.stringify(_args)}]\n${typeof error === "string" ? error : JSON.stringify(error, null, 2)}`;
+			return toolResult;
 		}
 	}
 
