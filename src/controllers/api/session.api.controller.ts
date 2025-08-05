@@ -16,7 +16,15 @@ export class SessionApiController {
 	) => {
 		try {
 			const { id: sessionId } = req.params;
-			const userId = res.locals.userId || "";
+			const userId = res.locals.userId;
+			if (!userId) {
+				const error = new AinHttpError(
+					StatusCodes.UNAUTHORIZED,
+					"User ID is required",
+				);
+				throw error;
+			}
+
 			const sessionMemory = this.memoryModule.getSessionMemory();
 			if (!sessionMemory) {
 				const error = new AinHttpError(
@@ -27,6 +35,36 @@ export class SessionApiController {
 			}
 			const session = await sessionMemory.getSession(userId, sessionId);
 			res.json(session);
+		} catch (error) {
+			next(error);
+		}
+	};
+
+	public handleUserSessionList = async (
+		_req: Request,
+		res: Response,
+		next: NextFunction,
+	) => {
+		try {
+			const userId = res.locals.userId;
+			if (!userId) {
+				const error = new AinHttpError(
+					StatusCodes.UNAUTHORIZED,
+					"User ID is required",
+				);
+				throw error;
+			}
+
+			const sessionMemory = this.memoryModule.getSessionMemory();
+			if (!sessionMemory) {
+				const error = new AinHttpError(
+					StatusCodes.SERVICE_UNAVAILABLE,
+					"Memory module is not initialized",
+				);
+				throw error;
+			}
+			const sessions = await sessionMemory.listSessions(userId);
+			res.json(sessions);
 		} catch (error) {
 			next(error);
 		}

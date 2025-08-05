@@ -7,6 +7,7 @@ export const createSessionApiRouter = (memoryModule: MemoryModule): Router => {
 	const sessionApiController = new SessionApiController(memoryModule);
 
 	// APIs (prefix: /api/sessions)
+	router.get("/", sessionApiController.handleUserSessionList);
 	router.get("/:id", sessionApiController.handleSessionHistory);
 
 	return router;
