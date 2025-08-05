@@ -303,9 +303,13 @@ ${this.prompts?.system || ""}
 			sessionId = randomUUID();
 			const title = await this.generateTitle(query);
 
-			const metadata = this.memoryModule
-				?.getSessionMemory()
-				?.createSession(userId, sessionId, title);
+			const metadata =
+				(await sessionMemory?.createSession(userId, sessionId, title)) ||
+				({
+					sessionId,
+					title,
+					updatedAt: Date.now(),
+				} as SessionMetadata);
 			loggers.intentStream.info("Create new session", { metadata });
 			res.write(`event: session_id\ndata: ${JSON.stringify(metadata)}\n\n`);
 		}
