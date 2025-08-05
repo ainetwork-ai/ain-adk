@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Response } from "express";
 import type {
 	A2AModule,
@@ -6,7 +7,11 @@ import type {
 	ModelModule,
 } from "@/modules/index.js";
 import type { AinAgentPrompts } from "@/types/agent.js";
-import type { SessionObject } from "@/types/memory.js";
+import {
+	ChatRole,
+	type SessionMetadata,
+	type SessionObject,
+} from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import {
 	type IA2ATool,
@@ -73,7 +78,7 @@ export class QueryStreamService {
 	public async *intentFulfilling(
 		query: string,
 		sessionId: string,
-		sessionHistory: SessionObject,
+		sessionHistory?: SessionObject,
 	): AsyncGenerator<StreamEvent> {
 		try {
 			const systemPrompt = `
@@ -101,7 +106,6 @@ ${this.prompts?.system || ""}
 			const functions = modelInstance.convertToolsToFunctions(tools);
 
 			const processList: string[] = [];
-			const finalMessage = "";
 			let didCallTool = false;
 
 			while (true) {
@@ -185,23 +189,19 @@ ${this.prompts?.system || ""}
 								| { [x: string]: unknown }
 								| undefined;
 							loggers.intent.debug("MCP tool call", { toolName, toolArgs });
-							const result = await this.mcpModule.useTool(
+							toolResult = await this.mcpModule.useTool(
 								selectedTool as IMCPTool,
 								toolArgs,
 							);
-							toolResult =
-								`[Bot Called MCP Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
-								JSON.stringify(result.content, null, 2);
 						} else if (
 							this.a2aModule &&
 							selectedTool.protocol === TOOL_PROTOCOL_TYPE.A2A
 						) {
-							const result = await this.a2aModule.useTool(
+							toolResult = await this.a2aModule.useTool(
 								selectedTool as IA2ATool,
 								messagePayload!,
 								sessionId,
 							);
-							toolResult = `[Bot Called A2A Tool ${toolName}]\n${result.join("\n")}`;
 						} else {
 							// Unrecognized tool type. It cannot be happened...
 							loggers.intent.warn(
@@ -237,6 +237,36 @@ ${this.prompts?.system || ""}
 			}
 		}
 	}
+
+	/**
+	 * Generates a title for the conversation based on the query.
+	 *
+	 * @param query - The user's input query
+	 * @returns Promise resolving to a generated title
+	 */
+
+	private async generateTitle(query: string): Promise<string> {
+		const DEFAULT_TITLE = "New Chat";
+		try {
+			const modelInstance = this.modelModule.getModel();
+			const messages = modelInstance.generateMessages({
+				query,
+				systemPrompt: `You are a helpful assistant that generates titles for conversations.
+  Please analyze the user's query and create a concise title that accurately reflects the conversation's core topic.
+  The title must be no more than 5 words long.
+  Respond with only the title. Do not include any punctuation or extra explanations.`,
+			});
+			const response = await modelInstance.fetch(messages);
+			return response.content || DEFAULT_TITLE;
+		} catch (error) {
+			loggers.intentStream.error("Error generating title", {
+				error,
+				query,
+			});
+			return DEFAULT_TITLE;
+		}
+	}
+
 	/**
 	 * Main entry point for processing user queries.
 	 *
@@ -252,27 +282,44 @@ ${this.prompts?.system || ""}
 	 */
 	public async handleQueryStream(
 		query: string,
-		sessionId: string,
+		userId: string,
 		res: Response,
-		userId?: string,
+		_sessionId?: string,
 	) {
 		// 1. Load session history with sessionId
+		let sessionId = _sessionId;
 		const queryStartAt = Date.now();
 		const sessionMemory = this.memoryModule?.getSessionMemory();
-		const session = !userId
-			? undefined
-			: await sessionMemory?.getSession(sessionId, userId);
+		const session =
+			!userId || !sessionId
+				? undefined
+				: await sessionMemory?.getSession(sessionId, userId);
+
+		try {
+			if (!sessionId) {
+				sessionId = randomUUID();
+				const title = await this.generateTitle(query);
+
+				const metadata =
+					(await sessionMemory?.createSession(userId, sessionId, title)) ||
+					({
+						sessionId,
+						title,
+						updatedAt: Date.now(),
+					} as SessionMetadata);
+				loggers.intentStream.info("Create new session", { metadata });
+				res.write(`event: session_id\ndata: ${JSON.stringify(metadata)}\n\n`);
+			}
+		} catch (error) {
+			throw new Error("Failed to create new session");
+		}
 
 		// 2. intent triggering
 		const intent = this.intentTriggering(query);
 
 		try {
 			// 3. intent fulfillment
-			const stream = await this.intentFulfilling(
-				query,
-				sessionId,
-				session || { chats: {} },
-			);
+			const stream = await this.intentFulfilling(query, sessionId, session);
 
 			let finalResponseText = "";
 			for await (const event of stream) {
@@ -283,6 +330,19 @@ ${this.prompts?.system || ""}
 
 				const sseFormattedEvent = `event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`;
 				res.write(sseFormattedEvent);
+			}
+
+			if (userId) {
+				await sessionMemory?.addChatToSession(userId, sessionId, {
+					role: ChatRole.USER,
+					timestamp: queryStartAt,
+					content: { type: "text", parts: [query] },
+				});
+				await sessionMemory?.addChatToSession(userId, sessionId, {
+					role: ChatRole.MODEL,
+					timestamp: Date.now(),
+					content: { type: "text", parts: [finalResponseText] },
+				});
 			}
 		} catch (error) {
 			loggers.intent.error("Error in handleQuery", { error });

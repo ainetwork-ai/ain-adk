@@ -71,7 +71,7 @@ export class QueryService {
 	private async intentFulfilling(
 		query: string,
 		sessionId: string,
-		sessionHistory: SessionObject | undefined,
+		sessionHistory?: SessionObject,
 	) {
 		// 1. Load agent / system prompt from memory
 		const systemPrompt = `
@@ -136,23 +136,19 @@ ${this.prompts?.system || ""}
 							| { [x: string]: unknown }
 							| undefined;
 						loggers.intent.debug("MCP tool call", { toolName, toolArgs });
-						const result = await this.mcpModule.useTool(
+						toolResult = await this.mcpModule.useTool(
 							selectedTool as IMCPTool,
 							toolArgs,
 						);
-						toolResult =
-							`[Bot Called MCP Tool ${toolName} with args ${JSON.stringify(toolArgs)}]\n` +
-							JSON.stringify(result.content, null, 2);
 					} else if (
 						this.a2aModule &&
 						selectedTool.protocol === TOOL_PROTOCOL_TYPE.A2A
 					) {
-						const result = await this.a2aModule.useTool(
+						toolResult = await this.a2aModule.useTool(
 							selectedTool as IA2ATool,
 							messagePayload!,
 							sessionId,
 						);
-						toolResult = `[Bot Called A2A Tool ${toolName}]\n${result.join("\n")}`;
 					} else {
 						// Unrecognized tool type. It cannot be happened...
 						loggers.intent.warn(

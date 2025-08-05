@@ -47,9 +47,9 @@ export class QueryController {
 		try {
 			await this.queryStreamService.handleQueryStream(
 				message,
-				sessionId,
-				res,
 				userId,
+				res,
+				sessionId,
 			);
 		} catch (error) {
 			next(error);
