@@ -6,7 +6,7 @@ import type {
 	ModelModule,
 } from "@/modules/index.js";
 import type { AinAgentPrompts } from "@/types/agent.js";
-import { ChatRole, type SessionObject } from "@/types/memory.js";
+import { ChatRole, SessionMetadata, type SessionObject } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import {
 	type IA2ATool,
@@ -273,9 +273,10 @@ ${this.prompts?.system || ""}
 				.getModel()
 				.generateTitle(query)
 				.catch((_) => "New Chat");
-			const metadata = {
+			const metadata: SessionMetadata = {
 				sessionId,
 				title,
+				updatedAt: Date.now(),
 			};
 			res.write(`event: session_id\ndata: ${JSON.stringify(metadata)}\n\n`);
 		}
