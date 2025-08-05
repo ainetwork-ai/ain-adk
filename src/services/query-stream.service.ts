@@ -268,9 +268,13 @@ ${this.prompts?.system || ""}
 		if (!sessionId) {
 			sessionId = createUUID();
 			loggers.intentStream.debug("Create new session id", { sessionId });
-			res.write(
-				`event: session_id\ndata: ${JSON.stringify({ sessionId })}\n\n`,
-			);
+
+			const title = await this.modelModule.getModel().generateTitle(query);
+			const metadata = {
+				sessionId,
+				title: title ? title : "New Chat",
+			};
+			res.write(`event: session_id\ndata: ${JSON.stringify(metadata)}\n\n`);
 		}
 
 		// 2. intent triggering
