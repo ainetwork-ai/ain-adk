@@ -293,7 +293,7 @@ ${this.prompts?.system || ""}
 		const session =
 			!userId || !sessionId
 				? undefined
-				: await sessionMemory?.getSession(sessionId, userId);
+				: await sessionMemory?.getSession(userId, sessionId);
 
 		try {
 			if (!sessionId) {

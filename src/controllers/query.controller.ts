@@ -18,10 +18,10 @@ export class QueryController {
 		res: Response,
 		next: NextFunction,
 	) => {
-		try {
-			const { message, sessionId } = req.body;
-			const userId = res.locals.userId;
+		const { message, sessionId } = req.body;
+		const userId = res.locals.userId;
 
+		try {
 			const result = await this.queryService.handleQuery(
 				message,
 				sessionId,
@@ -39,11 +39,13 @@ export class QueryController {
 		res: Response,
 		next: NextFunction,
 	) => {
-		const { message, sessionId, userId } = req.body;
+		const { message, sessionId } = req.body;
+		const userId = res.locals.userId;
 
 		if (!this.queryStreamService) {
 			throw new Error("This Agent does not support stream query");
 		}
+
 		try {
 			await this.queryStreamService.handleQueryStream(
 				message,
