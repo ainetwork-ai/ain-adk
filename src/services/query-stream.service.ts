@@ -295,19 +295,23 @@ ${this.prompts?.system || ""}
 				? undefined
 				: await sessionMemory?.getSession(sessionId, userId);
 
-		if (!sessionId) {
-			sessionId = randomUUID();
-			const title = await this.generateTitle(query);
+		try {
+			if (!sessionId) {
+				sessionId = randomUUID();
+				const title = await this.generateTitle(query);
 
-			const metadata =
-				(await sessionMemory?.createSession(userId, sessionId, title)) ||
-				({
-					sessionId,
-					title,
-					updatedAt: Date.now(),
-				} as SessionMetadata);
-			loggers.intentStream.info("Create new session", { metadata });
-			res.write(`event: session_id\ndata: ${JSON.stringify(metadata)}\n\n`);
+				const metadata =
+					(await sessionMemory?.createSession(userId, sessionId, title)) ||
+					({
+						sessionId,
+						title,
+						updatedAt: Date.now(),
+					} as SessionMetadata);
+				loggers.intentStream.info("Create new session", { metadata });
+				res.write(`event: session_id\ndata: ${JSON.stringify(metadata)}\n\n`);
+			}
+		} catch (error) {
+			throw new Error("Failed to create new session");
 		}
 
 		// 2. intent triggering
