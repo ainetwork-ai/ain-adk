@@ -301,14 +301,14 @@ ${this.prompts?.system || ""}
 
 		if (!sessionId) {
 			sessionId = randomUUID();
-			loggers.intentStream.debug("Create new session id", { sessionId });
-
 			const title = await this.generateTitle(query);
+
 			const metadata: SessionMetadata = {
 				sessionId,
 				title,
 				updatedAt: Date.now(),
 			};
+			loggers.intentStream.info("Create new session", { metadata });
 			res.write(`event: session_id\ndata: ${JSON.stringify(metadata)}\n\n`);
 		}
 
