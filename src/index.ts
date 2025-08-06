@@ -53,7 +53,7 @@ export class AINAgent {
 	public memoryModule?: MemoryModule;
 
 	/** Optional authentication scheme for securing endpoints */
-	public authScheme?: BaseAuth;
+	public authScheme: BaseAuth;
 
 	/**
 	 * Creates a new AINAgent instance.
@@ -75,7 +75,7 @@ export class AINAgent {
 			mcpModule?: MCPModule;
 			memoryModule?: MemoryModule;
 		},
-		authScheme?: BaseAuth,
+		authScheme: BaseAuth,
 		allowStream = false,
 	) {
 		this.app = express();
@@ -105,11 +105,6 @@ export class AINAgent {
 		this.app.use(cors());
 		this.app.use(express.json());
 		this.app.use(express.urlencoded({ extended: true }));
-
-		if (this.authScheme) {
-			const auth = new AuthMiddleware(this.authScheme);
-			this.app.use(auth.middleware());
-		}
 	}
 
 	/**
@@ -172,6 +167,8 @@ export class AINAgent {
 	 * - /a2a/* - A2A protocol endpoints (only if valid URL is configured)
 	 */
 	private initializeRoutes = (allowStream = false): void => {
+		const auth = new AuthMiddleware(this.authScheme);
+
 		this.app.get("/", async (_, res: Response) => {
 			const { name, description, version } = this.manifest;
 			res.status(200).send(
@@ -192,8 +189,9 @@ export class AINAgent {
 			}
 		});
 
-		this.app.use(createQueryRouter(this, allowStream));
-		this.app.use(createApiRouter(this));
+		this.app.use(auth.middleware(), createQueryRouter(this, allowStream));
+		this.app.use(auth.middleware(), createApiRouter(this));
+
 		if (this.isValidUrl(this.manifest.url)) {
 			this.app.use(createA2ARouter(this));
 		}
