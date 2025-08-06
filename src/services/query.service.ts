@@ -5,7 +5,7 @@ import type {
 	ModelModule,
 } from "@/modules/index.js";
 import type { AinAgentPrompts } from "@/types/agent.js";
-import { ChatRole, type SessionObject } from "@/types/memory.js";
+import { ChatRole, type Intent, type SessionObject } from "@/types/memory.js";
 import {
 	type IA2ATool,
 	type IAgentTool,
@@ -43,15 +43,82 @@ export class QueryService {
 	}
 
 	/**
-	 * Detects the intent from a user query.
+	 * Detects the intent from context.
 	 *
 	 * @param query - The user's input query
-	 * @returns The detected intent (currently returns the query as-is)
-	 * @todo Implement actual intent detection logic
+	 * @param sessionHistory - The session history
+	 * @returns The detected intent
 	 */
-	private async intentTriggering(query: string) {
-		/* TODO */
-		return query;
+	private async intentTriggering(
+		query: string,
+		sessionHistory: SessionObject | undefined,
+	): Promise<Intent | undefined> {
+		const modelInstance = this.modelModule.getModel();
+		const intentMemory = this.memoryModule?.getIntentMemory();
+		if (!intentMemory) {
+			loggers.intent.warn(
+				"No intent module available, returning query as intent",
+			);
+			return undefined;
+		}
+
+		// 인텐트 목록 가져오기
+		const intents = await intentMemory.listIntents();
+		const intentList = intents
+			.map((intent) => `- ${intent.name}: ${intent.description}`)
+			.join("\n");
+
+		// Convert session history to a string
+		const historyMessages = !sessionHistory
+			? ""
+			: Object.entries(sessionHistory.chats)
+					.sort(([, a], [, b]) => a.timestamp - b.timestamp)
+					.map(([chatId, chat]) => {
+						const role =
+							chat.role === "USER"
+								? "User"
+								: chat.role === "MODEL"
+									? "Assistant"
+									: "System";
+						const content = Array.isArray(chat.content.parts)
+							? chat.content.parts.join(" ")
+							: String(chat.content.parts);
+						return `${role}: """${content}"""`;
+					})
+					.join("\n");
+
+		const systemPrompt = `You are an expert in accurately identifying user intentions.
+
+Available intent list:
+${intentList}
+
+Please select and answer only from the above intent list. 
+Please return only the exact intent name without any additional explanations or text.`;
+
+		const userMessage = `The following is the conversation history with the user:
+
+${historyMessages}
+
+Last user question: "${query}"
+
+Based on the above conversation history, please determine what the intention of the last user question is. 
+Please select and answer the most appropriate intent name from the available intent list.`;
+
+		const messages = modelInstance.generateMessages({
+			query: userMessage,
+			systemPrompt,
+		});
+
+		const response = await modelInstance.fetch(messages);
+		if (!response.content) {
+			throw new Error("No intent detected");
+		}
+		const intentName = response.content.trim();
+		const intent = await intentMemory.getIntent(intentName);
+		if (!intent) {
+			throw new Error(`No intent found: ${intentName}`);
+		}
+		return intent;
 	}
 
 	/**
@@ -72,6 +139,7 @@ export class QueryService {
 		query: string,
 		sessionId: string,
 		sessionHistory?: SessionObject,
+		intent?: Intent,
 	) {
 		// 1. Load agent / system prompt from memory
 		const systemPrompt = `
@@ -80,8 +148,12 @@ Today is ${new Date().toLocaleDateString()}.
 ${this.prompts?.agent || ""}
 
 ${this.prompts?.system || ""}
-    `;
 
+${intent?.prompt || ""}
+    `;
+		// NOTE(haechan@comcom.ai):
+		// When the `intent.llm` is guaranteed to be consistent, it will be used as a parameter for getModel
+		// const model_name = intent?.llm || "gpt-4o";
 		const modelInstance = this.modelModule.getModel();
 		const messages = modelInstance.generateMessages({
 			query,
@@ -201,10 +273,15 @@ ${this.prompts?.system || ""}
 			: await sessionMemory?.getSession(userId, sessionId);
 
 		// 2. intent triggering
-		const intent = this.intentTriggering(query);
+		const intent = await this.intentTriggering(query, session);
 
 		// 3. intent fulfillment
-		const result = await this.intentFulfilling(query, sessionId, session);
+		const result = await this.intentFulfilling(
+			query,
+			sessionId,
+			session,
+			intent,
+		);
 		if (userId) {
 			await sessionMemory?.addChatToSession(userId, sessionId, {
 				role: ChatRole.USER,
