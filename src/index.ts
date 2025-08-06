@@ -189,11 +189,15 @@ export class AINAgent {
 			}
 		});
 
-		this.app.use(auth.middleware(), createQueryRouter(this, allowStream));
-		this.app.use(auth.middleware(), createApiRouter(this));
+		this.app.use(
+			"/query",
+			auth.middleware(),
+			createQueryRouter(this, allowStream),
+		);
+		this.app.use("/api", auth.middleware(), createApiRouter(this));
 
 		if (this.isValidUrl(this.manifest.url)) {
-			this.app.use(createA2ARouter(this));
+			this.app.use("/a2a", createA2ARouter(this));
 		}
 	};
 
