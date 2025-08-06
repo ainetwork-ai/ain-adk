@@ -33,7 +33,7 @@ export const createA2ARouter = (agent: AINAgent): Router => {
 	);
 
 	// 2. Define the route
-	router.post("/a2a", a2aController.handleA2ARequest);
+	router.post("/", a2aController.handleA2ARequest);
 
 	return router;
 };
