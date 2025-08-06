@@ -31,10 +31,10 @@ export const createQueryRouter = (
 	}
 
 	const queryController = new QueryController(queryService, queryStreamService);
-	router.post("/query", queryController.handleQueryRequest);
+	router.post("/", queryController.handleQueryRequest);
 
 	if (allowStream) {
-		router.post("/query-stream", queryController.handleQueryStreamRequest);
+		router.post("/stream", queryController.handleQueryStreamRequest);
 	}
 
 	return router;
