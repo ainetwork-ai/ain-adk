@@ -114,7 +114,7 @@ Please select and answer the most appropriate intent name from the available int
 			throw new Error("No intent detected");
 		}
 		const intentName = response.content.trim();
-		const intent = await intentMemory.getIntent(intentName);
+		const intent = await intentMemory.getIntentByName(intentName);
 		if (!intent) {
 			throw new Error(`No intent found: ${intentName}`);
 		}

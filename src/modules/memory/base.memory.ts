@@ -41,6 +41,7 @@ export interface ISessionMemory extends IMemory {
  */
 export interface IIntentMemory extends IMemory {
 	getIntent(intentId: string): Promise<Intent | undefined>;
+	getIntentByName(intentName: string): Promise<Intent | undefined>;
 	saveIntent(intent: Intent): Promise<void>;
 	updateIntent(intentId: string, intent: Intent): Promise<void>;
 	deleteIntent(intentId: string): Promise<void>;
