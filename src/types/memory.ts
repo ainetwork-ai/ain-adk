@@ -79,7 +79,7 @@ export type ThreadMetadata = {
  * ```
  */
 export type ThreadObject = {
-	type: "workflow" | "chat";
+	type: ThreadType;
 	title: string;
 	/* Collection of messages indexed by unique message ID */
 	messages: {
