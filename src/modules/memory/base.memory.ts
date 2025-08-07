@@ -3,6 +3,7 @@ import type {
 	MessageObject,
 	ThreadMetadata,
 	ThreadObject,
+	ThreadType,
 } from "@/types/memory";
 
 /**
@@ -19,10 +20,12 @@ export interface IMemory {
  */
 export interface IThreadMemory extends IMemory {
 	getThread(
+		type: ThreadType,
 		userId: string,
 		threadId: string,
 	): Promise<ThreadObject | undefined>;
 	createThread(
+		type: ThreadType,
 		userId: string,
 		threadId: string,
 		title: string,

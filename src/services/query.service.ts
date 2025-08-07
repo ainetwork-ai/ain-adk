@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
 	A2AModule,
 	MCPModule,
@@ -5,7 +6,12 @@ import type {
 	ModelModule,
 } from "@/modules/index.js";
 import type { AinAgentPrompts } from "@/types/agent.js";
-import { MessageRole, type ThreadObject } from "@/types/memory.js";
+import {
+	MessageRole,
+	type ThreadMetadata,
+	type ThreadObject,
+	type ThreadType,
+} from "@/types/memory.js";
 import {
 	type IA2ATool,
 	type IAgentTool,
@@ -179,6 +185,35 @@ ${this.prompts?.system || ""}
 	}
 
 	/**
+	 * Generates a title for the conversation based on the query.
+	 *
+	 * @param query - The user's input query
+	 * @returns Promise resolving to a generated title
+	 */
+
+	private async generateTitle(query: string): Promise<string> {
+		const DEFAULT_TITLE = "New Chat";
+		try {
+			const modelInstance = this.modelModule.getModel();
+			const messages = modelInstance.generateMessages({
+				query,
+				systemPrompt: `You are a helpful assistant that generates titles for conversations.
+  Please analyze the user's query and create a concise title that accurately reflects the conversation's core topic.
+  The title must be no more than 5 words long.
+  Respond with only the title. Do not include any punctuation or extra explanations.`,
+			});
+			const response = await modelInstance.fetch(messages);
+			return response.content || DEFAULT_TITLE;
+		} catch (error) {
+			loggers.intent.error("Error generating title", {
+				error,
+				query,
+			});
+			return DEFAULT_TITLE;
+		}
+	}
+
+	/**
 	 * Main entry point for processing user queries.
 	 *
 	 * Handles the complete query lifecycle:
@@ -187,21 +222,46 @@ ${this.prompts?.system || ""}
 	 * 3. Fulfills the intent with AI response
 	 * 4. Updates conversation history
 	 *
-	 * @param query - The user's input query
+	 * @param type - The type of thread (e.g., chat, workflow)
+	 * @param userId - The user's unique identifier
 	 * @param threadId - Unique thread identifier
-	 * @param userId - Unique user identifier
-	 * @returns Object containing the AI-generated response
+	 * @param query - The user's input query
 	 */
-	public async handleQuery(query: string, threadId: string, userId?: string) {
+	public async handleQuery(
+		threadMetadata: {
+			type: ThreadType;
+			userId: string;
+			threadId?: string;
+		},
+		query: string,
+	) {
 		// 1. Load thread with threadId
+		const { type, userId } = threadMetadata;
 		const queryStartAt = Date.now();
 		const threadMemory = this.memoryModule?.getThreadMemory();
-		const thread = !userId
-			? undefined
-			: await threadMemory?.getThread(userId, threadId);
+
+		let threadId = threadMetadata.threadId;
+		let thread: ThreadObject | undefined;
+
+		if (threadId) {
+			thread = await threadMemory?.getThread(type, userId, threadId);
+		} else {
+			threadId = randomUUID();
+			const title = await this.generateTitle(query);
+
+			const metadata =
+				(await threadMemory?.createThread(type, userId, threadId, title)) ||
+				({
+					type,
+					threadId,
+					title,
+					updatedAt: Date.now(),
+				} as ThreadMetadata);
+			loggers.intent.info("Create new thread", { metadata });
+		}
 
 		// 2. intent triggering
-		const intent = this.intentTriggering(query);
+		const _intent = this.intentTriggering(query);
 
 		// 3. intent fulfillment
 		const result = await this.intentFulfilling(query, threadId, thread);

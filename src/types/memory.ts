@@ -49,8 +49,13 @@ export type MessageObject = {
 	metadata?: { [key: string]: unknown };
 };
 
+export enum ThreadType {
+	WORKFLOW = "workflow",
+	CHAT = "chat",
+}
+
 export type ThreadMetadata = {
-	type: "workflow" | "chat";
+	type: ThreadType;
 	title: string;
 	threadId: string;
 	updatedAt: number;

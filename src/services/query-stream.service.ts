@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { Response } from "express";
 import type {
 	A2AModule,
 	MCPModule,
@@ -11,6 +10,7 @@ import {
 	MessageRole,
 	type ThreadMetadata,
 	type ThreadObject,
+	type ThreadType,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import {
@@ -276,52 +276,51 @@ ${this.prompts?.system || ""}
 	 * 3. Fulfills the intent with AI response
 	 * 4. Updates conversation history
 	 *
-	 * @param query - The user's input query
+	 * @param type - The type of thread (e.g., chat, workflow)
 	 * @param userId - The user's unique identifier
-	 * @param res - The Express response object (for streaming)
 	 * @param threadId - Unique thread identifier
+	 * @param query - The user's input query
 	 * @returns Object containing the AI-generated response
 	 */
-	public async handleQueryStream(
+	public async *handleQueryStream(
+		threadMetadata: {
+			type: ThreadType;
+			userId: string;
+			threadId?: string;
+		},
 		query: string,
-		userId: string,
-		res: Response,
-		_threadId?: string,
-	) {
-		// 1. Load thread history with threadId
-		let threadId = _threadId;
+	): AsyncGenerator<StreamEvent> {
+		const { type, userId } = threadMetadata;
 		const queryStartAt = Date.now();
 		const threadMemory = this.memoryModule?.getThreadMemory();
-		const thread =
-			!userId || !threadId
-				? undefined
-				: await threadMemory?.getThread(userId, threadId);
 
-		try {
-			if (!threadId) {
-				threadId = randomUUID();
-				const title = await this.generateTitle(query);
+		let threadId = threadMetadata.threadId;
+		let thread: ThreadObject | undefined;
 
-				const metadata =
-					(await threadMemory?.createThread(userId, threadId, title)) ||
-					({
-						threadId,
-						title,
-						updatedAt: Date.now(),
-					} as ThreadMetadata);
-				loggers.intentStream.info("Create new thread", { metadata });
-				res.write(`event: thread_id\ndata: ${JSON.stringify(metadata)}\n\n`);
-			}
-		} catch (_error) {
-			throw new Error("Failed to create new thread");
+		if (threadId) {
+			thread = await threadMemory?.getThread(type, userId, threadId);
+		} else {
+			threadId = randomUUID();
+			const title = await this.generateTitle(query);
+
+			const metadata =
+				(await threadMemory?.createThread(type, userId, threadId, title)) ||
+				({
+					type,
+					threadId,
+					title,
+					updatedAt: Date.now(),
+				} as ThreadMetadata);
+			loggers.intentStream.info("Create new thread", { metadata });
+			yield { event: "thread_id", data: metadata };
 		}
 
 		// 2. intent triggering
-		const intent = this.intentTriggering(query);
+		const _intent = await this.intentTriggering(query);
 
 		try {
 			// 3. intent fulfillment
-			const stream = await this.intentFulfilling(query, threadId, thread);
+			const stream = this.intentFulfilling(query, threadId, thread);
 
 			let finalResponseText = "";
 			for await (const event of stream) {
@@ -329,9 +328,7 @@ ${this.prompts?.system || ""}
 					loggers.intentStream.debug("text_chunk", { event });
 					finalResponseText += event.data.delta;
 				}
-
-				const sseFormattedEvent = `event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`;
-				res.write(sseFormattedEvent);
+				yield event;
 			}
 
 			if (userId) {
@@ -347,12 +344,12 @@ ${this.prompts?.system || ""}
 				});
 			}
 		} catch (error) {
-			loggers.intent.error("Error in handleQuery", { error });
-			res.write(
-				`event: error\ndata: ${JSON.stringify({ message: "Stream failed" })}\n\n`,
-			);
-		} finally {
-			res.end();
+			const message = error instanceof Error ? error.message : "Stream failed";
+			loggers.intentStream.error(message, { error });
+			yield {
+				event: "error",
+				data: { message },
+			};
 		}
 	}
 }

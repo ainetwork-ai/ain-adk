@@ -5,6 +5,7 @@ import type {
 	ExecutionEventBus,
 	RequestContext,
 } from "@a2a-js/sdk/server";
+import type { ThreadType } from "@/types/memory.js";
 import { loggers } from "@/utils/logger.js";
 import type { QueryService } from "./query.service.js";
 
@@ -60,7 +61,11 @@ export class A2AService implements AgentExecutor {
 		eventBus: ExecutionEventBus,
 	): Promise<void> {
 		const userMessage = requestContext.userMessage;
-		const { threadId } = userMessage.metadata as { threadId: string };
+		const { agentId, type, threadId } = userMessage.metadata as {
+			agentId: string;
+			type: ThreadType;
+			threadId: string;
+		};
 		const existingTask = requestContext.task;
 
 		const taskId = existingTask?.id || randomUUID();
@@ -107,7 +112,10 @@ export class A2AService implements AgentExecutor {
 		}
 
 		try {
-			const response = await this.queryService.handleQuery(message, threadId);
+			const response = await this.queryService.handleQuery(
+				{ userId: agentId, type, threadId },
+				message,
+			);
 
 			if (this.canceledTasks.has(taskId)) {
 				loggers.server.info(`Task ${taskId} was canceled.`);

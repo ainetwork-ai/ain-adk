@@ -8,6 +8,7 @@ import type {
 	TextPart,
 } from "@a2a-js/sdk";
 import { A2AClient } from "@a2a-js/sdk/client";
+import { ThreadType } from "@/types/memory.js";
 import { loggers } from "@/utils/logger.js";
 import { A2ATool } from "./a2a.tool.js";
 
@@ -27,22 +28,13 @@ interface A2ASession {
  * This module handles connections to other A2A-compatible agents, manages
  * conversation sessions, and provides an interface for inter-agent communication.
  * Supports multi-turn conversations with task and context tracking.
- *
- * @example
- * ```typescript
- * const a2aModule = new A2AModule();
- * await a2aModule.addA2APeerServer("https://api.example.com/agent");
- *
- * const tools = await a2aModule.getTools();
- * const message = a2aModule.getMessagePayload("Hello", "session-123");
- * const response = await a2aModule.useTool(tools[0], message, "session-123");
- * ```
  */
 export class A2AModule {
 	/** Map of A2A server URLs to their corresponding tool instances */
 	private a2aPeerServers: Map<string, A2ATool | null> = new Map();
 	/** Map of session IDs to their A2A session state */
 	private a2aSessions: Map<string, A2ASession> = new Map();
+	private agentId: string = randomUUID(); /* FIXME */
 
 	/**
 	 * Registers a new A2A peer server URL for connection.
@@ -120,6 +112,8 @@ export class A2AModule {
 			kind: "message",
 			role: "user", // FIXME: it could be 'agent'
 			metadata: {
+				agentId: this.agentId,
+				type: ThreadType.CHAT,
 				threadId,
 			},
 			parts: [
