@@ -1,5 +1,5 @@
 /**
- * Roles for participants in a chat conversation.
+ * Roles for participants in a message.
  */
 export enum MessageRole {
 	/** User/human participant */
@@ -11,7 +11,7 @@ export enum MessageRole {
 }
 
 /**
- * Content structure for chat messages.
+ * Content structure for message content.
  *
  * Supports multi-part content with different types (text, images, etc.).
  */
@@ -23,12 +23,12 @@ export type MessageContentObject = {
 };
 
 /**
- * Represents a single message in a chat conversation.
+ * Represents a single message in a thread.
  *
  * @example
  * ```typescript
- * const message: ChatObject = {
- *   role: ChatRole.USER,
+ * const message: MessageObject = {
+ *   role: MessageRole.USER,
  *   content: {
  *     type: "text",
  *     parts: ["Hello, how can you help me?"]
@@ -57,18 +57,18 @@ export type ThreadMetadata = {
 };
 
 /**
- * Represents a conversation thread containing multiple chat messages.
+ * Represents a conversation thread containing multiple messages.
  *
- * Messages are stored in a key-value structure where keys are unique chat IDs
- * and values are the corresponding chat objects.
+ * Messages are stored in a key-value structure where keys are unique message IDs
+ * and values are the corresponding message objects.
  *
  * @example
  * ```typescript
  * const thread: ThreadObject = {
  * 	 title: "New conversation",
- *   chats: {
- *     "<UUID_1>": { role: ChatRole.USER, content: {...}, timestamp: 1234567890 },
- *     "<UUID_2>": { role: ChatRole.MODEL, content: {...}, timestamp: 1234567891 }
+ *   messages: {
+ *     "<UUID_1>": { role: MessageRole.USER, content: {...}, timestamp: 1234567890 },
+ *     "<UUID_2>": { role: MessageRole.MODEL, content: {...}, timestamp: 1234567891 }
  *   }
  * };
  * ```
@@ -76,7 +76,7 @@ export type ThreadMetadata = {
 export type ThreadObject = {
 	type: "workflow" | "chat";
 	title: string;
-	/** Collection of chat messages indexed by unique chat ID */
+	/* Collection of messages indexed by unique message ID */
 	messages: {
 		[messageId: string]: MessageObject;
 	};
