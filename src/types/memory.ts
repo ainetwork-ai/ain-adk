@@ -50,8 +50,8 @@ export type MessageObject = {
 };
 
 export enum ThreadType {
-	WORKFLOW = "workflow",
-	CHAT = "chat",
+	WORKFLOW = "WORKFLOW",
+	CHAT = "CHAT",
 }
 
 export type ThreadMetadata = {
