@@ -60,7 +60,7 @@ export class A2AService implements AgentExecutor {
 		eventBus: ExecutionEventBus,
 	): Promise<void> {
 		const userMessage = requestContext.userMessage;
-		const { sessionId } = userMessage.metadata as { sessionId: string };
+		const { threadId } = userMessage.metadata as { threadId: string };
 		const existingTask = requestContext.task;
 
 		const taskId = existingTask?.id || randomUUID();
@@ -107,7 +107,7 @@ export class A2AService implements AgentExecutor {
 		}
 
 		try {
-			const response = await this.queryService.handleQuery(message, sessionId);
+			const response = await this.queryService.handleQuery(message, threadId);
 
 			if (this.canceledTasks.has(taskId)) {
 				loggers.server.info(`Task ${taskId} was canceled.`);

@@ -18,13 +18,13 @@ export class QueryController {
 		res: Response,
 		next: NextFunction,
 	) => {
-		const { message, sessionId } = req.body;
+		const { message, threadId } = req.body;
 		const userId = res.locals.userId;
 
 		try {
 			const result = await this.queryService.handleQuery(
 				message,
-				sessionId,
+				threadId,
 				userId,
 			);
 
@@ -39,7 +39,7 @@ export class QueryController {
 		res: Response,
 		next: NextFunction,
 	) => {
-		const { message, sessionId } = req.body;
+		const { message, threadId } = req.body;
 		const userId = res.locals.userId;
 
 		if (!this.queryStreamService) {
@@ -51,7 +51,7 @@ export class QueryController {
 				message,
 				userId,
 				res,
-				sessionId,
+				threadId,
 			);
 		} catch (error) {
 			next(error);

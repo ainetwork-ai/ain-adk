@@ -1,8 +1,8 @@
 import type {
-	ChatObject,
 	Intent,
-	SessionMetadata,
-	SessionObject,
+	MessageObject,
+	ThreadMetadata,
+	ThreadObject,
 } from "@/types/memory";
 
 /**
@@ -15,25 +15,25 @@ export interface IMemory {
 }
 
 /**
- * Session memory interface
+ * Thread memory interface
  */
-export interface ISessionMemory extends IMemory {
-	getSession(
+export interface IThreadMemory extends IMemory {
+	getThread(
 		userId: string,
-		sessionId: string,
-	): Promise<SessionObject | undefined>;
-	createSession(
+		threadId: string,
+	): Promise<ThreadObject | undefined>;
+	createThread(
 		userId: string,
-		sessionId: string,
+		threadId: string,
 		title: string,
-	): Promise<SessionMetadata>;
-	addChatToSession(
+	): Promise<ThreadMetadata>;
+	addMessageToThread(
 		userId: string,
-		sessionId: string,
-		chat: ChatObject,
+		threadId: string,
+		message: MessageObject,
 	): Promise<void>;
-	deleteSession(userId: string, sessionId: string): Promise<void>;
-	listSessions(userId: string): Promise<SessionMetadata[]>;
+	deleteThread(userId: string, threadId: string): Promise<void>;
+	listThreads(userId: string): Promise<ThreadMetadata[]>;
 }
 
 /**

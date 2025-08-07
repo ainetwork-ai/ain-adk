@@ -89,16 +89,16 @@ export class A2AModule {
 	/**
 	 * Gets or creates an A2A session for the given session ID.
 	 *
-	 * @param sessionId - The session identifier
+	 * @param threadId - The session identifier
 	 * @returns A2ASession object with task and context IDs
 	 */
-	private getA2ASessionWithId = (sessionId: string): A2ASession => {
-		const a2aSession = this.a2aSessions.get(sessionId) ?? {
+	private getA2ASessionWithId = (threadId: string): A2ASession => {
+		const a2aSession = this.a2aSessions.get(threadId) ?? {
 			taskId: undefined,
 			contextId: undefined,
 		};
-		if (!this.a2aSessions.has(sessionId)) {
-			this.a2aSessions.set(sessionId, a2aSession);
+		if (!this.a2aSessions.has(threadId)) {
+			this.a2aSessions.set(threadId, a2aSession);
 		}
 
 		return a2aSession;
@@ -111,16 +111,16 @@ export class A2AModule {
 	 * for maintaining conversation continuity.
 	 *
 	 * @param query - The message content to send
-	 * @param sessionId - The session identifier
+	 * @param threadId - The session identifier
 	 * @returns Formatted Message object for A2A protocol
 	 */
-	public getMessagePayload(query: string, sessionId: string): Message {
+	public getMessagePayload(query: string, threadId: string): Message {
 		const messagePayload: Message = {
 			messageId: randomUUID(),
 			kind: "message",
 			role: "user", // FIXME: it could be 'agent'
 			metadata: {
-				sessionId,
+				threadId,
 			},
 			parts: [
 				{
@@ -130,7 +130,7 @@ export class A2AModule {
 			],
 		};
 
-		const a2aSession = this.getA2ASessionWithId(sessionId);
+		const a2aSession = this.getA2ASessionWithId(threadId);
 		if (a2aSession.taskId) {
 			messagePayload.taskId = a2aSession.taskId;
 		}
@@ -149,20 +149,20 @@ export class A2AModule {
 	 *
 	 * @param tool - The A2ATool instance to use
 	 * @param messagePayload - The message to send to the agent
-	 * @param sessionId - The session identifier for context tracking
+	 * @param threadId - The session identifier for context tracking
 	 * @returns Promise resolving to array of text responses from the agent
 	 */
 	public async useTool(
 		tool: A2ATool,
 		messagePayload: Message,
-		sessionId: string,
+		threadId: string,
 	): Promise<string> {
 		const finalText: string[] = [];
 		const client = tool.client;
 		const params: MessageSendParams = {
 			message: messagePayload,
 		};
-		const a2aSession = this.getA2ASessionWithId(sessionId);
+		const a2aSession = this.getA2ASessionWithId(threadId);
 
 		try {
 			const stream = client.sendMessageStream(params);

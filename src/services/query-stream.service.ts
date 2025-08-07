@@ -8,9 +8,9 @@ import type {
 } from "@/modules/index.js";
 import type { AinAgentPrompts } from "@/types/agent.js";
 import {
-	ChatRole,
-	type SessionMetadata,
-	type SessionObject,
+	MessageRole,
+	type ThreadMetadata,
+	type ThreadObject,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import {
@@ -71,14 +71,14 @@ export class QueryStreamService {
 	 * - Processing tool calls iteratively until completion
 	 *
 	 * @param query - The user's input query
-	 * @param sessionId - Session identifier for context
-	 * @param sessionHistory - Previous conversation history
+	 * @param threadId - Thread identifier for context
+	 * @param thread - Previous conversation history
 	 * @returns Object containing process steps and final response
 	 */
 	public async *intentFulfilling(
 		query: string,
-		sessionId: string,
-		sessionHistory?: SessionObject,
+		threadId: string,
+		thread?: ThreadObject,
 	): AsyncGenerator<StreamEvent> {
 		try {
 			const systemPrompt = `
@@ -92,7 +92,7 @@ ${this.prompts?.system || ""}
 			const modelInstance = this.modelModule.getModel();
 			const messages = modelInstance.generateMessages({
 				query,
-				sessionHistory,
+				thread,
 				systemPrompt: systemPrompt.trim(),
 			});
 
@@ -168,7 +168,7 @@ ${this.prompts?.system || ""}
 				if (didCallTool && assembledToolCalls.length > 0) {
 					const messagePayload = this.a2aModule?.getMessagePayload(
 						query,
-						sessionId,
+						threadId,
 					);
 					for (const toolCall of assembledToolCalls) {
 						const toolName = toolCall.function.name;
@@ -200,7 +200,7 @@ ${this.prompts?.system || ""}
 							toolResult = await this.a2aModule.useTool(
 								selectedTool as IA2ATool,
 								messagePayload!,
-								sessionId,
+								threadId,
 							);
 						} else {
 							// Unrecognized tool type. It cannot be happened...
@@ -271,47 +271,49 @@ ${this.prompts?.system || ""}
 	 * Main entry point for processing user queries.
 	 *
 	 * Handles the complete query lifecycle:
-	 * 1. Loads session history from memory
+	 * 1. Loads thread from memory
 	 * 2. Detects intent from the query
 	 * 3. Fulfills the intent with AI response
 	 * 4. Updates conversation history
 	 *
 	 * @param query - The user's input query
-	 * @param sessionId - Unique session identifier
+	 * @param userId - The user's unique identifier
+	 * @param res - The Express response object (for streaming)
+	 * @param threadId - Unique thread identifier
 	 * @returns Object containing the AI-generated response
 	 */
 	public async handleQueryStream(
 		query: string,
 		userId: string,
 		res: Response,
-		_sessionId?: string,
+		_threadId?: string,
 	) {
-		// 1. Load session history with sessionId
-		let sessionId = _sessionId;
+		// 1. Load thread history with threadId
+		let threadId = _threadId;
 		const queryStartAt = Date.now();
-		const sessionMemory = this.memoryModule?.getSessionMemory();
-		const session =
-			!userId || !sessionId
+		const threadMemory = this.memoryModule?.getThreadMemory();
+		const thread =
+			!userId || !threadId
 				? undefined
-				: await sessionMemory?.getSession(userId, sessionId);
+				: await threadMemory?.getThread(userId, threadId);
 
 		try {
-			if (!sessionId) {
-				sessionId = randomUUID();
+			if (!threadId) {
+				threadId = randomUUID();
 				const title = await this.generateTitle(query);
 
 				const metadata =
-					(await sessionMemory?.createSession(userId, sessionId, title)) ||
+					(await threadMemory?.createThread(userId, threadId, title)) ||
 					({
-						sessionId,
+						threadId,
 						title,
 						updatedAt: Date.now(),
-					} as SessionMetadata);
-				loggers.intentStream.info("Create new session", { metadata });
-				res.write(`event: session_id\ndata: ${JSON.stringify(metadata)}\n\n`);
+					} as ThreadMetadata);
+				loggers.intentStream.info("Create new thread", { metadata });
+				res.write(`event: thread_id\ndata: ${JSON.stringify(metadata)}\n\n`);
 			}
-		} catch (error) {
-			throw new Error("Failed to create new session");
+		} catch (_error) {
+			throw new Error("Failed to create new thread");
 		}
 
 		// 2. intent triggering
@@ -319,7 +321,7 @@ ${this.prompts?.system || ""}
 
 		try {
 			// 3. intent fulfillment
-			const stream = await this.intentFulfilling(query, sessionId, session);
+			const stream = await this.intentFulfilling(query, threadId, thread);
 
 			let finalResponseText = "";
 			for await (const event of stream) {
@@ -333,13 +335,13 @@ ${this.prompts?.system || ""}
 			}
 
 			if (userId) {
-				await sessionMemory?.addChatToSession(userId, sessionId, {
-					role: ChatRole.USER,
+				await threadMemory?.addMessageToThread(userId, threadId, {
+					role: MessageRole.USER,
 					timestamp: queryStartAt,
 					content: { type: "text", parts: [query] },
 				});
-				await sessionMemory?.addChatToSession(userId, sessionId, {
-					role: ChatRole.MODEL,
+				await threadMemory?.addMessageToThread(userId, threadId, {
+					role: MessageRole.MODEL,
 					timestamp: Date.now(),
 					content: { type: "text", parts: [finalResponseText] },
 				});

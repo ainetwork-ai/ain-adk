@@ -6,7 +6,7 @@ export const createModelApiRouter = (modelModule: ModelModule): Router => {
 	const router = Router();
 	const modelApiController = new ModelApiController(modelModule);
 
-	// APIs (prefix: /api/models)
+	// APIs (prefix: /api/model)
 	router.get("/", modelApiController.handleModelList);
 
 	return router;

@@ -5,7 +5,7 @@ import type {
 	ModelModule,
 } from "@/modules/index.js";
 import type { AinAgentPrompts } from "@/types/agent.js";
-import { ChatRole, type SessionObject } from "@/types/memory.js";
+import { MessageRole, type ThreadObject } from "@/types/memory.js";
 import {
 	type IA2ATool,
 	type IAgentTool,
@@ -64,14 +64,14 @@ export class QueryService {
 	 * - Processing tool calls iteratively until completion
 	 *
 	 * @param query - The user's input query
-	 * @param sessionId - Session identifier for context
-	 * @param sessionHistory - Previous conversation history
+	 * @param threadId - Thread identifier for context
+	 * @param thread - Previous conversation history
 	 * @returns Object containing process steps and final response
 	 */
 	private async intentFulfilling(
 		query: string,
-		sessionId: string,
-		sessionHistory?: SessionObject,
+		threadId: string,
+		thread?: ThreadObject,
 	) {
 		// 1. Load agent / system prompt from memory
 		const systemPrompt = `
@@ -85,7 +85,7 @@ ${this.prompts?.system || ""}
 		const modelInstance = this.modelModule.getModel();
 		const messages = modelInstance.generateMessages({
 			query,
-			sessionHistory,
+			thread,
 			systemPrompt: systemPrompt.trim(),
 		});
 
@@ -119,7 +119,7 @@ ${this.prompts?.system || ""}
 			if (toolCalls) {
 				const messagePayload = this.a2aModule?.getMessagePayload(
 					query,
-					sessionId,
+					threadId,
 				);
 
 				for (const toolCall of toolCalls) {
@@ -147,7 +147,7 @@ ${this.prompts?.system || ""}
 						toolResult = await this.a2aModule.useTool(
 							selectedTool as IA2ATool,
 							messagePayload!,
-							sessionId,
+							threadId,
 						);
 					} else {
 						// Unrecognized tool type. It cannot be happened...
@@ -182,37 +182,37 @@ ${this.prompts?.system || ""}
 	 * Main entry point for processing user queries.
 	 *
 	 * Handles the complete query lifecycle:
-	 * 1. Loads session history from memory
+	 * 1. Loads thread history from memory
 	 * 2. Detects intent from the query
 	 * 3. Fulfills the intent with AI response
 	 * 4. Updates conversation history
 	 *
 	 * @param query - The user's input query
-	 * @param sessionId - Unique session identifier
+	 * @param threadId - Unique thread identifier
 	 * @param userId - Unique user identifier
 	 * @returns Object containing the AI-generated response
 	 */
-	public async handleQuery(query: string, sessionId: string, userId?: string) {
-		// 1. Load session history with sessionId
+	public async handleQuery(query: string, threadId: string, userId?: string) {
+		// 1. Load thread with threadId
 		const queryStartAt = Date.now();
-		const sessionMemory = this.memoryModule?.getSessionMemory();
-		const session = !userId
+		const threadMemory = this.memoryModule?.getThreadMemory();
+		const thread = !userId
 			? undefined
-			: await sessionMemory?.getSession(userId, sessionId);
+			: await threadMemory?.getThread(userId, threadId);
 
 		// 2. intent triggering
 		const intent = this.intentTriggering(query);
 
 		// 3. intent fulfillment
-		const result = await this.intentFulfilling(query, sessionId, session);
+		const result = await this.intentFulfilling(query, threadId, thread);
 		if (userId) {
-			await sessionMemory?.addChatToSession(userId, sessionId, {
-				role: ChatRole.USER,
+			await threadMemory?.addMessageToThread(userId, threadId, {
+				role: MessageRole.USER,
 				timestamp: queryStartAt,
 				content: { type: "text", parts: [query] },
 			});
-			await sessionMemory?.addChatToSession(userId, sessionId, {
-				role: ChatRole.MODEL,
+			await threadMemory?.addMessageToThread(userId, threadId, {
+				role: MessageRole.MODEL,
 				timestamp: Date.now(),
 				content: { type: "text", parts: [result.response] },
 			});
