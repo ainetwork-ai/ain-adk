@@ -103,8 +103,8 @@ export class AINAgent {
 	private initializeMiddlewares(): void {
 		this.app.use(helmet());
 		this.app.use(cors());
-		this.app.use(express.json());
-		this.app.use(express.urlencoded({ extended: true }));
+		this.app.use(express.json({ limit: "25mb" }));
+		this.app.use(express.urlencoded({ limit: "25mb", extended: true }));
 	}
 
 	/**
