@@ -208,10 +208,44 @@ export class AINAgent {
 	 * @param port - The port number to listen on
 	 */
 	public async start(port: number): Promise<void> {
-		await this.memoryModule?.initialize();
-		await this.mcpModule?.connectToServers();
-		this.app.listen(port, () => {
+		const server = this.app.listen(port, async () => {
+			await this.memoryModule?.initialize();
+			await this.mcpModule?.connectToServers();
 			loggers.agent.info(`AINAgent is running on port ${port}`);
 		});
+
+		// Graceful shutdown handling
+		const gracefulShutdown = async (signal: string) => {
+			loggers.agent.info(`Received ${signal}, starting graceful shutdown...`);
+
+			// Stop accepting new connections
+			server.close(() => {
+				loggers.agent.info("HTTP server closed");
+			});
+
+			try {
+				// Cleanup modules
+				if (this.mcpModule) {
+					loggers.agent.info("Disconnecting from MCP servers...");
+					await this.mcpModule.cleanup();
+				}
+
+				if (this.memoryModule) {
+					loggers.agent.info("Closing memory module...");
+					await this.memoryModule.shutdown();
+				}
+
+				loggers.agent.info("Graceful shutdown completed");
+				process.exit(0);
+			} catch (error) {
+				loggers.agent.error("Error during graceful shutdown:", error);
+				process.exit(1);
+			}
+		};
+
+		// Register signal handlers
+		process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+		process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+		process.on("SIGHUP", () => gracefulShutdown("SIGHUP"));
 	}
 }

@@ -80,13 +80,12 @@ export class MCPModule {
 
 				this.mcpClientMap.set(name, mcpClient);
 				const toolList = await mcpClient.listTools();
-				this.tools.push(
-					...toolList.tools.map((tool) => {
-						return new MCPTool(name, tool);
-					}),
-				);
+				const newToolList = toolList.tools.map((tool) => {
+					return new MCPTool(name, tool);
+				});
+				this.tools.push(...newToolList);
 				loggers.mcp.info("Connected to MCP server with tools:", {
-					tools: toolList.tools.map((tool) => tool.id),
+					tools: newToolList.map((tool) => tool.id),
 				});
 			} catch (error) {
 				loggers.mcp.error(`Failed to connect to MCP server ${name}`, { error });
