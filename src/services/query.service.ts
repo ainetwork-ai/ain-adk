@@ -7,7 +7,7 @@ import type {
 } from "@/modules/index.js";
 import type { AinAgentPrompts } from "@/types/agent.js";
 import {
-	Intent,
+	type Intent,
 	MessageRole,
 	type ThreadMetadata,
 	type ThreadObject,
