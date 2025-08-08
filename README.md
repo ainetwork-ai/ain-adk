@@ -10,7 +10,7 @@ A TypeScript library for building AI agents with multi-protocol support includin
 - **Multi-Protocol Support**: Integrate with MCP servers and A2A agents
 - **Modular Architecture**: Flexible module system for models, memory, MCP, and A2A
 - **Multiple AI Models**: Support for OpenAI and Gemini with easy extensibility
-- **Session Management**: Built-in memory module for conversation history
+- **Thread Management**: Built-in memory module for conversation history
 - **Dual Build System**: Supports both ESM and CJS formats for maximum compatibility
 - **Structured Logging**: Winston-based logging system with service-specific loggers
 - **TypeScript First**: Built with strict TypeScript configuration
@@ -45,7 +45,7 @@ To see how to use this package in your project, check out our comprehensive exam
 - **ModelModule** (`src/modules/models/`): Manages AI model integrations (OpenAI, Gemini)
 - **MCPModule** (`src/modules/mcp/`): Handles Model Context Protocol connections
 - **A2AModule** (`src/modules/a2a/`): Manages agent-to-agent communication
-- **MemoryModule** (`src/modules/memory/`): Provides session and conversation history
+- **MemoryModule** (`src/modules/memory/`): Provides threads and conversation history
 
 ### Module System
 
@@ -129,7 +129,7 @@ modelLogger.error('Model API error');
 - `a2a`: Agent-to-agent communication
 - `model`: AI model interactions
 - `server`: HTTP server operations
-- `memory`: Session and memory management
+- `memory`: Threads, Intents, Agent Data management
 
 ### Log Levels
 - `error`: Error conditions
@@ -142,8 +142,13 @@ modelLogger.error('Model API error');
 ### Standard Endpoints
 - `GET /` - Welcome message
 - `POST /query` - Process queries
-  - Request: `{ message: string, sessionId?: string }`
+  - Request: `{ message: string, threadId: string }`
   - Response: `{ content: string }`
+- `POST /query/stream` - Process queries with streaming
+  - Request: `{ message: string, threadId: string }`
+  - Response: `{ content: string }`
+
+### Agent Management
 
 ### A2A Server Endpoints (when `manifest.url` is configured)
 - `GET /agent-card` - Get agent card information

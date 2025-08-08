@@ -1,5 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
+import { StatusCodes } from "http-status-codes";
 import type { QueryService, QueryStreamService } from "@/services";
+import { AinHttpError } from "@/types/agent";
 
 export class QueryController {
 	private queryService;
@@ -18,14 +20,13 @@ export class QueryController {
 		res: Response,
 		next: NextFunction,
 	) => {
-		const { message, sessionId } = req.body;
+		const { type, message, threadId } = req.body;
 		const userId = res.locals.userId;
 
 		try {
 			const result = await this.queryService.handleQuery(
+				{ type, userId, threadId },
 				message,
-				sessionId,
-				userId,
 			);
 
 			res.status(200).json(result);
@@ -39,22 +40,34 @@ export class QueryController {
 		res: Response,
 		next: NextFunction,
 	) => {
-		const { message, sessionId } = req.body;
+		const { type, threadId, message } = req.body;
 		const userId = res.locals.userId;
 
 		if (!this.queryStreamService) {
-			throw new Error("This Agent does not support stream query");
+			const error = new AinHttpError(
+				StatusCodes.NOT_IMPLEMENTED,
+				"Stream query not supported",
+			);
+			return next(error);
 		}
 
+		const stream = this.queryStreamService.handleQueryStream(
+			{ type, userId, threadId },
+			message,
+		);
+
 		try {
-			await this.queryStreamService.handleQueryStream(
-				message,
-				userId,
-				res,
-				sessionId,
-			);
-		} catch (error) {
-			next(error);
+			for await (const event of stream) {
+				res.write(
+					`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`,
+				);
+			}
+		} catch (error: unknown) {
+			const errMsg =
+				(error as Error)?.message || "Failed to handle query stream";
+			res.write(`event: error\ndata: ${errMsg}\n\n`);
+		} finally {
+			res.end();
 		}
 	};
 }

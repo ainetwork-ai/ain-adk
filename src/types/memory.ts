@@ -1,14 +1,7 @@
-export enum MemoryType {
-	SESSION = "SESSION",
-	INTENT = "INTENT",
-	AGENT = "AGENT",
-	USER = "USER",
-}
-
 /**
- * Roles for participants in a chat conversation.
+ * Roles for participants in a message.
  */
-export enum ChatRole {
+export enum MessageRole {
 	/** User/human participant */
 	USER = "USER",
 	/** System-generated messages or instructions */
@@ -18,11 +11,11 @@ export enum ChatRole {
 }
 
 /**
- * Content structure for chat messages.
+ * Content structure for message content.
  *
  * Supports multi-part content with different types (text, images, etc.).
  */
-export type ChatContentObject = {
+export type MessageContentObject = {
 	/** Content type (e.g., "text", "image", "tool_use") */
 	type: string;
 	/** Array of content parts, structure depends on content type */
@@ -30,12 +23,12 @@ export type ChatContentObject = {
 };
 
 /**
- * Represents a single message in a chat conversation.
+ * Represents a single message in a thread.
  *
  * @example
  * ```typescript
- * const message: ChatObject = {
- *   role: ChatRole.USER,
+ * const message: MessageObject = {
+ *   role: MessageRole.USER,
  *   content: {
  *     type: "text",
  *     parts: ["Hello, how can you help me?"]
@@ -45,44 +38,52 @@ export type ChatContentObject = {
  * };
  * ```
  */
-export type ChatObject = {
+export type MessageObject = {
 	/** Role of the message sender */
-	role: ChatRole;
+	role: MessageRole;
 	/** Message content with type and parts */
-	content: ChatContentObject;
+	content: MessageContentObject;
 	/** Unix timestamp when the message was created */
 	timestamp: number;
 	/** Optional metadata for additional context */
 	metadata?: { [key: string]: unknown };
 };
 
-export type SessionMetadata = {
-	title?: string;
-	sessionId: string;
+export enum ThreadType {
+	WORKFLOW = "WORKFLOW",
+	CHAT = "CHAT",
+}
+
+export type ThreadMetadata = {
+	type: ThreadType;
+	title: string;
+	threadId: string;
 	updatedAt: number;
 };
 
 /**
- * Represents a conversation session containing multiple chat messages.
+ * Represents a conversation thread containing multiple messages.
  *
- * Messages are stored in a key-value structure where keys are unique chat IDs
- * and values are the corresponding chat objects.
+ * Messages are stored in a key-value structure where keys are unique message IDs
+ * and values are the corresponding message objects.
  *
  * @example
  * ```typescript
- * const session: SessionObject = {
- *   chats: {
- *     "<UUID_1>": { role: ChatRole.USER, content: {...}, timestamp: 1234567890 },
- *     "<UUID_2>": { role: ChatRole.MODEL, content: {...}, timestamp: 1234567891 }
+ * const thread: ThreadObject = {
+ * 	 title: "New conversation",
+ *   messages: {
+ *     "<UUID_1>": { role: MessageRole.USER, content: {...}, timestamp: 1234567890 },
+ *     "<UUID_2>": { role: MessageRole.MODEL, content: {...}, timestamp: 1234567891 }
  *   }
  * };
  * ```
  */
-export type SessionObject = {
-	title?: string;
-	/** Collection of chat messages indexed by unique chat ID */
-	chats: {
-		[chatId: string]: ChatObject;
+export type ThreadObject = {
+	type: ThreadType;
+	title: string;
+	/* Collection of messages indexed by unique message ID */
+	messages: {
+		[messageId: string]: MessageObject;
 	};
 };
 

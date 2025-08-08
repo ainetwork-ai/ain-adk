@@ -1,4 +1,4 @@
-import type { SessionObject } from "@/types/memory.js";
+import type { ThreadObject } from "@/types/memory.js";
 import type { LLMStream } from "@/types/stream.js";
 import type { FetchResponse, IAgentTool } from "@/types/tool.js";
 
@@ -14,16 +14,16 @@ import type { FetchResponse, IAgentTool } from "@/types/tool.js";
  */
 export abstract class BaseModel<MessageType, FunctionType> {
 	/**
-	 * Generates an array of messages from session history and current query.
+	 * Generates an array of messages from thread and current query.
 	 *
-	 * @param sessionHistory - Previous conversation history
 	 * @param query - Current user query
+	 * @param thread - Previous conversation history
 	 * @param systemPrompt - Optional system prompt to set context
 	 * @returns Array of messages formatted for the specific model API
 	 */
 	abstract generateMessages(params: {
 		query: string;
-		sessionHistory?: SessionObject;
+		thread?: ThreadObject;
 		systemPrompt?: string;
 	}): MessageType[];
 

@@ -1,23 +1,23 @@
 import type {
 	IAgentMemory,
 	IIntentMemory,
-	ISessionMemory,
+	IThreadMemory,
 } from "./base.memory.js";
 
 export interface MemoryConfig {
 	agent?: IAgentMemory;
-	session?: ISessionMemory;
+	thread?: IThreadMemory;
 	intent?: IIntentMemory;
 }
 
 export class MemoryModule {
 	private agentMemory?: IAgentMemory;
-	private sessionMemory?: ISessionMemory;
+	private threadMemory?: IThreadMemory;
 	private intentMemory?: IIntentMemory;
 
 	constructor(config: MemoryConfig) {
 		this.agentMemory = config.agent;
-		this.sessionMemory = config.session;
+		this.threadMemory = config.thread;
 		this.intentMemory = config.intent;
 	}
 
@@ -27,8 +27,8 @@ export class MemoryModule {
 		if (this.agentMemory) {
 			connectPromises.push(this.agentMemory.connect());
 		}
-		if (this.sessionMemory) {
-			connectPromises.push(this.sessionMemory.connect());
+		if (this.threadMemory) {
+			connectPromises.push(this.threadMemory.connect());
 		}
 		if (this.intentMemory) {
 			connectPromises.push(this.intentMemory.connect());
@@ -43,8 +43,8 @@ export class MemoryModule {
 		if (this.agentMemory?.isConnected()) {
 			disconnectPromises.push(this.agentMemory.disconnect());
 		}
-		if (this.sessionMemory?.isConnected()) {
-			disconnectPromises.push(this.sessionMemory.disconnect());
+		if (this.threadMemory?.isConnected()) {
+			disconnectPromises.push(this.threadMemory.disconnect());
 		}
 		if (this.intentMemory?.isConnected()) {
 			disconnectPromises.push(this.intentMemory.disconnect());
@@ -57,8 +57,8 @@ export class MemoryModule {
 		return this.agentMemory;
 	}
 
-	public getSessionMemory(): ISessionMemory | undefined {
-		return this.sessionMemory;
+	public getThreadMemory(): IThreadMemory | undefined {
+		return this.threadMemory;
 	}
 
 	public getIntentMemory(): IIntentMemory | undefined {
