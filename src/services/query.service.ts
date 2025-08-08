@@ -7,6 +7,7 @@ import type {
 } from "@/modules/index.js";
 import type { AinAgentPrompts } from "@/types/agent.js";
 import {
+	type Intent,
 	MessageRole,
 	type ThreadMetadata,
 	type ThreadObject,
@@ -49,15 +50,85 @@ export class QueryService {
 	}
 
 	/**
-	 * Detects the intent from a user query.
+	 * Detects the intent from context.
 	 *
 	 * @param query - The user's input query
-	 * @returns The detected intent (currently returns the query as-is)
-	 * @todo Implement actual intent detection logic
+	 * @param thread - The thread history
+	 * @returns The detected intent
 	 */
-	private async intentTriggering(query: string) {
-		/* TODO */
-		return query;
+	private async intentTriggering(
+		query: string,
+		thread: ThreadObject | undefined,
+	): Promise<Intent | undefined> {
+		const modelInstance = this.modelModule.getModel();
+		const intentMemory = this.memoryModule?.getIntentMemory();
+		if (!intentMemory) {
+			return undefined;
+		}
+
+		// 인텐트 목록 가져오기
+		const intents = await intentMemory.listIntents();
+
+		if (intents.length === 0) {
+			loggers.intent.warn("No intent found");
+			return undefined;
+		}
+
+		const intentList = intents
+			.map((intent) => `- ${intent.name}: ${intent.description}`)
+			.join("\n");
+
+		// Convert session history to a string
+		const historyMessages = !thread
+			? ""
+			: Object.entries(thread.messages)
+					.sort(([, a], [, b]) => a.timestamp - b.timestamp)
+					.map(([chatId, chat]) => {
+						const role =
+							chat.role === "USER"
+								? "User"
+								: chat.role === "MODEL"
+									? "Assistant"
+									: "System";
+						const content = Array.isArray(chat.content.parts)
+							? chat.content.parts.join(" ")
+							: String(chat.content.parts);
+						return `${role}: """${content}"""`;
+					})
+					.join("\n");
+
+		const systemPrompt = `You are an expert in accurately identifying user intentions.
+
+Available intent list:
+${intentList}
+
+Please select and answer only from the above intent list. 
+Please return only the exact intent name without any additional explanations or text.`;
+
+		const userMessage = `The following is the conversation history with the user:
+
+${historyMessages}
+
+Last user question: "${query}"
+
+Based on the above conversation history, please determine what the intention of the last user question is. 
+Please select and answer the most appropriate intent name from the available intent list.`;
+
+		const messages = modelInstance.generateMessages({
+			query: userMessage,
+			systemPrompt,
+		});
+
+		const response = await modelInstance.fetch(messages);
+		if (!response.content) {
+			throw new Error("No intent detected");
+		}
+		const intentName = response.content.trim();
+		const intent = await intentMemory.getIntentByName(intentName);
+		if (!intent) {
+			throw new Error(`No intent found: ${intentName}`);
+		}
+		return intent;
 	}
 
 	/**
@@ -78,6 +149,7 @@ export class QueryService {
 		query: string,
 		threadId: string,
 		thread?: ThreadObject,
+		intent?: Intent,
 	) {
 		// 1. Load agent / system prompt from memory
 		const systemPrompt = `
@@ -86,8 +158,12 @@ Today is ${new Date().toLocaleDateString()}.
 ${this.prompts?.agent || ""}
 
 ${this.prompts?.system || ""}
-    `;
 
+${intent?.prompt || ""}
+    `;
+		// NOTE(haechan@comcom.ai):
+		// When the `intent.llm` is guaranteed to be consistent, it will be used as a parameter for getModel
+		// const model_name = intent?.llm || "gpt-4o";
 		const modelInstance = this.modelModule.getModel();
 		const messages = modelInstance.generateMessages({
 			query,
@@ -261,10 +337,10 @@ ${this.prompts?.system || ""}
 		}
 
 		// 2. intent triggering
-		const _intent = this.intentTriggering(query);
+		const intent = await this.intentTriggering(query, thread);
 
 		// 3. intent fulfillment
-		const result = await this.intentFulfilling(query, threadId, thread);
+		const result = await this.intentFulfilling(query, threadId, thread, intent);
 		await threadMemory?.addMessagesToThread(userId, threadId, [
 			{
 				role: MessageRole.USER,
