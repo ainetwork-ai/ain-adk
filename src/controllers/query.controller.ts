@@ -62,8 +62,10 @@ export class QueryController {
 					`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`,
 				);
 			}
-		} catch (error) {
-			res.write(`event: error\ndata: ${JSON.stringify(error)}\n\n`);
+		} catch (error: unknown) {
+			const errMsg =
+				(error as Error)?.message || "Failed to handle query stream";
+			res.write(`event: error\ndata: ${errMsg}\n\n`);
 		} finally {
 			res.end();
 		}

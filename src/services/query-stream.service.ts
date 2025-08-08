@@ -80,160 +80,137 @@ export class QueryStreamService {
 		threadId: string,
 		thread?: ThreadObject,
 	): AsyncGenerator<StreamEvent> {
-		try {
-			const systemPrompt = `
+		const systemPrompt = `
 Today is ${new Date().toLocaleDateString()}.
 
 ${this.prompts?.agent || ""}
 
 ${this.prompts?.system || ""}
-    `;
+	`;
 
-			const modelInstance = this.modelModule.getModel();
-			const messages = modelInstance.generateMessages({
-				query,
-				thread,
-				systemPrompt: systemPrompt.trim(),
+		const modelInstance = this.modelModule.getModel();
+		const messages = modelInstance.generateMessages({
+			query,
+			thread,
+			systemPrompt: systemPrompt.trim(),
+		});
+
+		const tools: IAgentTool[] = [];
+		this.mcpModule && tools.push(...this.mcpModule.getTools());
+		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
+
+		const functions = modelInstance.convertToolsToFunctions(tools);
+
+		const processList: string[] = [];
+
+		while (true) {
+			const responseStream = await modelInstance.fetchStreamWithContextMessage(
+				messages,
+				functions,
+			);
+
+			const assembledToolCalls: {
+				id: string;
+				type: "function";
+				function: { name: string; arguments: string };
+			}[] = [];
+
+			loggers.intentStream.debug("messages", { messages });
+
+			for await (const chunk of responseStream) {
+				const delta = chunk.delta;
+				if (delta?.tool_calls) {
+					for (const { index, id, function: func } of delta.tool_calls) {
+						assembledToolCalls[index] ??= {
+							id: "",
+							type: "function",
+							function: { name: "", arguments: "" },
+						};
+
+						if (id) assembledToolCalls[index].id = id;
+						if (func?.name) assembledToolCalls[index].function.name = func.name;
+						if (func?.arguments)
+							assembledToolCalls[index].function.arguments += func.arguments;
+					}
+				} else if (chunk.delta?.content) {
+					yield {
+						event: "text_chunk",
+						data: { delta: chunk.delta.content },
+					};
+				}
+			}
+
+			loggers.intentStream.debug("assembledToolCalls", {
+				assembledToolCalls,
 			});
 
-			const tools: IAgentTool[] = [];
-			if (this.mcpModule) {
-				tools.push(...this.mcpModule.getTools());
-			}
-			if (this.a2aModule) {
-				tools.push(...(await this.a2aModule.getTools()));
-			}
-			const functions = modelInstance.convertToolsToFunctions(tools);
+			if (assembledToolCalls.length > 0) {
+				const messagePayload = this.a2aModule?.getMessagePayload(
+					query,
+					threadId,
+				);
+				for (const toolCall of assembledToolCalls) {
+					const toolName = toolCall.function.name;
+					const selectedTool = tools.filter((tool) => tool.id === toolName)[0];
 
-			const processList: string[] = [];
-			let didCallTool = false;
-
-			while (true) {
-				const responseStream =
-					await modelInstance.fetchStreamWithContextMessage(
-						messages,
-						functions,
-					);
-				didCallTool = false;
-
-				const assembledToolCalls: {
-					id: string;
-					type: "function";
-					function: { name: string; arguments: string };
-				}[] = [];
-
-				loggers.intentStream.debug("messages", { messages });
-
-				for await (const chunk of responseStream) {
-					const delta = chunk.delta;
-					if (delta?.tool_calls) {
-						didCallTool = true;
-						for (const toolCallDelta of delta.tool_calls) {
-							const index = toolCallDelta.index;
-
-							if (!assembledToolCalls[index]) {
-								assembledToolCalls[index] = {
-									id: "",
-									type: "function",
-									function: { name: "", arguments: "" },
-								};
-							}
-
-							if (toolCallDelta.id) {
-								assembledToolCalls[index].id = toolCallDelta.id;
-							}
-
-							if (toolCallDelta.function?.name) {
-								assembledToolCalls[index].function.name =
-									toolCallDelta.function.name;
-							}
-
-							if (toolCallDelta.function?.arguments) {
-								assembledToolCalls[index].function.arguments +=
-									toolCallDelta.function.arguments;
-							}
-						}
-					} else if (chunk.delta?.content) {
+					let toolResult = "";
+					if (
+						this.mcpModule &&
+						selectedTool.protocol === TOOL_PROTOCOL_TYPE.MCP
+					) {
+						const toolArgs = JSON.parse(toolCall.function.arguments) as
+							| { [x: string]: unknown }
+							| undefined;
 						yield {
-							event: "text_chunk",
-							data: { delta: chunk.delta.content },
+							event: "tool_start",
+							data: { protocol: TOOL_PROTOCOL_TYPE.MCP, toolName, toolArgs },
 						};
-					}
-				}
-
-				loggers.intentStream.debug("assembledToolCalls", {
-					assembledToolCalls,
-				});
-
-				if (didCallTool && assembledToolCalls.length > 0) {
-					const messagePayload = this.a2aModule?.getMessagePayload(
-						query,
-						threadId,
-					);
-					for (const toolCall of assembledToolCalls) {
-						const toolName = toolCall.function.name;
-						const toolArgs = JSON.parse(toolCall.function.arguments);
-						const selectedTool = tools.filter(
-							(tool) => tool.id === toolName,
-						)[0];
-
-						yield { event: "tool_start", data: { toolName, toolArgs } };
-
-						let toolResult = "";
-
-						if (
-							this.mcpModule &&
-							selectedTool.protocol === TOOL_PROTOCOL_TYPE.MCP
-						) {
-							const toolArgs = JSON.parse(toolCall.function.arguments) as
-								| { [x: string]: unknown }
-								| undefined;
-							loggers.intent.debug("MCP tool call", { toolName, toolArgs });
-							toolResult = await this.mcpModule.useTool(
-								selectedTool as IMCPTool,
-								toolArgs,
-							);
-						} else if (
-							this.a2aModule &&
-							selectedTool.protocol === TOOL_PROTOCOL_TYPE.A2A
-						) {
-							toolResult = await this.a2aModule.useTool(
-								selectedTool as IA2ATool,
-								messagePayload!,
-								threadId,
-							);
-						} else {
-							// Unrecognized tool type. It cannot be happened...
-							loggers.intent.warn(
-								`Unrecognized tool type: ${selectedTool.protocol}`,
-							);
-							continue;
-						}
+						loggers.intent.debug("MCP tool call", { toolName, toolArgs });
+						toolResult = await this.mcpModule.useTool(
+							selectedTool as IMCPTool,
+							toolArgs,
+						);
+					} else if (
+						this.a2aModule &&
+						selectedTool.protocol === TOOL_PROTOCOL_TYPE.A2A
+					) {
 						yield {
-							event: "tool_output",
-							data: { toolName, result: toolResult },
+							event: "tool_start",
+							data: {
+								protocol: TOOL_PROTOCOL_TYPE.A2A,
+								toolName,
+								toolArgs: null,
+							},
 						};
-						loggers.intent.debug("toolResult", { toolResult });
-
-						processList.push(toolResult);
-						modelInstance.appendMessages(messages, toolResult);
+						loggers.intent.debug("A2A tool call", { toolName });
+						toolResult = await this.a2aModule.useTool(
+							selectedTool as IA2ATool,
+							// biome-ignore lint/style/noNonNullAssertion: <a2aModule is guaranteed to be defined>
+							messagePayload!,
+							threadId,
+						);
+					} else {
+						// Unrecognized tool type. It cannot be happened...
+						loggers.intent.warn(
+							`Unrecognized tool type: ${selectedTool.protocol}`,
+						);
+						continue;
 					}
-				}
+					yield {
+						event: "tool_output",
+						data: {
+							protocol: selectedTool.protocol,
+							toolName,
+							result: toolResult,
+						},
+					};
+					loggers.intent.debug("toolResult", { toolResult });
 
-				if (!didCallTool) break;
-			}
-		} catch (error) {
-			loggers.intent.error("Error in intentFulfilling generator", { error });
-			if (error instanceof Error) {
-				yield {
-					event: "error",
-					data: { message: error.message || "An unknown error occurred." },
-				};
+					processList.push(toolResult);
+					modelInstance.appendMessages(messages, toolResult);
+				}
 			} else {
-				yield {
-					event: "error",
-					data: { message: "An unknown error occurred." },
-				};
+				break;
 			}
 		}
 	}
@@ -318,38 +295,29 @@ ${this.prompts?.system || ""}
 		// 2. intent triggering
 		const _intent = await this.intentTriggering(query);
 
-		try {
-			// 3. intent fulfillment
-			const stream = this.intentFulfilling(query, threadId, thread);
+		// 3. intent fulfillment
+		const stream = this.intentFulfilling(query, threadId, thread);
 
-			let finalResponseText = "";
-			for await (const event of stream) {
-				if (event.event === "text_chunk" && event.data.delta) {
-					loggers.intentStream.debug("text_chunk", { event });
-					finalResponseText += event.data.delta;
-				}
-				yield event;
+		let finalResponseText = "";
+		for await (const event of stream) {
+			if (event.event === "text_chunk" && event.data.delta) {
+				loggers.intentStream.debug("text_chunk", { event });
+				finalResponseText += event.data.delta;
 			}
-
-			await threadMemory?.addMessagesToThread(userId, threadId, [
-				{
-					role: MessageRole.USER,
-					timestamp: queryStartAt,
-					content: { type: "text", parts: [query] },
-				},
-				{
-					role: MessageRole.MODEL,
-					timestamp: Date.now(),
-					content: { type: "text", parts: [finalResponseText] },
-				},
-			]);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : "Stream failed";
-			loggers.intentStream.error(message, { error });
-			yield {
-				event: "error",
-				data: { message },
-			};
+			yield event;
 		}
+
+		await threadMemory?.addMessagesToThread(userId, threadId, [
+			{
+				role: MessageRole.USER,
+				timestamp: queryStartAt,
+				content: { type: "text", parts: [query] },
+			},
+			{
+				role: MessageRole.MODEL,
+				timestamp: Date.now(),
+				content: { type: "text", parts: [finalResponseText] },
+			},
+		]);
 	}
 }
