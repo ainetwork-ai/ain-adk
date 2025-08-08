@@ -331,18 +331,18 @@ ${this.prompts?.system || ""}
 				yield event;
 			}
 
-			if (userId) {
-				await threadMemory?.addMessageToThread(userId, threadId, {
+			await threadMemory?.addMessagesToThread(userId, threadId, [
+				{
 					role: MessageRole.USER,
 					timestamp: queryStartAt,
 					content: { type: "text", parts: [query] },
-				});
-				await threadMemory?.addMessageToThread(userId, threadId, {
+				},
+				{
 					role: MessageRole.MODEL,
 					timestamp: Date.now(),
 					content: { type: "text", parts: [finalResponseText] },
-				});
-			}
+				},
+			]);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "Stream failed";
 			loggers.intentStream.error(message, { error });

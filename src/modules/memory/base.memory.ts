@@ -30,10 +30,10 @@ export interface IThreadMemory extends IMemory {
 		threadId: string,
 		title: string,
 	): Promise<ThreadMetadata>;
-	addMessageToThread(
+	addMessagesToThread(
 		userId: string,
 		threadId: string,
-		message: MessageObject,
+		messages: MessageObject[],
 	): Promise<void>;
 	deleteThread(userId: string, threadId: string): Promise<void>;
 	listThreads(userId: string): Promise<ThreadMetadata[]>;

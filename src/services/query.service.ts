@@ -265,18 +265,18 @@ ${this.prompts?.system || ""}
 
 		// 3. intent fulfillment
 		const result = await this.intentFulfilling(query, threadId, thread);
-		if (userId) {
-			await threadMemory?.addMessageToThread(userId, threadId, {
+		await threadMemory?.addMessagesToThread(userId, threadId, [
+			{
 				role: MessageRole.USER,
 				timestamp: queryStartAt,
 				content: { type: "text", parts: [query] },
-			});
-			await threadMemory?.addMessageToThread(userId, threadId, {
+			},
+			{
 				role: MessageRole.MODEL,
 				timestamp: Date.now(),
 				content: { type: "text", parts: [result.response] },
-			});
-		}
+			},
+		]);
 
 		return { content: result.response };
 	}
