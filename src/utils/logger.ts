@@ -4,7 +4,7 @@ const { combine, timestamp, printf, colorize, errors } = winston.format;
 
 const createLogger = (service: string) => {
 	const logger = winston.createLogger({
-		level: process.env.LOG_LEVEL || "info",
+		level: (process.env.LOG_LEVEL || "info").toLowerCase(),
 		format: combine(
 			errors({ stack: true }),
 			colorize(),
@@ -34,6 +34,7 @@ export const getLogger = (service: string) => createLogger(service);
 export const loggers = {
 	agent: getLogger("AINAgent"),
 	intent: getLogger("Intent"),
+	intentStream: getLogger("IntentStream"),
 	mcp: getLogger("MCPModule"),
 	a2a: getLogger("A2AModule"),
 	model: getLogger("Model"),

@@ -22,10 +22,8 @@ yarn build:cjs  # CJS only
 yarn test
 
 # Code quality
-yarn lint       # Run linting
-yarn format     # Format code
-yarn check      # Check code
-yarn check:write # Check and auto-fix
+yarn biome        # Check code
+yarn biome:write  # Check and auto-fix
 
 # Development mode
 yarn dev        # Run TypeScript directly with tsx
@@ -45,7 +43,7 @@ yarn dev        # Run TypeScript directly with tsx
    - **ModelModule** (`src/modules/models/`): AI model integrations (OpenAI, Gemini)
    - **MCPModule** (`src/modules/mcp/`): Model Context Protocol client connections
    - **A2AModule** (`src/modules/a2a/`): Agent-to-Agent communication
-   - **MemoryModule** (`src/modules/memory/`): Session and memory management
+   - **MemoryModule** (`src/modules/memory/`): Threads, Intents, Agent data management
 
 3. **Controller Layer** (`src/controllers/`)
    - `query.controller.ts`: Handles query processing endpoints
@@ -82,8 +80,8 @@ yarn dev        # Run TypeScript directly with tsx
 
 3. **API Endpoints**
    - Standard query endpoints: `/query`
+   - API for agent management: `/api`
    - A2A endpoints: `/a2a` (only available in A2A server mode)
-   - Health/discovery endpoints for A2A protocol
 
 4. **Testing**
    - Use Jest for unit tests
@@ -96,11 +94,10 @@ The project uses environment variables for configuration. Key variables include:
 - Model API keys (OpenAI, Google)
 - Server configuration
 - A2A settings
-- Database connections for FOL storage
+- Database connections
 
 ### Build Considerations
 
 - The project outputs both ESM and CJS formats
 - TypeScript path alias `@/` maps to `src/`
-- Target is ES2021 with Node16 module resolution
 - Strict TypeScript mode is enabled

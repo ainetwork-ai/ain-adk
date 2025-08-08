@@ -88,25 +88,29 @@ export class MCPModule {
 	 * @returns Promise resolving to the tool's execution result
 	 * @throws Error if the MCP server for the tool is not found
 	 */
-	async useTool(tool: MCPTool, _args?: any): Promise<any> {
+	async useTool(tool: MCPTool, _args?: any): Promise<string> {
 		const { serverName, mcpTool } = tool;
 		const toolName = mcpTool.name;
 		const mcp = this.mcpMap.get(serverName);
 
-		if (!mcp) {
-			throw new Error(`Invalid MCP Tool ${serverName}-${mcpTool.name}`);
+		try {
+			if (!mcp) {
+				throw new Error(`Invalid MCP Tool ${serverName}-${mcpTool.name}`);
+			}
+
+			const result = await mcp.callTool({
+				name: toolName,
+				arguments: _args,
+			});
+			const toolResult =
+				`[Bot Called Tool ${toolName} with args ${JSON.stringify(_args)}]\n` +
+				JSON.stringify(result.content, null, 2);
+			return toolResult;
+		} catch (error) {
+			loggers.mcp.error("Failed to call tool", { error });
+			const toolResult = `[Bot Called Tool ${toolName} with args ${JSON.stringify(_args)}]\n${typeof error === "string" ? error : JSON.stringify(error, null, 2)}`;
+			return toolResult;
 		}
-
-		const result = await mcp.callTool({
-			name: toolName,
-			arguments: _args,
-		});
-		const toolResult =
-			`[Bot Called Tool ${toolName} with args ${JSON.stringify(_args)}]\n` +
-			JSON.stringify(result.content, null, 2);
-
-		loggers.mcp.debug("MCP useTool result:", toolResult);
-		return result;
 	}
 
 	/**

@@ -13,6 +13,7 @@ import {
 	type ThreadObject,
 	type ThreadType,
 } from "@/types/memory.js";
+import type { StreamEvent } from "@/types/stream";
 import {
 	type IA2ATool,
 	type IAgentTool,
@@ -28,7 +29,7 @@ import { loggers } from "@/utils/logger.js";
  * model inference, tool execution, and response generation. Manages
  * conversation context and coordinates between different modules.
  */
-export class QueryService {
+export class QueryStreamService {
 	private modelModule: ModelModule;
 	private a2aModule?: A2AModule;
 	private mcpModule?: MCPModule;
@@ -70,7 +71,7 @@ export class QueryService {
 		const intents = await intentMemory.listIntents();
 
 		if (intents.length === 0) {
-			loggers.intent.warn("No intent found");
+			loggers.intentStream.warn("No intent found");
 			return undefined;
 		}
 
@@ -83,7 +84,7 @@ export class QueryService {
 			? ""
 			: Object.entries(thread.messages)
 					.sort(([, a], [, b]) => a.timestamp - b.timestamp)
-					.map(([chatId, chat]) => {
+					.map(([_chatId, chat]) => {
 						const role =
 							chat.role === "USER"
 								? "User"
@@ -145,13 +146,12 @@ Please select and answer the most appropriate intent name from the available int
 	 * @param thread - Previous conversation history
 	 * @returns Object containing process steps and final response
 	 */
-	private async intentFulfilling(
+	public async *intentFulfilling(
 		query: string,
 		threadId: string,
 		thread?: ThreadObject,
 		intent?: Intent,
-	) {
-		// 1. Load agent / system prompt from memory
+	): AsyncGenerator<StreamEvent> {
 		const systemPrompt = `
 Today is ${new Date().toLocaleDateString()}.
 
@@ -160,10 +160,8 @@ ${this.prompts?.agent || ""}
 ${this.prompts?.system || ""}
 
 ${intent?.prompt || ""}
-    `;
-		// NOTE(haechan@comcom.ai):
-		// When the `intent.llm` is guaranteed to be consistent, it will be used as a parameter for getModel
-		// const model_name = intent?.llm || "gpt-4o";
+	`.trim();
+
 		const modelInstance = this.modelModule.getModel();
 		const messages = modelInstance.generateMessages({
 			query,
@@ -172,41 +170,61 @@ ${intent?.prompt || ""}
 		});
 
 		const tools: IAgentTool[] = [];
-		if (this.mcpModule) {
-			tools.push(...this.mcpModule.getTools());
-		}
-		if (this.a2aModule) {
-			tools.push(...(await this.a2aModule.getTools()));
-		}
+		this.mcpModule && tools.push(...this.mcpModule.getTools());
+		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
+
 		const functions = modelInstance.convertToolsToFunctions(tools);
 
 		const processList: string[] = [];
-		let finalMessage = "";
-		let didCallTool = false;
 
 		while (true) {
-			const response = await modelInstance.fetchWithContextMessage(
+			const responseStream = await modelInstance.fetchStreamWithContextMessage(
 				messages,
 				functions,
 			);
-			didCallTool = false;
 
-			loggers.intent.debug("messages", { messages });
+			const assembledToolCalls: {
+				id: string;
+				type: "function";
+				function: { name: string; arguments: string };
+			}[] = [];
 
-			const { content, toolCalls } = response;
+			loggers.intentStream.debug("messages", { messages });
 
-			loggers.intent.debug("content", { content });
-			loggers.intent.debug("tool_calls", { ...toolCalls });
+			for await (const chunk of responseStream) {
+				const delta = chunk.delta;
+				if (delta?.tool_calls) {
+					for (const { index, id, function: func } of delta.tool_calls) {
+						assembledToolCalls[index] ??= {
+							id: "",
+							type: "function",
+							function: { name: "", arguments: "" },
+						};
 
-			if (toolCalls) {
+						if (id) assembledToolCalls[index].id = id;
+						if (func?.name) assembledToolCalls[index].function.name = func.name;
+						if (func?.arguments)
+							assembledToolCalls[index].function.arguments += func.arguments;
+					}
+				} else if (chunk.delta?.content) {
+					yield {
+						event: "text_chunk",
+						data: { delta: chunk.delta.content },
+					};
+				}
+			}
+
+			loggers.intentStream.debug("assembledToolCalls", {
+				assembledToolCalls,
+			});
+
+			if (assembledToolCalls.length > 0) {
 				const messagePayload = this.a2aModule?.getMessagePayload(
 					query,
 					threadId,
 				);
-
-				for (const toolCall of toolCalls) {
-					const toolName = toolCall.name;
-					didCallTool = true;
+				for (const toolCall of assembledToolCalls) {
+					const toolName = toolCall.function.name;
 					const selectedTool = tools.filter((tool) => tool.id === toolName)[0];
 
 					let toolResult = "";
@@ -214,9 +232,13 @@ ${intent?.prompt || ""}
 						this.mcpModule &&
 						selectedTool.protocol === TOOL_PROTOCOL_TYPE.MCP
 					) {
-						const toolArgs = toolCall.arguments as
+						const toolArgs = JSON.parse(toolCall.function.arguments) as
 							| { [x: string]: unknown }
 							| undefined;
+						yield {
+							event: "tool_start",
+							data: { protocol: TOOL_PROTOCOL_TYPE.MCP, toolName, toolArgs },
+						};
 						loggers.intent.debug("MCP tool call", { toolName, toolArgs });
 						toolResult = await this.mcpModule.useTool(
 							selectedTool as IMCPTool,
@@ -226,8 +248,18 @@ ${intent?.prompt || ""}
 						this.a2aModule &&
 						selectedTool.protocol === TOOL_PROTOCOL_TYPE.A2A
 					) {
+						yield {
+							event: "tool_start",
+							data: {
+								protocol: TOOL_PROTOCOL_TYPE.A2A,
+								toolName,
+								toolArgs: null,
+							},
+						};
+						loggers.intent.debug("A2A tool call", { toolName });
 						toolResult = await this.a2aModule.useTool(
 							selectedTool as IA2ATool,
+							// biome-ignore lint/style/noNonNullAssertion: <a2aModule is guaranteed to be defined>
 							messagePayload!,
 							threadId,
 						);
@@ -238,26 +270,23 @@ ${intent?.prompt || ""}
 						);
 						continue;
 					}
-
+					yield {
+						event: "tool_output",
+						data: {
+							protocol: selectedTool.protocol,
+							toolName,
+							result: toolResult,
+						},
+					};
 					loggers.intent.debug("toolResult", { toolResult });
 
 					processList.push(toolResult);
 					modelInstance.appendMessages(messages, toolResult);
 				}
-			} else if (content) {
-				processList.push(content);
-				finalMessage = content;
+			} else {
+				break;
 			}
-
-			if (!didCallTool) break;
 		}
-
-		const botResponse = {
-			process: processList.join("\n"),
-			response: finalMessage,
-		};
-
-		return botResponse;
 	}
 
 	/**
@@ -281,7 +310,7 @@ ${intent?.prompt || ""}
 			const response = await modelInstance.fetch(messages);
 			return response.content || DEFAULT_TITLE;
 		} catch (error) {
-			loggers.intent.error("Error generating title", {
+			loggers.intentStream.error("Error generating title", {
 				error,
 				query,
 			});
@@ -293,7 +322,7 @@ ${intent?.prompt || ""}
 	 * Main entry point for processing user queries.
 	 *
 	 * Handles the complete query lifecycle:
-	 * 1. Loads thread history from memory
+	 * 1. Loads thread from memory
 	 * 2. Detects intent from the query
 	 * 3. Fulfills the intent with AI response
 	 * 4. Updates conversation history
@@ -302,16 +331,16 @@ ${intent?.prompt || ""}
 	 * @param userId - The user's unique identifier
 	 * @param threadId - Unique thread identifier
 	 * @param query - The user's input query
+	 * @returns Object containing the AI-generated response
 	 */
-	public async handleQuery(
+	public async *handleQueryStream(
 		threadMetadata: {
 			type: ThreadType;
 			userId: string;
 			threadId?: string;
 		},
 		query: string,
-	) {
-		// 1. Load thread with threadId
+	): AsyncGenerator<StreamEvent> {
 		const { type, userId } = threadMetadata;
 		const queryStartAt = Date.now();
 		const threadMemory = this.memoryModule?.getThreadMemory();
@@ -333,14 +362,25 @@ ${intent?.prompt || ""}
 					title,
 					updatedAt: Date.now(),
 				} as ThreadMetadata);
-			loggers.intent.info("Create new thread", { metadata });
+			loggers.intentStream.info("Create new thread", { metadata });
+			yield { event: "thread_id", data: metadata };
 		}
 
 		// 2. intent triggering
 		const intent = await this.intentTriggering(query, thread);
 
 		// 3. intent fulfillment
-		const result = await this.intentFulfilling(query, threadId, thread, intent);
+		const stream = this.intentFulfilling(query, threadId, thread, intent);
+
+		let finalResponseText = "";
+		for await (const event of stream) {
+			if (event.event === "text_chunk" && event.data.delta) {
+				loggers.intentStream.debug("text_chunk", { event });
+				finalResponseText += event.data.delta;
+			}
+			yield event;
+		}
+
 		await threadMemory?.addMessagesToThread(userId, threadId, [
 			{
 				role: MessageRole.USER,
@@ -350,10 +390,8 @@ ${intent?.prompt || ""}
 			{
 				role: MessageRole.MODEL,
 				timestamp: Date.now(),
-				content: { type: "text", parts: [result.response] },
+				content: { type: "text", parts: [finalResponseText] },
 			},
 		]);
-
-		return { content: result.response };
 	}
 }

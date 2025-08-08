@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
-import {
-	A2AClient,
-	type AgentCard,
-	type Message,
-	type MessageSendParams,
-	type Task,
-	type TaskStatusUpdateEvent,
-	type TextPart,
+import type {
+	AgentCard,
+	Message,
+	MessageSendParams,
+	Task,
+	TaskStatusUpdateEvent,
+	TextPart,
 } from "@a2a-js/sdk";
+import { A2AClient } from "@a2a-js/sdk/client";
+import { ThreadType } from "@/types/memory.js";
 import { loggers } from "@/utils/logger.js";
 import { A2ATool } from "./a2a.tool.js";
 
@@ -27,22 +28,13 @@ interface A2ASession {
  * This module handles connections to other A2A-compatible agents, manages
  * conversation sessions, and provides an interface for inter-agent communication.
  * Supports multi-turn conversations with task and context tracking.
- *
- * @example
- * ```typescript
- * const a2aModule = new A2AModule();
- * await a2aModule.addA2APeerServer("https://api.example.com/agent");
- *
- * const tools = await a2aModule.getTools();
- * const message = a2aModule.getMessagePayload("Hello", "session-123");
- * const response = await a2aModule.useTool(tools[0], message, "session-123");
- * ```
  */
 export class A2AModule {
 	/** Map of A2A server URLs to their corresponding tool instances */
 	private a2aPeerServers: Map<string, A2ATool | null> = new Map();
 	/** Map of session IDs to their A2A session state */
 	private a2aSessions: Map<string, A2ASession> = new Map();
+	private agentId: string = randomUUID(); /* FIXME */
 
 	/**
 	 * Registers a new A2A peer server URL for connection.
@@ -89,16 +81,16 @@ export class A2AModule {
 	/**
 	 * Gets or creates an A2A session for the given session ID.
 	 *
-	 * @param sessionId - The session identifier
+	 * @param threadId - The session identifier
 	 * @returns A2ASession object with task and context IDs
 	 */
-	private getA2ASessionWithId = (sessionId: string): A2ASession => {
-		const a2aSession = this.a2aSessions.get(sessionId) ?? {
+	private getA2ASessionWithId = (threadId: string): A2ASession => {
+		const a2aSession = this.a2aSessions.get(threadId) ?? {
 			taskId: undefined,
 			contextId: undefined,
 		};
-		if (!this.a2aSessions.has(sessionId)) {
-			this.a2aSessions.set(sessionId, a2aSession);
+		if (!this.a2aSessions.has(threadId)) {
+			this.a2aSessions.set(threadId, a2aSession);
 		}
 
 		return a2aSession;
@@ -111,16 +103,18 @@ export class A2AModule {
 	 * for maintaining conversation continuity.
 	 *
 	 * @param query - The message content to send
-	 * @param sessionId - The session identifier
+	 * @param threadId - The session identifier
 	 * @returns Formatted Message object for A2A protocol
 	 */
-	public getMessagePayload(query: string, sessionId: string): Message {
+	public getMessagePayload(query: string, threadId: string): Message {
 		const messagePayload: Message = {
 			messageId: randomUUID(),
 			kind: "message",
 			role: "user", // FIXME: it could be 'agent'
 			metadata: {
-				sessionId,
+				agentId: this.agentId,
+				type: ThreadType.CHAT,
+				threadId,
 			},
 			parts: [
 				{
@@ -130,7 +124,7 @@ export class A2AModule {
 			],
 		};
 
-		const a2aSession = this.getA2ASessionWithId(sessionId);
+		const a2aSession = this.getA2ASessionWithId(threadId);
 		if (a2aSession.taskId) {
 			messagePayload.taskId = a2aSession.taskId;
 		}
@@ -149,20 +143,20 @@ export class A2AModule {
 	 *
 	 * @param tool - The A2ATool instance to use
 	 * @param messagePayload - The message to send to the agent
-	 * @param sessionId - The session identifier for context tracking
+	 * @param threadId - The session identifier for context tracking
 	 * @returns Promise resolving to array of text responses from the agent
 	 */
 	public async useTool(
 		tool: A2ATool,
 		messagePayload: Message,
-		sessionId: string,
-	): Promise<string[]> {
+		threadId: string,
+	): Promise<string> {
 		const finalText: string[] = [];
 		const client = tool.client;
 		const params: MessageSendParams = {
 			message: messagePayload,
 		};
-		const a2aSession = this.getA2ASessionWithId(sessionId);
+		const a2aSession = this.getA2ASessionWithId(threadId);
 
 		try {
 			const stream = client.sendMessageStream(params);
@@ -207,12 +201,13 @@ export class A2AModule {
 					});
 				}
 			}
-		} catch (error: unknown) {
+		} catch (error) {
 			loggers.a2a.error("Error communicating with agent:", { error });
 			tool.disable();
-			// TODO: add failed & disabled text for next inference?
+			const toolResult = `[Bot Called A2A Tool ${tool.card.name}]\n${typeof error === "string" ? error : JSON.stringify(error, null, 2)}`;
+			return toolResult;
 		}
 
-		return finalText;
+		return `[Bot Called A2A Tool ${tool.card.name}]\n${finalText.join("\n")}`;
 	}
 }

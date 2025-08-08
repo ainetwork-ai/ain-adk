@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
+import type { Task, TaskStatusUpdateEvent } from "@a2a-js/sdk";
 import type {
 	AgentExecutor,
 	ExecutionEventBus,
 	RequestContext,
-	TaskStatusUpdateEvent,
-} from "@a2a-js/sdk";
-import type { AgentExecutionEvent } from "@a2a-js/sdk/build/src/server/events/execution_event_bus.js";
+} from "@a2a-js/sdk/server";
+import type { ThreadType } from "@/types/memory.js";
 import { loggers } from "@/utils/logger.js";
 import type { QueryService } from "./query.service.js";
 
@@ -61,7 +61,11 @@ export class A2AService implements AgentExecutor {
 		eventBus: ExecutionEventBus,
 	): Promise<void> {
 		const userMessage = requestContext.userMessage;
-		const { sessionId } = userMessage.metadata as { sessionId: string };
+		const { agentId, type, threadId } = userMessage.metadata as {
+			agentId: string;
+			type: ThreadType;
+			threadId: string;
+		};
 		const existingTask = requestContext.task;
 
 		const taskId = existingTask?.id || randomUUID();
@@ -69,7 +73,7 @@ export class A2AService implements AgentExecutor {
 			userMessage.contextId || existingTask?.contextId || randomUUID();
 
 		if (!existingTask) {
-			const initialTask: AgentExecutionEvent = {
+			const initialTask: Task = {
 				kind: "task",
 				id: taskId,
 				contextId: contextId,
@@ -108,7 +112,10 @@ export class A2AService implements AgentExecutor {
 		}
 
 		try {
-			const response = await this.queryService.handleQuery(message, sessionId);
+			const response = await this.queryService.handleQuery(
+				{ userId: agentId, type, threadId },
+				message,
+			);
 
 			if (this.canceledTasks.has(taskId)) {
 				loggers.server.info(`Task ${taskId} was canceled.`);
