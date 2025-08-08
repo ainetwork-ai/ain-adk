@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { Response } from "express";
 import type {
 	A2AModule,
 	MCPModule,
@@ -8,9 +7,10 @@ import type {
 } from "@/modules/index.js";
 import type { AinAgentPrompts } from "@/types/agent.js";
 import {
-	ChatRole,
-	type SessionMetadata,
-	type SessionObject,
+	MessageRole,
+	type ThreadMetadata,
+	type ThreadObject,
+	type ThreadType,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import {
@@ -71,169 +71,146 @@ export class QueryStreamService {
 	 * - Processing tool calls iteratively until completion
 	 *
 	 * @param query - The user's input query
-	 * @param sessionId - Session identifier for context
-	 * @param sessionHistory - Previous conversation history
+	 * @param threadId - Thread identifier for context
+	 * @param thread - Previous conversation history
 	 * @returns Object containing process steps and final response
 	 */
 	public async *intentFulfilling(
 		query: string,
-		sessionId: string,
-		sessionHistory?: SessionObject,
+		threadId: string,
+		thread?: ThreadObject,
 	): AsyncGenerator<StreamEvent> {
-		try {
-			const systemPrompt = `
+		const systemPrompt = `
 Today is ${new Date().toLocaleDateString()}.
 
 ${this.prompts?.agent || ""}
 
 ${this.prompts?.system || ""}
-    `;
+	`;
 
-			const modelInstance = this.modelModule.getModel();
-			const messages = modelInstance.generateMessages({
-				query,
-				sessionHistory,
-				systemPrompt: systemPrompt.trim(),
+		const modelInstance = this.modelModule.getModel();
+		const messages = modelInstance.generateMessages({
+			query,
+			thread,
+			systemPrompt: systemPrompt.trim(),
+		});
+
+		const tools: IAgentTool[] = [];
+		this.mcpModule && tools.push(...this.mcpModule.getTools());
+		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
+
+		const functions = modelInstance.convertToolsToFunctions(tools);
+
+		const processList: string[] = [];
+
+		while (true) {
+			const responseStream = await modelInstance.fetchStreamWithContextMessage(
+				messages,
+				functions,
+			);
+
+			const assembledToolCalls: {
+				id: string;
+				type: "function";
+				function: { name: string; arguments: string };
+			}[] = [];
+
+			loggers.intentStream.debug("messages", { messages });
+
+			for await (const chunk of responseStream) {
+				const delta = chunk.delta;
+				if (delta?.tool_calls) {
+					for (const { index, id, function: func } of delta.tool_calls) {
+						assembledToolCalls[index] ??= {
+							id: "",
+							type: "function",
+							function: { name: "", arguments: "" },
+						};
+
+						if (id) assembledToolCalls[index].id = id;
+						if (func?.name) assembledToolCalls[index].function.name = func.name;
+						if (func?.arguments)
+							assembledToolCalls[index].function.arguments += func.arguments;
+					}
+				} else if (chunk.delta?.content) {
+					yield {
+						event: "text_chunk",
+						data: { delta: chunk.delta.content },
+					};
+				}
+			}
+
+			loggers.intentStream.debug("assembledToolCalls", {
+				assembledToolCalls,
 			});
 
-			const tools: IAgentTool[] = [];
-			if (this.mcpModule) {
-				tools.push(...this.mcpModule.getTools());
-			}
-			if (this.a2aModule) {
-				tools.push(...(await this.a2aModule.getTools()));
-			}
-			const functions = modelInstance.convertToolsToFunctions(tools);
+			if (assembledToolCalls.length > 0) {
+				const messagePayload = this.a2aModule?.getMessagePayload(
+					query,
+					threadId,
+				);
+				for (const toolCall of assembledToolCalls) {
+					const toolName = toolCall.function.name;
+					const selectedTool = tools.filter((tool) => tool.id === toolName)[0];
 
-			const processList: string[] = [];
-			let didCallTool = false;
-
-			while (true) {
-				const responseStream =
-					await modelInstance.fetchStreamWithContextMessage(
-						messages,
-						functions,
-					);
-				didCallTool = false;
-
-				const assembledToolCalls: {
-					id: string;
-					type: "function";
-					function: { name: string; arguments: string };
-				}[] = [];
-
-				loggers.intentStream.debug("messages", { messages });
-
-				for await (const chunk of responseStream) {
-					const delta = chunk.delta;
-					if (delta?.tool_calls) {
-						didCallTool = true;
-						for (const toolCallDelta of delta.tool_calls) {
-							const index = toolCallDelta.index;
-
-							if (!assembledToolCalls[index]) {
-								assembledToolCalls[index] = {
-									id: "",
-									type: "function",
-									function: { name: "", arguments: "" },
-								};
-							}
-
-							if (toolCallDelta.id) {
-								assembledToolCalls[index].id = toolCallDelta.id;
-							}
-
-							if (toolCallDelta.function?.name) {
-								assembledToolCalls[index].function.name =
-									toolCallDelta.function.name;
-							}
-
-							if (toolCallDelta.function?.arguments) {
-								assembledToolCalls[index].function.arguments +=
-									toolCallDelta.function.arguments;
-							}
-						}
-					} else if (chunk.delta?.content) {
+					let toolResult = "";
+					if (
+						this.mcpModule &&
+						selectedTool.protocol === TOOL_PROTOCOL_TYPE.MCP
+					) {
+						const toolArgs = JSON.parse(toolCall.function.arguments) as
+							| { [x: string]: unknown }
+							| undefined;
 						yield {
-							event: "text_chunk",
-							data: { delta: chunk.delta.content },
+							event: "tool_start",
+							data: { protocol: TOOL_PROTOCOL_TYPE.MCP, toolName, toolArgs },
 						};
-					}
-				}
-
-				loggers.intentStream.debug("assembledToolCalls", {
-					assembledToolCalls,
-				});
-
-				if (didCallTool && assembledToolCalls.length > 0) {
-					const messagePayload = this.a2aModule?.getMessagePayload(
-						query,
-						sessionId,
-					);
-					for (const toolCall of assembledToolCalls) {
-						const toolName = toolCall.function.name;
-						const toolArgs = JSON.parse(toolCall.function.arguments);
-						const selectedTool = tools.filter(
-							(tool) => tool.id === toolName,
-						)[0];
-
-						yield { event: "tool_start", data: { toolName, toolArgs } };
-
-						let toolResult = "";
-
-						if (
-							this.mcpModule &&
-							selectedTool.protocol === TOOL_PROTOCOL_TYPE.MCP
-						) {
-							const toolArgs = JSON.parse(toolCall.function.arguments) as
-								| { [x: string]: unknown }
-								| undefined;
-							loggers.intent.debug("MCP tool call", { toolName, toolArgs });
-							toolResult = await this.mcpModule.useTool(
-								selectedTool as IMCPTool,
-								toolArgs,
-							);
-						} else if (
-							this.a2aModule &&
-							selectedTool.protocol === TOOL_PROTOCOL_TYPE.A2A
-						) {
-							toolResult = await this.a2aModule.useTool(
-								selectedTool as IA2ATool,
-								messagePayload!,
-								sessionId,
-							);
-						} else {
-							// Unrecognized tool type. It cannot be happened...
-							loggers.intent.warn(
-								`Unrecognized tool type: ${selectedTool.protocol}`,
-							);
-							continue;
-						}
+						loggers.intent.debug("MCP tool call", { toolName, toolArgs });
+						toolResult = await this.mcpModule.useTool(
+							selectedTool as IMCPTool,
+							toolArgs,
+						);
+					} else if (
+						this.a2aModule &&
+						selectedTool.protocol === TOOL_PROTOCOL_TYPE.A2A
+					) {
 						yield {
-							event: "tool_output",
-							data: { toolName, result: toolResult },
+							event: "tool_start",
+							data: {
+								protocol: TOOL_PROTOCOL_TYPE.A2A,
+								toolName,
+								toolArgs: null,
+							},
 						};
-						loggers.intent.debug("toolResult", { toolResult });
-
-						processList.push(toolResult);
-						modelInstance.appendMessages(messages, toolResult);
+						loggers.intent.debug("A2A tool call", { toolName });
+						toolResult = await this.a2aModule.useTool(
+							selectedTool as IA2ATool,
+							// biome-ignore lint/style/noNonNullAssertion: <a2aModule is guaranteed to be defined>
+							messagePayload!,
+							threadId,
+						);
+					} else {
+						// Unrecognized tool type. It cannot be happened...
+						loggers.intent.warn(
+							`Unrecognized tool type: ${selectedTool.protocol}`,
+						);
+						continue;
 					}
-				}
+					yield {
+						event: "tool_output",
+						data: {
+							protocol: selectedTool.protocol,
+							toolName,
+							result: toolResult,
+						},
+					};
+					loggers.intent.debug("toolResult", { toolResult });
 
-				if (!didCallTool) break;
-			}
-		} catch (error) {
-			loggers.intent.error("Error in intentFulfilling generator", { error });
-			if (error instanceof Error) {
-				yield {
-					event: "error",
-					data: { message: error.message || "An unknown error occurred." },
-				};
+					processList.push(toolResult);
+					modelInstance.appendMessages(messages, toolResult);
+				}
 			} else {
-				yield {
-					event: "error",
-					data: { message: "An unknown error occurred." },
-				};
+				break;
 			}
 		}
 	}
@@ -271,86 +248,76 @@ ${this.prompts?.system || ""}
 	 * Main entry point for processing user queries.
 	 *
 	 * Handles the complete query lifecycle:
-	 * 1. Loads session history from memory
+	 * 1. Loads thread from memory
 	 * 2. Detects intent from the query
 	 * 3. Fulfills the intent with AI response
 	 * 4. Updates conversation history
 	 *
+	 * @param type - The type of thread (e.g., chat, workflow)
+	 * @param userId - The user's unique identifier
+	 * @param threadId - Unique thread identifier
 	 * @param query - The user's input query
-	 * @param sessionId - Unique session identifier
 	 * @returns Object containing the AI-generated response
 	 */
-	public async handleQueryStream(
+	public async *handleQueryStream(
+		threadMetadata: {
+			type: ThreadType;
+			userId: string;
+			threadId?: string;
+		},
 		query: string,
-		userId: string,
-		res: Response,
-		_sessionId?: string,
-	) {
-		// 1. Load session history with sessionId
-		let sessionId = _sessionId;
+	): AsyncGenerator<StreamEvent> {
+		const { type, userId } = threadMetadata;
 		const queryStartAt = Date.now();
-		const sessionMemory = this.memoryModule?.getSessionMemory();
-		const session =
-			!userId || !sessionId
-				? undefined
-				: await sessionMemory?.getSession(userId, sessionId);
+		const threadMemory = this.memoryModule?.getThreadMemory();
 
-		try {
-			if (!sessionId) {
-				sessionId = randomUUID();
-				const title = await this.generateTitle(query);
+		let threadId = threadMetadata.threadId;
+		let thread: ThreadObject | undefined;
 
-				const metadata =
-					(await sessionMemory?.createSession(userId, sessionId, title)) ||
-					({
-						sessionId,
-						title,
-						updatedAt: Date.now(),
-					} as SessionMetadata);
-				loggers.intentStream.info("Create new session", { metadata });
-				res.write(`event: session_id\ndata: ${JSON.stringify(metadata)}\n\n`);
-			}
-		} catch (error) {
-			throw new Error("Failed to create new session");
+		if (threadId) {
+			thread = await threadMemory?.getThread(type, userId, threadId);
+		} else {
+			threadId = randomUUID();
+			const title = await this.generateTitle(query);
+
+			const metadata =
+				(await threadMemory?.createThread(type, userId, threadId, title)) ||
+				({
+					type,
+					threadId,
+					title,
+					updatedAt: Date.now(),
+				} as ThreadMetadata);
+			loggers.intentStream.info("Create new thread", { metadata });
+			yield { event: "thread_id", data: metadata };
 		}
 
 		// 2. intent triggering
-		const intent = this.intentTriggering(query);
+		const _intent = await this.intentTriggering(query);
 
-		try {
-			// 3. intent fulfillment
-			const stream = await this.intentFulfilling(query, sessionId, session);
+		// 3. intent fulfillment
+		const stream = this.intentFulfilling(query, threadId, thread);
 
-			let finalResponseText = "";
-			for await (const event of stream) {
-				if (event.event === "text_chunk" && event.data.delta) {
-					loggers.intentStream.debug("text_chunk", { event });
-					finalResponseText += event.data.delta;
-				}
-
-				const sseFormattedEvent = `event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`;
-				res.write(sseFormattedEvent);
+		let finalResponseText = "";
+		for await (const event of stream) {
+			if (event.event === "text_chunk" && event.data.delta) {
+				loggers.intentStream.debug("text_chunk", { event });
+				finalResponseText += event.data.delta;
 			}
-
-			if (userId) {
-				await sessionMemory?.addChatToSession(userId, sessionId, {
-					role: ChatRole.USER,
-					timestamp: queryStartAt,
-					content: { type: "text", parts: [query] },
-				});
-				await sessionMemory?.addChatToSession(userId, sessionId, {
-					role: ChatRole.MODEL,
-					timestamp: Date.now(),
-					content: { type: "text", parts: [finalResponseText] },
-				});
-			}
-		} catch (error) {
-			loggers.intent.error("Error in handleQuery", { error });
-			res.write(
-				`event: error\ndata: ${JSON.stringify({ message: "Stream failed" })}\n\n`,
-			);
-		} finally {
-			res.end();
+			yield event;
 		}
+
+		await threadMemory?.addMessagesToThread(userId, threadId, [
+			{
+				role: MessageRole.USER,
+				timestamp: queryStartAt,
+				content: { type: "text", parts: [query] },
+			},
+			{
+				role: MessageRole.MODEL,
+				timestamp: Date.now(),
+				content: { type: "text", parts: [finalResponseText] },
+			},
+		]);
 	}
 }

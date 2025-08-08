@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
 	A2AModule,
 	MCPModule,
@@ -5,7 +6,12 @@ import type {
 	ModelModule,
 } from "@/modules/index.js";
 import type { AinAgentPrompts } from "@/types/agent.js";
-import { ChatRole, type SessionObject } from "@/types/memory.js";
+import {
+	MessageRole,
+	type ThreadMetadata,
+	type ThreadObject,
+	type ThreadType,
+} from "@/types/memory.js";
 import {
 	type IA2ATool,
 	type IAgentTool,
@@ -64,14 +70,14 @@ export class QueryService {
 	 * - Processing tool calls iteratively until completion
 	 *
 	 * @param query - The user's input query
-	 * @param sessionId - Session identifier for context
-	 * @param sessionHistory - Previous conversation history
+	 * @param threadId - Thread identifier for context
+	 * @param thread - Previous conversation history
 	 * @returns Object containing process steps and final response
 	 */
 	private async intentFulfilling(
 		query: string,
-		sessionId: string,
-		sessionHistory?: SessionObject,
+		threadId: string,
+		thread?: ThreadObject,
 	) {
 		// 1. Load agent / system prompt from memory
 		const systemPrompt = `
@@ -85,7 +91,7 @@ ${this.prompts?.system || ""}
 		const modelInstance = this.modelModule.getModel();
 		const messages = modelInstance.generateMessages({
 			query,
-			sessionHistory,
+			thread,
 			systemPrompt: systemPrompt.trim(),
 		});
 
@@ -119,7 +125,7 @@ ${this.prompts?.system || ""}
 			if (toolCalls) {
 				const messagePayload = this.a2aModule?.getMessagePayload(
 					query,
-					sessionId,
+					threadId,
 				);
 
 				for (const toolCall of toolCalls) {
@@ -147,7 +153,7 @@ ${this.prompts?.system || ""}
 						toolResult = await this.a2aModule.useTool(
 							selectedTool as IA2ATool,
 							messagePayload!,
-							sessionId,
+							threadId,
 						);
 					} else {
 						// Unrecognized tool type. It cannot be happened...
@@ -179,44 +185,98 @@ ${this.prompts?.system || ""}
 	}
 
 	/**
+	 * Generates a title for the conversation based on the query.
+	 *
+	 * @param query - The user's input query
+	 * @returns Promise resolving to a generated title
+	 */
+
+	private async generateTitle(query: string): Promise<string> {
+		const DEFAULT_TITLE = "New Chat";
+		try {
+			const modelInstance = this.modelModule.getModel();
+			const messages = modelInstance.generateMessages({
+				query,
+				systemPrompt: `You are a helpful assistant that generates titles for conversations.
+  Please analyze the user's query and create a concise title that accurately reflects the conversation's core topic.
+  The title must be no more than 5 words long.
+  Respond with only the title. Do not include any punctuation or extra explanations.`,
+			});
+			const response = await modelInstance.fetch(messages);
+			return response.content || DEFAULT_TITLE;
+		} catch (error) {
+			loggers.intent.error("Error generating title", {
+				error,
+				query,
+			});
+			return DEFAULT_TITLE;
+		}
+	}
+
+	/**
 	 * Main entry point for processing user queries.
 	 *
 	 * Handles the complete query lifecycle:
-	 * 1. Loads session history from memory
+	 * 1. Loads thread history from memory
 	 * 2. Detects intent from the query
 	 * 3. Fulfills the intent with AI response
 	 * 4. Updates conversation history
 	 *
+	 * @param type - The type of thread (e.g., chat, workflow)
+	 * @param userId - The user's unique identifier
+	 * @param threadId - Unique thread identifier
 	 * @param query - The user's input query
-	 * @param sessionId - Unique session identifier
-	 * @param userId - Unique user identifier
-	 * @returns Object containing the AI-generated response
 	 */
-	public async handleQuery(query: string, sessionId: string, userId?: string) {
-		// 1. Load session history with sessionId
+	public async handleQuery(
+		threadMetadata: {
+			type: ThreadType;
+			userId: string;
+			threadId?: string;
+		},
+		query: string,
+	) {
+		// 1. Load thread with threadId
+		const { type, userId } = threadMetadata;
 		const queryStartAt = Date.now();
-		const sessionMemory = this.memoryModule?.getSessionMemory();
-		const session = !userId
-			? undefined
-			: await sessionMemory?.getSession(userId, sessionId);
+		const threadMemory = this.memoryModule?.getThreadMemory();
+
+		let threadId = threadMetadata.threadId;
+		let thread: ThreadObject | undefined;
+
+		if (threadId) {
+			thread = await threadMemory?.getThread(type, userId, threadId);
+		} else {
+			threadId = randomUUID();
+			const title = await this.generateTitle(query);
+
+			const metadata =
+				(await threadMemory?.createThread(type, userId, threadId, title)) ||
+				({
+					type,
+					threadId,
+					title,
+					updatedAt: Date.now(),
+				} as ThreadMetadata);
+			loggers.intent.info("Create new thread", { metadata });
+		}
 
 		// 2. intent triggering
-		const intent = this.intentTriggering(query);
+		const _intent = this.intentTriggering(query);
 
 		// 3. intent fulfillment
-		const result = await this.intentFulfilling(query, sessionId, session);
-		if (userId) {
-			await sessionMemory?.addChatToSession(userId, sessionId, {
-				role: ChatRole.USER,
+		const result = await this.intentFulfilling(query, threadId, thread);
+		await threadMemory?.addMessagesToThread(userId, threadId, [
+			{
+				role: MessageRole.USER,
 				timestamp: queryStartAt,
 				content: { type: "text", parts: [query] },
-			});
-			await sessionMemory?.addChatToSession(userId, sessionId, {
-				role: ChatRole.MODEL,
+			},
+			{
+				role: MessageRole.MODEL,
 				timestamp: Date.now(),
 				content: { type: "text", parts: [result.response] },
-			});
-		}
+			},
+		]);
 
 		return { content: result.response };
 	}

@@ -1,15 +1,15 @@
 import { Router } from "express";
 import type { AINAgent } from "@/index.js";
 
-import { createModelApiRouter } from "./api/models.routes.js";
-import { createSessionApiRouter } from "./api/sessions.routes.js";
+import { createModelApiRouter } from "./api/model.routes.js";
+import { createThreadApiRouter } from "./api/thread.routes.js";
 
 export const createApiRouter = (agent: AINAgent): Router => {
 	const router = Router();
 
-	router.use("/api/models", createModelApiRouter(agent.modelModule));
+	router.use("/api/model", createModelApiRouter(agent.modelModule));
 	if (agent.memoryModule) {
-		router.use("/api/sessions", createSessionApiRouter(agent.memoryModule));
+		router.use("/api/thread", createThreadApiRouter(agent.memoryModule));
 	}
 
 	return router;

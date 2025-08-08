@@ -164,6 +164,7 @@ export class AINAgent {
 	 * - GET / - Health check endpoint
 	 * - GET /.well-known/agent.json - Agent card discovery endpoint
 	 * - /query/* - Query processing endpoints
+	 * - /api/* - API endpoints for agent management
 	 * - /a2a/* - A2A protocol endpoints (only if valid URL is configured)
 	 */
 	private initializeRoutes = (allowStream = false): void => {

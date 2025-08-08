@@ -1,7 +1,22 @@
-export type StreamEvent = {
-	event: "tool_start" | "tool_output" | "text_chunk" | "error";
-	data: Record<string, any>;
-};
+import type { ThreadMetadata } from "@/types/memory.js";
+import type { TOOL_PROTOCOL_TYPE } from "./tool";
+
+export type StreamEvent =
+	| { event: "text_chunk"; data: { delta: string } }
+	| {
+			event: "tool_start";
+			data: {
+				protocol: TOOL_PROTOCOL_TYPE;
+				toolName: string;
+				toolArgs: unknown;
+			};
+	  }
+	| {
+			event: "tool_output";
+			data: { protocol: TOOL_PROTOCOL_TYPE; toolName: string; result: unknown };
+	  }
+	| { event: "error"; data: { message: string } }
+	| { event: "thread_id"; data: ThreadMetadata };
 
 /**
  * Tool call delta for streaming tool invocations
