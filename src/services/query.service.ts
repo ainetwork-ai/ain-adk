@@ -53,7 +53,7 @@ export class QueryService {
 	 * Detects the intent from context.
 	 *
 	 * @param query - The user's input query
-	 * @param sessionHistory - The session history
+	 * @param thread - The thread history
 	 * @returns The detected intent
 	 */
 	private async intentTriggering(
@@ -63,14 +63,17 @@ export class QueryService {
 		const modelInstance = this.modelModule.getModel();
 		const intentMemory = this.memoryModule?.getIntentMemory();
 		if (!intentMemory) {
-			loggers.intent.warn(
-				"No intent module available, returning query as intent",
-			);
 			return undefined;
 		}
 
 		// 인텐트 목록 가져오기
 		const intents = await intentMemory.listIntents();
+
+		if (intents.length === 0) {
+			loggers.intent.warn("No intent found");
+			return undefined;
+		}
+
 		const intentList = intents
 			.map((intent) => `- ${intent.name}: ${intent.description}`)
 			.join("\n");
@@ -334,10 +337,10 @@ ${intent?.prompt || ""}
 		}
 
 		// 2. intent triggering
-		const _intent = this.intentTriggering(query, thread);
+		const intent = await this.intentTriggering(query, thread);
 
 		// 3. intent fulfillment
-		const result = await this.intentFulfilling(query, threadId, thread);
+		const result = await this.intentFulfilling(query, threadId, thread, intent);
 		await threadMemory?.addMessagesToThread(userId, threadId, [
 			{
 				role: MessageRole.USER,
