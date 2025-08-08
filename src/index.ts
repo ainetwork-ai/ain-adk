@@ -209,6 +209,7 @@ export class AINAgent {
 	 */
 	public async start(port: number): Promise<void> {
 		await this.memoryModule?.initialize();
+		await this.mcpModule?.connectToServers();
 		this.app.listen(port, () => {
 			loggers.agent.info(`AINAgent is running on port ${port}`);
 		});
