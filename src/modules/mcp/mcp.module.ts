@@ -73,7 +73,7 @@ export class MCPModule {
 						break;
 					}
 					default:
-						// It cannot be happened.
+						// This cannot happen.
 						loggers.mcp.error("Unsupported MCP config type");
 						break;
 				}
