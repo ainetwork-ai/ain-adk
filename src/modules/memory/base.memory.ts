@@ -20,7 +20,6 @@ export interface IMemory {
  */
 export interface IThreadMemory extends IMemory {
 	getThread(
-		type: ThreadType,
 		userId: string,
 		threadId: string,
 	): Promise<ThreadObject | undefined>;

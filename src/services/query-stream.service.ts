@@ -357,7 +357,7 @@ ${intent?.prompt || ""}
 		let threadId = threadMetadata.threadId;
 		let thread: ThreadObject | undefined;
 		if (threadId) {
-			thread = await threadMemory?.getThread(type, userId, threadId);
+			thread = await threadMemory?.getThread(userId, threadId);
 		} else {
 			threadId = randomUUID();
 			const title = await this.generateTitle(query);

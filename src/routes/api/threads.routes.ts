@@ -32,7 +32,11 @@ export const createThreadApiRouter = (memoryModule: MemoryModule): Router => {
 	// APIs (prefix: /api/threads)
 	router.get("/", checkThreadMemory, threadApiController.handleGetUserThreads);
 	router.get("/:id", checkThreadMemory, threadApiController.handleGetThread);
-	router.delete("/:id", checkThreadMemory, threadApiController.handleGetThread);
+	router.delete(
+		"/:id",
+		checkThreadMemory,
+		threadApiController.handleDeleteThread,
+	);
 
 	return router;
 };

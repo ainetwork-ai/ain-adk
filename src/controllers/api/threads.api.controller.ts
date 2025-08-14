@@ -16,13 +16,12 @@ export class ThreadApiController {
 		next: NextFunction,
 	) => {
 		try {
-			const { id: threadId, type } = req.params as {
+			const { id: threadId } = req.params as {
 				id: string;
-				type: ThreadType;
 			};
 			const userId = res.locals.userId || "";
 			const threadMemory = this.memoryModule.getThreadMemory();
-			const thread = await threadMemory?.getThread(type, userId, threadId);
+			const thread = await threadMemory?.getThread(userId, threadId);
 			res.json(thread);
 		} catch (error) {
 			next(error);
