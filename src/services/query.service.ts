@@ -182,14 +182,12 @@ ${intent?.prompt || ""}
 
 		const processList: string[] = [];
 		let finalMessage = "";
-		let didCallTool = false;
 
 		while (true) {
 			const response = await modelInstance.fetchWithContextMessage(
 				messages,
 				functions,
 			);
-			didCallTool = false;
 
 			loggers.intent.debug("messages", { messages });
 
@@ -206,7 +204,6 @@ ${intent?.prompt || ""}
 
 				for (const toolCall of toolCalls) {
 					const toolName = toolCall.name;
-					didCallTool = true;
 					const selectedTool = tools.filter((tool) => tool.id === toolName)[0];
 
 					let toolResult = "";
@@ -247,9 +244,8 @@ ${intent?.prompt || ""}
 			} else if (content) {
 				processList.push(content);
 				finalMessage = content;
+				break;
 			}
-
-			if (!didCallTool) break;
 		}
 
 		const botResponse = {
@@ -320,7 +316,7 @@ ${intent?.prompt || ""}
 		let thread: ThreadObject | undefined;
 
 		if (threadId) {
-			thread = await threadMemory?.getThread(type, userId, threadId);
+			thread = await threadMemory?.getThread(userId, threadId);
 		} else {
 			threadId = randomUUID();
 			const title = await this.generateTitle(query);

@@ -6,6 +6,7 @@ export type StreamEvent =
 	| {
 			event: "tool_start";
 			data: {
+				toolCallId: string;
 				protocol: TOOL_PROTOCOL_TYPE;
 				toolName: string;
 				toolArgs: unknown;
@@ -13,7 +14,12 @@ export type StreamEvent =
 	  }
 	| {
 			event: "tool_output";
-			data: { protocol: TOOL_PROTOCOL_TYPE; toolName: string; result: unknown };
+			data: {
+				toolCallId: string;
+				protocol: TOOL_PROTOCOL_TYPE;
+				toolName: string;
+				result: unknown;
+			};
 	  }
 	| { event: "error"; data: { message: string } }
 	| { event: "thread_id"; data: ThreadMetadata };

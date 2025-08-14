@@ -20,7 +20,6 @@ export interface IMemory {
  */
 export interface IThreadMemory extends IMemory {
 	getThread(
-		type: ThreadType,
 		userId: string,
 		threadId: string,
 	): Promise<ThreadObject | undefined>;
@@ -34,7 +33,7 @@ export interface IThreadMemory extends IMemory {
 		userId: string,
 		threadId: string,
 		messages: MessageObject[],
-	): Promise<void>;
+	): Promise<string[]>;
 	deleteThread(userId: string, threadId: string): Promise<void>;
 	listThreads(userId: string): Promise<ThreadMetadata[]>;
 }

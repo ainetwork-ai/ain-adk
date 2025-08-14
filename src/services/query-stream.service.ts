@@ -224,6 +224,7 @@ ${intent?.prompt || ""}
 					threadId,
 				);
 				for (const toolCall of assembledToolCalls) {
+					const toolCallId = randomUUID();
 					const toolName = toolCall.function.name;
 					const selectedTool = tools.filter((tool) => tool.id === toolName)[0];
 
@@ -237,7 +238,12 @@ ${intent?.prompt || ""}
 							| undefined;
 						yield {
 							event: "tool_start",
-							data: { protocol: TOOL_PROTOCOL_TYPE.MCP, toolName, toolArgs },
+							data: {
+								toolCallId,
+								protocol: TOOL_PROTOCOL_TYPE.MCP,
+								toolName,
+								toolArgs,
+							},
 						};
 						loggers.intent.debug("MCP tool call", { toolName, toolArgs });
 						toolResult = await this.mcpModule.useTool(
@@ -251,6 +257,7 @@ ${intent?.prompt || ""}
 						yield {
 							event: "tool_start",
 							data: {
+								toolCallId,
 								protocol: TOOL_PROTOCOL_TYPE.A2A,
 								toolName,
 								toolArgs: null,
@@ -273,6 +280,7 @@ ${intent?.prompt || ""}
 					yield {
 						event: "tool_output",
 						data: {
+							toolCallId,
 							protocol: selectedTool.protocol,
 							toolName,
 							result: toolResult,
@@ -345,11 +353,11 @@ ${intent?.prompt || ""}
 		const queryStartAt = Date.now();
 		const threadMemory = this.memoryModule?.getThreadMemory();
 
+		// 1. Load or create thread
 		let threadId = threadMetadata.threadId;
 		let thread: ThreadObject | undefined;
-
 		if (threadId) {
-			thread = await threadMemory?.getThread(type, userId, threadId);
+			thread = await threadMemory?.getThread(userId, threadId);
 		} else {
 			threadId = randomUUID();
 			const title = await this.generateTitle(query);
@@ -366,6 +374,14 @@ ${intent?.prompt || ""}
 			yield { event: "thread_id", data: metadata };
 		}
 
+		await threadMemory?.addMessagesToThread(userId, threadId, [
+			{
+				role: MessageRole.USER,
+				timestamp: queryStartAt,
+				content: { type: "text", parts: [query] },
+			},
+		]);
+
 		// 2. intent triggering
 		const intent = await this.intentTriggering(query, thread);
 
@@ -377,16 +393,40 @@ ${intent?.prompt || ""}
 			if (event.event === "text_chunk" && event.data.delta) {
 				loggers.intentStream.debug("text_chunk", { event });
 				finalResponseText += event.data.delta;
+			} else if (event.event === "tool_start") {
+				await threadMemory?.addMessagesToThread(userId, threadId, [
+					{
+						role: MessageRole.MODEL,
+						timestamp: Date.now(),
+						content: {
+							type: "text",
+							parts: [JSON.stringify(event.data.toolArgs)],
+						},
+						metadata: {
+							toolCallId: event.data.toolCallId,
+							toolName: event.data.toolName,
+							protocol: event.data.protocol,
+						},
+					},
+				]);
+			} else if (event.event === "tool_output") {
+				await threadMemory?.addMessagesToThread(userId, threadId, [
+					{
+						role: MessageRole.MODEL,
+						timestamp: Date.now(),
+						content: { type: "text", parts: [event.data.result] },
+						metadata: {
+							toolCallId: event.data.toolCallId,
+							toolName: event.data.toolName,
+							protocol: event.data.protocol,
+						},
+					},
+				]);
 			}
 			yield event;
 		}
 
 		await threadMemory?.addMessagesToThread(userId, threadId, [
-			{
-				role: MessageRole.USER,
-				timestamp: queryStartAt,
-				content: { type: "text", parts: [query] },
-			},
 			{
 				role: MessageRole.MODEL,
 				timestamp: Date.now(),
