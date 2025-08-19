@@ -1,7 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { MemoryModule } from "@/modules/index.js";
-import type { ThreadType } from "@/types/memory";
 
 export class ThreadApiController {
 	private memoryModule: MemoryModule;
