@@ -13,16 +13,6 @@ import { loggers } from "@/utils/logger.js";
 import { A2ATool } from "./a2a.tool.js";
 
 /**
- * Represents an active A2A communication session.
- */
-interface A2ASession {
-	/** Current task ID for multi-turn conversations */
-	taskId: string | undefined;
-	/** Context ID for maintaining conversation state */
-	contextId: string | undefined;
-}
-
-/**
  * Module for managing Agent-to-Agent (A2A) protocol connections.
  *
  * This module handles connections to other A2A-compatible agents, manages
@@ -33,7 +23,7 @@ export class A2AModule {
 	/** Map of A2A server URLs to their corresponding tool instances */
 	private a2aPeerServers: Map<string, A2ATool | null> = new Map();
 	/** Map of session IDs to their A2A session state */
-	private a2aSessions: Map<string, A2ASession> = new Map();
+	private a2aTasks: Map<string, string> = new Map();
 	private agentId: string = randomUUID(); /* FIXME */
 
 	/**
@@ -79,24 +69,6 @@ export class A2AModule {
 	}
 
 	/**
-	 * Gets or creates an A2A session for the given session ID.
-	 *
-	 * @param threadId - The session identifier
-	 * @returns A2ASession object with task and context IDs
-	 */
-	private getA2ASessionWithId = (threadId: string): A2ASession => {
-		const a2aSession = this.a2aSessions.get(threadId) ?? {
-			taskId: undefined,
-			contextId: undefined,
-		};
-		if (!this.a2aSessions.has(threadId)) {
-			this.a2aSessions.set(threadId, a2aSession);
-		}
-
-		return a2aSession;
-	};
-
-	/**
 	 * Constructs a message payload for A2A communication.
 	 *
 	 * Includes session context (task ID and context ID) if available
@@ -114,7 +86,6 @@ export class A2AModule {
 			metadata: {
 				agentId: this.agentId,
 				type: ThreadType.CHAT,
-				threadId,
 			},
 			parts: [
 				{
@@ -122,14 +93,11 @@ export class A2AModule {
 					text: query,
 				},
 			],
+			contextId: threadId,
 		};
 
-		const a2aSession = this.getA2ASessionWithId(threadId);
-		if (a2aSession.taskId) {
-			messagePayload.taskId = a2aSession.taskId;
-		}
-		if (a2aSession.contextId) {
-			messagePayload.contextId = a2aSession.contextId;
+		if (this.a2aTasks.has(threadId)) {
+			messagePayload.taskId = this.a2aTasks.get(threadId);
 		}
 
 		return messagePayload;
@@ -148,15 +116,15 @@ export class A2AModule {
 	 */
 	public async useTool(
 		tool: A2ATool,
-		messagePayload: Message,
+		query: string,
 		threadId: string,
 	): Promise<string> {
 		const finalText: string[] = [];
 		const client = tool.client;
+		const messagePayload = this.getMessagePayload(query, threadId);
 		const params: MessageSendParams = {
 			message: messagePayload,
 		};
-		const a2aSession = this.getA2ASessionWithId(threadId);
 
 		try {
 			const stream = client.sendMessageStream(params);
@@ -167,7 +135,7 @@ export class A2AModule {
 						typedEvent.final &&
 						typedEvent.status.state !== "input-required"
 					) {
-						a2aSession.taskId = undefined;
+						this.a2aTasks.delete(threadId);
 					}
 					// TODO: handle 'file', 'data' parts
 					const texts = typedEvent.status.message?.parts
@@ -180,20 +148,15 @@ export class A2AModule {
 				} else if (event.kind === "message") {
 					// FIXME: handling text in 'message'?
 					const msg = event as Message;
-					if (msg.taskId && msg.taskId !== a2aSession.taskId) {
-						a2aSession.taskId = msg.taskId;
-					}
-					if (msg.contextId && msg.contextId !== a2aSession.contextId) {
-						a2aSession.contextId = msg.contextId;
+					const taskId = this.a2aTasks.get(threadId);
+					if (msg.taskId && msg.taskId !== taskId) {
+						this.a2aTasks.set(threadId, msg.taskId);
 					}
 				} else if (event.kind === "task") {
-					// FIXME: handling text in 'task'?
+					// establishing the Task ID
 					const task = event as Task;
-					if (task.id !== a2aSession.taskId) {
-						a2aSession.taskId = task.id;
-					}
-					if (task.contextId && task.contextId !== a2aSession.contextId) {
-						a2aSession.contextId = task.contextId;
+					if (task.id !== this.a2aTasks.get(threadId)) {
+						this.a2aTasks.set(threadId, task.id);
 					}
 				} else {
 					loggers.a2a.warn("Received unknown event structure from stream:", {

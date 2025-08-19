@@ -219,10 +219,6 @@ ${intent?.prompt || ""}
 			});
 
 			if (assembledToolCalls.length > 0) {
-				const messagePayload = this.a2aModule?.getMessagePayload(
-					query,
-					threadId,
-				);
 				for (const toolCall of assembledToolCalls) {
 					const toolCallId = randomUUID();
 					const toolName = toolCall.function.name;
@@ -266,8 +262,7 @@ ${intent?.prompt || ""}
 						loggers.intent.debug("A2A tool call", { toolName });
 						toolResult = await this.a2aModule.useTool(
 							selectedTool as IA2ATool,
-							// biome-ignore lint/style/noNonNullAssertion: <a2aModule is guaranteed to be defined>
-							messagePayload!,
+							query,
 							threadId,
 						);
 					} else {

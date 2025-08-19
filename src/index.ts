@@ -4,6 +4,7 @@ import express, { type Response } from "express";
 import helmet from "helmet";
 import { StatusCodes } from "http-status-codes";
 import { loggers } from "@/utils/logger";
+import { version } from "../package.json";
 import { AuthMiddleware } from "./middlewares/auth.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import type {
@@ -27,7 +28,6 @@ import type { AinAgentManifest } from "./types/agent";
  * const manifest = {
  *   name: "MyAgent",
  *   description: "An example AI agent",
- *   version: "1.0.0"
  * };
  *
  * const agent = new AINAgent(manifest, {
@@ -142,7 +142,8 @@ export class AINAgent {
 		return {
 			name: this.manifest.name,
 			description: this.manifest.description,
-			version: this.manifest.version,
+			version: version,
+			protocolVersion: "0.3.0",
 			url: _url.toString(),
 			capabilities: {
 				streaming: true, // The new framework supports streaming
@@ -171,10 +172,10 @@ export class AINAgent {
 		const auth = new AuthMiddleware(this.authScheme);
 
 		this.app.get("/", async (_, res: Response) => {
-			const { name, description, version } = this.manifest;
+			const { name, description } = this.manifest;
 			res.status(200).send(
 				`
-        ⚡ AIN Agent: ${name} v${version}<br/>
+        ⚡ AIN Agent: ${name} with ain-adk v${version}<br/>
         ${description}<br/><br/>
         Agent status: Online and ready.
       `.trim(),

@@ -61,22 +61,22 @@ export class A2AService implements AgentExecutor {
 		eventBus: ExecutionEventBus,
 	): Promise<void> {
 		const userMessage = requestContext.userMessage;
-		const { agentId, type, threadId } = userMessage.metadata as {
+		// A2A context ID === AIN ADK thread ID
+		const threadId = userMessage.contextId!; // TODO: no context id case
+
+		const { agentId, type } = userMessage.metadata as {
 			agentId: string;
 			type: ThreadType;
-			threadId: string;
 		};
 		const existingTask = requestContext.task;
 
 		const taskId = existingTask?.id || randomUUID();
-		const contextId =
-			userMessage.contextId || existingTask?.contextId || randomUUID();
 
 		if (!existingTask) {
 			const initialTask: Task = {
 				kind: "task",
 				id: taskId,
-				contextId: contextId,
+				contextId: threadId,
 				status: {
 					state: "submitted",
 					timestamp: new Date().toISOString(),
@@ -90,7 +90,7 @@ export class A2AService implements AgentExecutor {
 
 		const workingStatusUpdate = this.createTaskStatusUpdateEvent(
 			taskId,
-			contextId,
+			threadId,
 			"working",
 		);
 		eventBus.publish(workingStatusUpdate);
@@ -103,7 +103,7 @@ export class A2AService implements AgentExecutor {
 			loggers.server.warn(`Empty message received for task ${taskId}.`);
 			const failureUpdate = this.createTaskStatusUpdateEvent(
 				taskId,
-				contextId,
+				threadId,
 				"failed",
 				"No message found to process.",
 			);
@@ -121,7 +121,7 @@ export class A2AService implements AgentExecutor {
 				loggers.server.info(`Task ${taskId} was canceled.`);
 				const canceledUpdate = this.createTaskStatusUpdateEvent(
 					taskId,
-					contextId,
+					threadId,
 					"canceled",
 				);
 				eventBus.publish(canceledUpdate);
@@ -130,7 +130,7 @@ export class A2AService implements AgentExecutor {
 
 			const finalUpdate = this.createTaskStatusUpdateEvent(
 				taskId,
-				contextId,
+				threadId,
 				"completed",
 				response.content,
 			);
@@ -140,7 +140,7 @@ export class A2AService implements AgentExecutor {
 			loggers.server.error(`Error processing task ${taskId}:`, error);
 			const errorUpdate = this.createTaskStatusUpdateEvent(
 				taskId,
-				contextId,
+				threadId,
 				"failed",
 				`Agent error: ${error.message}`,
 			);

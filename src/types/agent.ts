@@ -37,8 +37,6 @@ export type AinAgentManifest = {
 	name: string;
 	/** Human-readable description of the agent's purpose and capabilities */
 	description: string;
-	/** Semantic version of the agent (e.g., "1.0.0") */
-	version: string;
 	/** Optional public URL for A2A protocol discovery and communication */
 	url?: string;
 	/** Optional custom prompts to configure agent behavior */

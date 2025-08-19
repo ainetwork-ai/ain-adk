@@ -197,11 +197,6 @@ ${intent?.prompt || ""}
 			loggers.intent.debug("tool_calls", { ...toolCalls });
 
 			if (toolCalls) {
-				const messagePayload = this.a2aModule?.getMessagePayload(
-					query,
-					threadId,
-				);
-
 				for (const toolCall of toolCalls) {
 					const toolName = toolCall.name;
 					const selectedTool = tools.filter((tool) => tool.id === toolName)[0];
@@ -225,7 +220,7 @@ ${intent?.prompt || ""}
 					) {
 						toolResult = await this.a2aModule.useTool(
 							selectedTool as IA2ATool,
-							messagePayload!,
+							query,
 							threadId,
 						);
 					} else {
