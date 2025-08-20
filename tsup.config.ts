@@ -2,7 +2,7 @@ import { defineConfig } from "tsup";
 
 export default defineConfig([
   {
-    entry: ["src/**/*.ts"],
+    entry: ["src/**/*.ts", "!src/**/*.test.ts"],
     format: "esm",
     outDir: "dist/esm",
     dts: true, // Generate .d.ts files only for the ESM build
