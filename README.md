@@ -152,7 +152,8 @@ modelLogger.error('Model API error');
 
 ### A2A Server Endpoints (when `manifest.url` is configured)
 - `GET /agent-card` - Get agent card information
-- `GET /.well-known/agent.json` - Agent discovery endpoint  
+- `GET /.well-known/agent.json` - Agent discovery endpoint (A2A ~v0.2.0)
+- `GET /.well-known/agent-card.json` - Agent discovery endpoint (A2A v0.3.0~)
 - `POST /a2a` - A2A communication endpoint
   - Supports streaming responses
   - Request: `{ message: string, stream?: boolean }`
