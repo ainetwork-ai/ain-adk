@@ -133,18 +133,20 @@ Please select and answer the most appropriate intent name from the available int
 	}
 
 	/**
-	 * Fulfills the detected intent by generating a response.
+	 * Fulfills the detected intent by generating a streaming response.
 	 *
 	 * Manages the complete inference loop including:
 	 * - Loading prompts and conversation history
 	 * - Collecting available tools from modules
 	 * - Executing model inference with tool support
 	 * - Processing tool calls iteratively until completion
+	 * - Streaming results as Server-Sent Events
 	 *
 	 * @param query - The user's input query
 	 * @param threadId - Thread identifier for context
 	 * @param thread - Previous conversation history
-	 * @returns Object containing process steps and final response
+	 * @param intent - Optional detected intent with custom prompt
+	 * @returns AsyncGenerator yielding StreamEvent objects
 	 */
 	public async *intentFulfilling(
 		query: string,
@@ -322,19 +324,20 @@ ${intent?.prompt || ""}
 	}
 
 	/**
-	 * Main entry point for processing user queries.
+	 * Main entry point for processing streaming user queries.
 	 *
 	 * Handles the complete query lifecycle:
-	 * 1. Loads thread from memory
+	 * 1. Loads or creates thread from memory
 	 * 2. Detects intent from the query
-	 * 3. Fulfills the intent with AI response
-	 * 4. Updates conversation history
+	 * 3. Fulfills the intent with streaming AI response
+	 * 4. Updates conversation history in real-time
 	 *
-	 * @param type - The type of thread (e.g., chat, workflow)
-	 * @param userId - The user's unique identifier
-	 * @param threadId - Unique thread identifier
+	 * @param threadMetadata - Metadata containing type, userId, and optional threadId
+	 * @param threadMetadata.type - The type of thread (e.g., chat, workflow)
+	 * @param threadMetadata.userId - The user's unique identifier
+	 * @param threadMetadata.threadId - Optional thread identifier
 	 * @param query - The user's input query
-	 * @returns Object containing the AI-generated response
+	 * @returns AsyncGenerator yielding StreamEvent objects for SSE
 	 */
 	public async *handleQueryStream(
 		threadMetadata: {

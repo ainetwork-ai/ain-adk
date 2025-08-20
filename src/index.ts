@@ -64,8 +64,8 @@ export class AINAgent {
 	 * @param modules.a2aModule - Optional module for A2A protocol support
 	 * @param modules.mcpModule - Optional module for MCP server connections
 	 * @param modules.memoryModule - Optional module for memory management
-	 * @param modules.folModule - Optional module for fol management
 	 * @param authScheme - Optional authentication middleware for securing endpoints
+	 * @param allowStream - Enable streaming query endpoints (default: false)
 	 */
 	constructor(
 		manifest: AinAgentManifest,
