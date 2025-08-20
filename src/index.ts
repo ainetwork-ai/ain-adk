@@ -182,14 +182,20 @@ export class AINAgent {
 			);
 		});
 
-		this.app.get("/.well-known/agent.json", async (_, res: Response) => {
-			try {
-				const card = this.generateAgentCard();
-				res.json(card);
-			} catch (_error) {
-				res.status(StatusCodes.NOT_FOUND).send("No agent card");
-			}
-		});
+		this.app.get(
+			[
+				"/.well-known/agent.json", // ~v0.2.0
+				"/.well-known/agent-card.json", // v0.3.0~
+			],
+			async (_, res: Response) => {
+				try {
+					const card = this.generateAgentCard();
+					res.json(card);
+				} catch (_error) {
+					res.status(StatusCodes.NOT_FOUND).send("No agent card");
+				}
+			},
+		);
 
 		this.app.use(
 			"/query",
