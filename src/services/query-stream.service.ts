@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { StatusCodes } from "http-status-codes";
 import type {
 	A2AModule,
 	MCPModule,
 	MemoryModule,
 	ModelModule,
 } from "@/modules/index.js";
-import type { AinAgentPrompts } from "@/types/agent.js";
+import { type AinAgentPrompts, AinHttpError } from "@/types/agent.js";
 import {
 	type Intent,
 	MessageRole,
@@ -356,6 +357,9 @@ ${intent?.prompt || ""}
 		let thread: ThreadObject | undefined;
 		if (threadId) {
 			thread = await threadMemory?.getThread(userId, threadId);
+			if (!thread) {
+				throw new AinHttpError(StatusCodes.NOT_FOUND, "Thread not found");
+			}
 		} else {
 			threadId = randomUUID();
 			const title = await this.generateTitle(query);
