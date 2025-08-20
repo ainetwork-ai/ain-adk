@@ -143,6 +143,7 @@ Please select and answer the most appropriate intent name from the available int
 	 * @param query - The user's input query
 	 * @param threadId - Thread identifier for context
 	 * @param thread - Previous conversation history
+	 * @param intent - Optional detected intent with custom prompt
 	 * @returns Object containing process steps and final response
 	 */
 	private async intentFulfilling(
@@ -197,11 +198,6 @@ ${intent?.prompt || ""}
 			loggers.intent.debug("tool_calls", { ...toolCalls });
 
 			if (toolCalls) {
-				const messagePayload = this.a2aModule?.getMessagePayload(
-					query,
-					threadId,
-				);
-
 				for (const toolCall of toolCalls) {
 					const toolName = toolCall.name;
 					const selectedTool = tools.filter((tool) => tool.id === toolName)[0];
@@ -225,7 +221,7 @@ ${intent?.prompt || ""}
 					) {
 						toolResult = await this.a2aModule.useTool(
 							selectedTool as IA2ATool,
-							messagePayload!,
+							query,
 							threadId,
 						);
 					} else {
@@ -289,15 +285,17 @@ ${intent?.prompt || ""}
 	 * Main entry point for processing user queries.
 	 *
 	 * Handles the complete query lifecycle:
-	 * 1. Loads thread history from memory
+	 * 1. Loads or creates thread from memory
 	 * 2. Detects intent from the query
 	 * 3. Fulfills the intent with AI response
 	 * 4. Updates conversation history
 	 *
-	 * @param type - The type of thread (e.g., chat, workflow)
-	 * @param userId - The user's unique identifier
-	 * @param threadId - Unique thread identifier
+	 * @param threadMetadata - Metadata containing type, userId, and optional threadId
+	 * @param threadMetadata.type - The type of thread (e.g., chat, workflow)
+	 * @param threadMetadata.userId - The user's unique identifier
+	 * @param threadMetadata.threadId - Optional thread identifier
 	 * @param query - The user's input query
+	 * @returns Promise resolving to object with content property containing the response
 	 */
 	public async handleQuery(
 		threadMetadata: {
