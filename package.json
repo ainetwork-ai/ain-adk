@@ -1,6 +1,6 @@
 {
 	"name": "@ainetwork/adk",
-	"version": "0.2.1",
+	"version": "0.2.2",
 	"description": "AI Network Agent Development Kit",
 	"repository": "git@github.com:ainetwork-ai/ain-adk.git",
 	"author": "AI Network (https://ainetwork.ai)",
@@ -81,6 +81,6 @@
 		"winston": "^3.17.0"
 	},
 	"publishConfig": {
-    "registry": "https://registry.npmjs.org"
+		"registry": "https://registry.npmjs.org"
 	}
 }
