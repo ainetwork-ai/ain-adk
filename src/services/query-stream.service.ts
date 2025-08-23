@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { StatusCodes } from "http-status-codes";
 import type {
 	A2AModule,
 	MCPModule,
 	MemoryModule,
 	ModelModule,
 } from "@/modules/index.js";
-import type { AinAgentPrompts } from "@/types/agent.js";
+import { type AinAgentPrompts, AinHttpError } from "@/types/agent.js";
 import {
 	type Intent,
 	MessageRole,
@@ -356,6 +357,9 @@ ${intent?.prompt || ""}
 		let thread: ThreadObject | undefined;
 		if (threadId) {
 			thread = await threadMemory?.getThread(userId, threadId);
+			if (!thread) {
+				throw new AinHttpError(StatusCodes.NOT_FOUND, "Thread not found");
+			}
 		} else {
 			threadId = randomUUID();
 			const title = await this.generateTitle(query);
@@ -374,6 +378,7 @@ ${intent?.prompt || ""}
 
 		await threadMemory?.addMessagesToThread(userId, threadId, [
 			{
+				messageId: randomUUID(),
 				role: MessageRole.USER,
 				timestamp: queryStartAt,
 				content: { type: "text", parts: [query] },
@@ -394,6 +399,7 @@ ${intent?.prompt || ""}
 			} else if (event.event === "tool_start") {
 				await threadMemory?.addMessagesToThread(userId, threadId, [
 					{
+						messageId: randomUUID(),
 						role: MessageRole.MODEL,
 						timestamp: Date.now(),
 						content: {
@@ -410,6 +416,7 @@ ${intent?.prompt || ""}
 			} else if (event.event === "tool_output") {
 				await threadMemory?.addMessagesToThread(userId, threadId, [
 					{
+						messageId: randomUUID(),
 						role: MessageRole.MODEL,
 						timestamp: Date.now(),
 						content: { type: "text", parts: [event.data.result] },
@@ -426,6 +433,7 @@ ${intent?.prompt || ""}
 
 		await threadMemory?.addMessagesToThread(userId, threadId, [
 			{
+				messageId: randomUUID(),
 				role: MessageRole.MODEL,
 				timestamp: Date.now(),
 				content: { type: "text", parts: [finalResponseText] },
