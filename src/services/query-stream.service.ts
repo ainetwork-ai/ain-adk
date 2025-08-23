@@ -378,6 +378,7 @@ ${intent?.prompt || ""}
 
 		await threadMemory?.addMessagesToThread(userId, threadId, [
 			{
+				messageId: randomUUID(),
 				role: MessageRole.USER,
 				timestamp: queryStartAt,
 				content: { type: "text", parts: [query] },
@@ -398,6 +399,7 @@ ${intent?.prompt || ""}
 			} else if (event.event === "tool_start") {
 				await threadMemory?.addMessagesToThread(userId, threadId, [
 					{
+						messageId: randomUUID(),
 						role: MessageRole.MODEL,
 						timestamp: Date.now(),
 						content: {
@@ -414,6 +416,7 @@ ${intent?.prompt || ""}
 			} else if (event.event === "tool_output") {
 				await threadMemory?.addMessagesToThread(userId, threadId, [
 					{
+						messageId: randomUUID(),
 						role: MessageRole.MODEL,
 						timestamp: Date.now(),
 						content: { type: "text", parts: [event.data.result] },
@@ -430,6 +433,7 @@ ${intent?.prompt || ""}
 
 		await threadMemory?.addMessagesToThread(userId, threadId, [
 			{
+				messageId: randomUUID(),
 				role: MessageRole.MODEL,
 				timestamp: Date.now(),
 				content: { type: "text", parts: [finalResponseText] },

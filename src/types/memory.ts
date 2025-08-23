@@ -39,6 +39,7 @@ export type MessageContentObject = {
  * ```
  */
 export type MessageObject = {
+	messageId: string;
 	/** Role of the message sender */
 	role: MessageRole;
 	/** Message content with type and parts */
@@ -71,20 +72,17 @@ export type ThreadMetadata = {
  * ```typescript
  * const thread: ThreadObject = {
  * 	 title: "New conversation",
- *   messages: {
- *     "<UUID_1>": { role: MessageRole.USER, content: {...}, timestamp: 1234567890 },
- *     "<UUID_2>": { role: MessageRole.MODEL, content: {...}, timestamp: 1234567891 }
- *   }
+ *   messages: [
+ *     { messageId: <UUID_1>, role: MessageRole.USER, content: {...}, timestamp: 1234567890 },
+ *     { messageId: <UUID_2> ,role: MessageRole.MODEL, content: {...}, timestamp: 1234567891 }
+ *   ]
  * };
  * ```
  */
 export type ThreadObject = {
 	type: ThreadType;
 	title: string;
-	/* Collection of messages indexed by unique message ID */
-	messages: {
-		[messageId: string]: MessageObject;
-	};
+	messages: Array<MessageObject>;
 };
 
 export interface Intent {

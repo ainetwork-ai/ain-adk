@@ -337,11 +337,13 @@ ${intent?.prompt || ""}
 		const result = await this.intentFulfilling(query, threadId, thread, intent);
 		await threadMemory?.addMessagesToThread(userId, threadId, [
 			{
+				messageId: randomUUID(),
 				role: MessageRole.USER,
 				timestamp: queryStartAt,
 				content: { type: "text", parts: [query] },
 			},
 			{
+				messageId: randomUUID(),
 				role: MessageRole.MODEL,
 				timestamp: Date.now(),
 				content: { type: "text", parts: [result.response] },
