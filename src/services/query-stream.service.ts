@@ -9,7 +9,7 @@ import type {
 import { type AinAgentPrompts, AinHttpError } from "@/types/agent.js";
 import {
 	type Intent,
-	MessageObject,
+	type MessageObject,
 	MessageRole,
 	type ThreadMetadata,
 	type ThreadObject,
