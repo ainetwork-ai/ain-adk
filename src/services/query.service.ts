@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { StatusCodes } from "http-status-codes";
 import type {
 	A2AModule,
 	MCPModule,
 	MemoryModule,
 	ModelModule,
 } from "@/modules/index.js";
-import type { AinAgentPrompts } from "@/types/agent.js";
+import { type AinAgentPrompts, AinHttpError } from "@/types/agent.js";
 import {
 	type Intent,
 	type MessageObject,
@@ -305,6 +306,7 @@ ${intent?.prompt || ""}
 			threadId?: string;
 		},
 		query: string,
+		isA2A?: boolean,
 	) {
 		// 1. Load thread with threadId
 		const { type, userId } = threadMetadata;
@@ -313,11 +315,15 @@ ${intent?.prompt || ""}
 
 		let threadId = threadMetadata.threadId;
 		let thread: ThreadObject | undefined;
-
 		if (threadId) {
 			thread = await threadMemory?.getThread(userId, threadId);
-		} else {
-			threadId = randomUUID();
+			if (!thread && !isA2A) {
+				throw new AinHttpError(StatusCodes.NOT_FOUND, "Thread not found");
+			}
+		}
+
+		threadId ??= randomUUID();
+		if (!thread) {
 			const title = await this.generateTitle(query);
 
 			const metadata =

@@ -348,6 +348,7 @@ ${intent?.prompt || ""}
 			threadId?: string;
 		},
 		query: string,
+		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
 		const { type, userId } = threadMetadata;
 		const queryStartAt = Date.now();
@@ -358,11 +359,13 @@ ${intent?.prompt || ""}
 		let thread: ThreadObject | undefined;
 		if (threadId) {
 			thread = await threadMemory?.getThread(userId, threadId);
-			if (!thread) {
+			if (!thread && !isA2A) {
 				throw new AinHttpError(StatusCodes.NOT_FOUND, "Thread not found");
 			}
-		} else {
-			threadId = randomUUID();
+		}
+
+		threadId ??= randomUUID();
+		if (!thread) {
 			const title = await this.generateTitle(query);
 
 			const metadata =
