@@ -33,7 +33,7 @@ export interface IThreadMemory extends IMemory {
 		userId: string,
 		threadId: string,
 		messages: MessageObject[],
-	): Promise<string[]>;
+	): Promise<void>;
 	deleteThread(userId: string, threadId: string): Promise<void>;
 	listThreads(userId: string): Promise<ThreadMetadata[]>;
 }

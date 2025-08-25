@@ -14,8 +14,8 @@ export const createThreadApiRouter = (memoryModule: MemoryModule): Router => {
 	const threadApiController = new ThreadApiController(memoryModule);
 
 	const checkThreadMemory = (
-		req: Request,
-		res: Response,
+		_req: Request,
+		_res: Response,
 		next: NextFunction,
 	) => {
 		const threadMemory = memoryModule.getThreadMemory();
