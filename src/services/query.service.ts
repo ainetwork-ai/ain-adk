@@ -8,6 +8,7 @@ import type {
 import type { AinAgentPrompts } from "@/types/agent.js";
 import {
 	type Intent,
+	MessageObject,
 	MessageRole,
 	type ThreadMetadata,
 	type ThreadObject,
@@ -78,21 +79,21 @@ export class QueryService {
 			.map((intent) => `- ${intent.name}: ${intent.description}`)
 			.join("\n");
 
-		// Convert session history to a string
-		const historyMessages = !thread
+		// Convert thread messages to a string
+		const threadMessages = !thread
 			? ""
-			: Object.entries(thread.messages)
-					.sort(([, a], [, b]) => a.timestamp - b.timestamp)
-					.map(([chatId, chat]) => {
+			: thread.messages
+					.sort((a, b) => a.timestamp - b.timestamp)
+					.map((message: MessageObject) => {
 						const role =
-							chat.role === "USER"
+							message.role === "USER"
 								? "User"
-								: chat.role === "MODEL"
+								: message.role === "MODEL"
 									? "Assistant"
 									: "System";
-						const content = Array.isArray(chat.content.parts)
-							? chat.content.parts.join(" ")
-							: String(chat.content.parts);
+						const content = Array.isArray(message.content.parts)
+							? message.content.parts.join(" ")
+							: String(message.content.parts);
 						return `${role}: """${content}"""`;
 					})
 					.join("\n");
@@ -107,7 +108,7 @@ Please return only the exact intent name without any additional explanations or 
 
 		const userMessage = `The following is the conversation history with the user:
 
-${historyMessages}
+${threadMessages}
 
 Last user question: "${query}"
 
