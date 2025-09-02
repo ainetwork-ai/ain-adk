@@ -73,12 +73,12 @@ yarn dev        # Run TypeScript directly with tsx
    - `query.controller.ts`: Query endpoint handlers (both streaming and non-streaming)
    - `a2a.controller.ts`: A2A-specific endpoint handlers
    - `api/threads.api.controller.ts`: Thread management API
-   - `api/model.api.controller.ts`: Model configuration API
+   - `api/model.api.controller.ts`: Model management API
+   - `api/agent.api.controller.ts`: Agent management API
 
 5. **Tool Abstraction**
-   - Unified `IAgentTool` interface for protocol-agnostic tool execution
-   - Protocol-specific tool types: `IMCPTool`, `IA2ATool`
-   - `TOOL_PROTOCOL_TYPE` enum for tool source identification
+   - Unified `ConnectorTool` class for protocol-agnostic tool execution
+   - `CONNECTOR_PROTOCOL_TYPE` enum for tool source identification
 
 6. **Type System** (`src/types/`)
    - `agent.ts`: Agent manifest and configuration types
