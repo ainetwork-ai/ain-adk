@@ -8,6 +8,10 @@ import type {
 } from "@/modules/index.js";
 import { type AinAgentPrompts, AinHttpError } from "@/types/agent.js";
 import {
+	CONNECTOR_PROTOCOL_TYPE,
+	type ConnectorTool,
+} from "@/types/connector.js";
+import {
 	type Intent,
 	type MessageObject,
 	MessageRole,
@@ -15,12 +19,6 @@ import {
 	type ThreadObject,
 	type ThreadType,
 } from "@/types/memory.js";
-import {
-	type IA2ATool,
-	type IAgentTool,
-	type IMCPTool,
-	TOOL_PROTOCOL_TYPE,
-} from "@/types/tool.js";
 import { loggers } from "@/utils/logger.js";
 
 /**
@@ -174,7 +172,7 @@ ${intent?.prompt || ""}
 			systemPrompt: systemPrompt.trim(),
 		});
 
-		const tools: IAgentTool[] = [];
+		const tools: ConnectorTool[] = [];
 		if (this.mcpModule) {
 			tools.push(...this.mcpModule.getTools());
 		}
@@ -202,27 +200,26 @@ ${intent?.prompt || ""}
 			if (toolCalls) {
 				for (const toolCall of toolCalls) {
 					const toolName = toolCall.name;
-					const selectedTool = tools.filter((tool) => tool.id === toolName)[0];
+					const selectedTool = tools.filter(
+						(tool) => tool.toolName === toolName,
+					)[0];
 
 					let toolResult = "";
 					if (
 						this.mcpModule &&
-						selectedTool.protocol === TOOL_PROTOCOL_TYPE.MCP
+						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.MCP
 					) {
 						const toolArgs = toolCall.arguments as
 							| { [x: string]: unknown }
 							| undefined;
 						loggers.intent.debug("MCP tool call", { toolName, toolArgs });
-						toolResult = await this.mcpModule.useTool(
-							selectedTool as IMCPTool,
-							toolArgs,
-						);
+						toolResult = await this.mcpModule.useTool(selectedTool, toolArgs);
 					} else if (
 						this.a2aModule &&
-						selectedTool.protocol === TOOL_PROTOCOL_TYPE.A2A
+						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.A2A
 					) {
 						toolResult = await this.a2aModule.useTool(
-							selectedTool as IA2ATool,
+							selectedTool,
 							query,
 							threadId,
 						);

@@ -1,11 +1,15 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { Client as MCPClient } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { WebSocketClientTransport } from "@modelcontextprotocol/sdk/client/websocket.js";
+import {
+	CONNECTOR_PROTOCOL_TYPE,
+	type ConnectorTool,
+} from "@/types/connector.js";
 import type { MCPConfig } from "@/types/mcp.js";
 import { loggers } from "@/utils/logger.js";
-import { MCPTool } from "./mcp.tool.js";
+import { MCPConnector } from "./mcp.connector.js";
 
 /**
  * Module for managing Model Context Protocol (MCP) server connections.
@@ -13,38 +17,30 @@ import { MCPTool } from "./mcp.tool.js";
  * This module handles the lifecycle of MCP client connections, discovers
  * available tools from connected servers, and provides an interface for
  * executing those tools. Multiple MCP servers can be connected simultaneously.
- *
- * @example
- * ```typescript
- * const mcpModule = new MCPModule();
- * await mcpModule.addMCPConfig({
- *   "filesystem": {
- *     command: "npx",
- *     args: ["@modelcontextprotocol/server-filesystem", "/path/to/files"]
- *   }
- * });
- *
- * const tools = mcpModule.getTools();
- * const result = await mcpModule.useTool(tools[0], { path: "/example.txt" });
- * ```
  */
 export class MCPModule {
-	private mcpConfigs: Map<string, MCPConfig> = new Map();
-	/** Map of MCP server names to their client instances */
-	private mcpClientMap: Map<string, Client> = new Map();
-	/** Array of all discovered tools from connected MCP servers */
-	private tools: MCPTool[] = [];
+	private mcpConnectors: Map<string, MCPConnector> = new Map();
 
-	addMCPServerConfig(configs: { [name: string]: MCPConfig }): void {
+	addMCPConnector(configs: { [name: string]: MCPConfig }): void {
 		for (const [name, config] of Object.entries(configs)) {
-			this.mcpConfigs.set(name, config);
+			const conn = new MCPConnector(name, config);
+			this.mcpConnectors.set(name, conn);
 		}
 	}
 
+	private getOrCreateClient(connector: MCPConnector): MCPClient {
+		connector.client ??= new MCPClient({
+			name: connector.name,
+			version: "1.0.0",
+		});
+		return connector.client;
+	}
+
 	async connectToServers(): Promise<void> {
-		for (const [name, config] of this.mcpConfigs.entries()) {
+		for (const [name, conn] of this.mcpConnectors.entries()) {
 			try {
-				const mcpClient = new Client({ name, version: "1.0.0" });
+				const mcpClient = this.getOrCreateClient(conn);
+				const config = conn.config;
 				switch (config.type) {
 					case "stdio": {
 						const transport = new StdioClientTransport(config.params);
@@ -78,14 +74,18 @@ export class MCPModule {
 						break;
 				}
 
-				this.mcpClientMap.set(name, mcpClient);
 				const toolList = await mcpClient.listTools();
-				const newToolList = toolList.tools.map((tool) => {
-					return new MCPTool(name, tool);
+				conn.tools = toolList.tools.map((tool) => {
+					return {
+						toolName: `${name}-${tool.name}`, // to avoid tool name duplication
+						connectorName: name,
+						protocol: CONNECTOR_PROTOCOL_TYPE.MCP,
+						description: tool.description,
+						inputSchema: tool.inputSchema,
+					};
 				});
-				this.tools.push(...newToolList);
 				loggers.mcp.info("Connected to MCP server with tools:", {
-					tools: newToolList.map((tool) => tool.id),
+					tools: conn.tools.map((tool) => tool.toolName),
 				});
 			} catch (error) {
 				loggers.mcp.error(`Failed to connect to MCP server ${name}`, { error });
@@ -98,8 +98,12 @@ export class MCPModule {
 	 *
 	 * @returns Array of MCPTool instances representing available tools
 	 */
-	getTools() {
-		return this.tools;
+	getTools(): Array<ConnectorTool> {
+		const allTools: Array<ConnectorTool> = [];
+		for (const conn of this.mcpConnectors.values()) {
+			allTools.push(...conn.tools);
+		}
+		return allTools;
 	}
 
 	/**
@@ -110,18 +114,19 @@ export class MCPModule {
 	 * @returns Promise resolving to the tool's execution result
 	 * @throws Error if the MCP server for the tool is not found
 	 */
-	async useTool(tool: MCPTool, _args?: any): Promise<string> {
-		const { serverName, mcpTool } = tool;
-		const toolName = mcpTool.name;
-		const mcp = this.mcpClientMap.get(serverName);
+	async useTool(tool: ConnectorTool, _args?: any): Promise<string> {
+		const { connectorName, toolName } = tool;
+		const client = this.mcpConnectors.get(connectorName)?.client;
 
 		try {
-			if (!mcp) {
-				throw new Error(`Invalid MCP Tool ${serverName}-${mcpTool.name}`);
+			if (!client) {
+				throw new Error(`Invalid MCP Tool ${toolName}`);
 			}
 
-			const result = await mcp.callTool({
-				name: toolName,
+			// `${name}-${tool.name}` => tool.name
+			const mcpToolName = toolName.slice(connectorName.length + 1);
+			const result = await client.callTool({
+				name: mcpToolName,
 				arguments: _args,
 			});
 			const toolResult =
@@ -142,8 +147,8 @@ export class MCPModule {
 	 * all MCP connections are properly closed.
 	 */
 	async cleanup() {
-		this.mcpClientMap.forEach((mcpClient: Client) => {
-			mcpClient.close();
-		});
+		for (const conn of this.mcpConnectors.values()) {
+			await conn.client?.close();
+		}
 	}
 }
