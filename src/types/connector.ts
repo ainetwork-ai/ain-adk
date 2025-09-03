@@ -1,16 +1,20 @@
-import type { AgentCard } from "@a2a-js/sdk";
-import type { A2AClient } from "@a2a-js/sdk/client";
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-
 /**
  * Supported tool protocol types in the AIN-ADK framework.
  */
-export enum TOOL_PROTOCOL_TYPE {
+export enum CONNECTOR_PROTOCOL_TYPE {
 	/** Agent-to-Agent protocol */
 	A2A = "A2A",
 	/** Model Context Protocol */
 	MCP = "MCP",
 }
+
+export type ConnectorTool = {
+	toolName: string;
+	connectorName: string;
+	protocol: CONNECTOR_PROTOCOL_TYPE;
+	description?: string;
+	inputSchema?: any;
+};
 
 /**
  * Represents a tool invocation request.
@@ -36,32 +40,6 @@ export type FetchResponse = {
 };
 
 /**
- * MCP-specific tool implementation.
- *
- * Wraps an MCP tool with additional metadata and functionality
- * required for integration with the AIN-ADK framework.
- */
-export interface IMCPTool extends IAgentTool {
-	/** The underlying MCP tool definition */
-	mcpTool: Tool;
-	/** Name of the MCP server providing this tool */
-	serverName: string;
-}
-
-/**
- * A2A-specific tool implementation.
- *
- * Represents a tool provided by another agent through the A2A protocol,
- * including the client connection and agent metadata.
- */
-export interface IA2ATool extends IAgentTool {
-	/** A2A client instance for communication with the remote agent */
-	client: A2AClient;
-	/** Agent card containing metadata about the remote agent */
-	card: AgentCard;
-}
-
-/**
  * Base interface for all tools in the AIN-ADK framework.
  *
  * Provides a protocol-agnostic interface for tool management,
@@ -71,7 +49,7 @@ export interface IA2ATool extends IAgentTool {
  * @example
  * ```typescript
  * const tool: IAgentTool = {
- *   id: "search-tool",
+ *   name: "search-tool",
  *   protocol: TOOL_PROTOCOL_TYPE.MCP,
  *   enabled: true,
  *   enable: () => { this.enabled = true; },
@@ -79,11 +57,11 @@ export interface IA2ATool extends IAgentTool {
  * };
  * ```
  */
-export interface IAgentTool {
-	/** Unique identifier for the tool */
-	id: string;
+export interface IAgentConnector {
+	/** Unique identifier for the connector */
+	name: string;
 	/** Protocol type (MCP or A2A) */
-	protocol: TOOL_PROTOCOL_TYPE;
+	protocol: CONNECTOR_PROTOCOL_TYPE;
 	/** Whether the tool is currently enabled for use */
 	enabled: boolean;
 	/** Enables the tool for use */
