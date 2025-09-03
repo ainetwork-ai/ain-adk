@@ -86,8 +86,10 @@ export type ThreadObject = {
 };
 
 export interface Intent {
+	id: string;
 	name: string;
 	description: string;
 	prompt?: string;
-	llm?: string;
+	triggeringSentences?: Array<string>;
+	tags?: Array<string>;
 }
