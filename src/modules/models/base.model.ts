@@ -1,6 +1,6 @@
+import type { ConnectorTool, FetchResponse } from "@/types/connector.js";
 import type { ThreadObject } from "@/types/memory.js";
 import type { LLMStream } from "@/types/stream.js";
-import type { FetchResponse, IAgentTool } from "@/types/tool.js";
 
 /**
  * Abstract base class for AI model implementations.
@@ -41,7 +41,7 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	 * @param tools - Array of agent tools from MCP or A2A sources
 	 * @returns Array of functions in the format required by the model API
 	 */
-	abstract convertToolsToFunctions(tools: IAgentTool[]): FunctionType[];
+	abstract convertToolsToFunctions(tools: ConnectorTool[]): FunctionType[];
 
 	/**
 	 * Fetches a response from the model API without tool support.

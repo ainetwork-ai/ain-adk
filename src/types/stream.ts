@@ -1,5 +1,5 @@
 import type { ThreadMetadata } from "@/types/memory.js";
-import type { TOOL_PROTOCOL_TYPE } from "./tool";
+import type { CONNECTOR_PROTOCOL_TYPE } from "./connector";
 
 export type StreamEvent =
 	| { event: "text_chunk"; data: { delta: string } }
@@ -7,7 +7,7 @@ export type StreamEvent =
 			event: "tool_start";
 			data: {
 				toolCallId: string;
-				protocol: TOOL_PROTOCOL_TYPE;
+				protocol: CONNECTOR_PROTOCOL_TYPE;
 				toolName: string;
 				toolArgs: unknown;
 			};
@@ -16,7 +16,7 @@ export type StreamEvent =
 			event: "tool_output";
 			data: {
 				toolCallId: string;
-				protocol: TOOL_PROTOCOL_TYPE;
+				protocol: CONNECTOR_PROTOCOL_TYPE;
 				toolName: string;
 				result: unknown;
 			};

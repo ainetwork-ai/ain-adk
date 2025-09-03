@@ -8,6 +8,10 @@ import type {
 } from "@/modules/index.js";
 import { type AinAgentPrompts, AinHttpError } from "@/types/agent.js";
 import {
+	CONNECTOR_PROTOCOL_TYPE,
+	type ConnectorTool,
+} from "@/types/connector.js";
+import {
 	type Intent,
 	type MessageObject,
 	MessageRole,
@@ -16,12 +20,6 @@ import {
 	type ThreadType,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
-import {
-	type IA2ATool,
-	type IAgentTool,
-	type IMCPTool,
-	TOOL_PROTOCOL_TYPE,
-} from "@/types/tool.js";
 import { loggers } from "@/utils/logger.js";
 
 /**
@@ -173,7 +171,7 @@ ${intent?.prompt || ""}
 			systemPrompt: systemPrompt.trim(),
 		});
 
-		const tools: IAgentTool[] = [];
+		const tools: ConnectorTool[] = [];
 		this.mcpModule && tools.push(...this.mcpModule.getTools());
 		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
 
@@ -226,12 +224,14 @@ ${intent?.prompt || ""}
 				for (const toolCall of assembledToolCalls) {
 					const toolCallId = randomUUID();
 					const toolName = toolCall.function.name;
-					const selectedTool = tools.filter((tool) => tool.id === toolName)[0];
+					const selectedTool = tools.filter(
+						(tool) => tool.toolName === toolName,
+					)[0];
 
 					let toolResult = "";
 					if (
 						this.mcpModule &&
-						selectedTool.protocol === TOOL_PROTOCOL_TYPE.MCP
+						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.MCP
 					) {
 						const toolArgs = JSON.parse(toolCall.function.arguments) as
 							| { [x: string]: unknown }
@@ -240,32 +240,29 @@ ${intent?.prompt || ""}
 							event: "tool_start",
 							data: {
 								toolCallId,
-								protocol: TOOL_PROTOCOL_TYPE.MCP,
+								protocol: CONNECTOR_PROTOCOL_TYPE.MCP,
 								toolName,
 								toolArgs,
 							},
 						};
 						loggers.intent.debug("MCP tool call", { toolName, toolArgs });
-						toolResult = await this.mcpModule.useTool(
-							selectedTool as IMCPTool,
-							toolArgs,
-						);
+						toolResult = await this.mcpModule.useTool(selectedTool, toolArgs);
 					} else if (
 						this.a2aModule &&
-						selectedTool.protocol === TOOL_PROTOCOL_TYPE.A2A
+						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.A2A
 					) {
 						yield {
 							event: "tool_start",
 							data: {
 								toolCallId,
-								protocol: TOOL_PROTOCOL_TYPE.A2A,
+								protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
 								toolName,
 								toolArgs: null,
 							},
 						};
 						loggers.intent.debug("A2A tool call", { toolName });
 						toolResult = await this.a2aModule.useTool(
-							selectedTool as IA2ATool,
+							selectedTool,
 							query,
 							threadId,
 						);
