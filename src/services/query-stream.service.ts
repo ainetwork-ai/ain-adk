@@ -15,12 +15,16 @@ import {
 	type Intent,
 	type MessageObject,
 	MessageRole,
-	type ThreadMetadata,
 	type ThreadObject,
 	type ThreadType,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
+
+type TriggeredIntent = {
+	subquery: string;
+	intent?: Intent;
+};
 
 /**
  * Service for processing user queries through the agent's AI pipeline.
@@ -50,6 +54,23 @@ export class QueryStreamService {
 		this.prompts = prompts;
 	}
 
+	private async addToThreadMessages(
+		thread: ThreadObject,
+		params: { role: MessageRole; content: string; metadata?: any },
+	) {
+		const threadMemory = this.memoryModule?.getThreadMemory();
+		const { userId, threadId } = thread;
+		const newMessage: MessageObject = {
+			messageId: randomUUID(),
+			role: params.role,
+			timestamp: Date.now(),
+			content: { type: "text", parts: [params.content] },
+			metadata: params.metadata,
+		};
+		thread.messages.push(newMessage);
+		await threadMemory?.addMessagesToThread(userId, threadId, [newMessage]);
+	}
+
 	/**
 	 * Detects the intent from context.
 	 *
@@ -60,11 +81,11 @@ export class QueryStreamService {
 	private async intentTriggering(
 		query: string,
 		thread: ThreadObject | undefined,
-	): Promise<Intent | undefined> {
+	): Promise<Array<TriggeredIntent>> {
 		const modelInstance = this.modelModule.getModel();
 		const intentMemory = this.memoryModule?.getIntentMemory();
 		if (!intentMemory) {
-			return undefined;
+			return [{ subquery: query }];
 		}
 
 		// 인텐트 목록 가져오기
@@ -72,7 +93,7 @@ export class QueryStreamService {
 
 		if (intents.length === 0) {
 			loggers.intentStream.warn("No intent found");
-			return undefined;
+			return [{ subquery: query }];
 		}
 
 		const intentList = intents
@@ -112,8 +133,34 @@ ${threadMessages}
 
 Last user question: "${query}"
 
-Based on the above conversation history, please determine what the intention of the last user question is. 
-Please select and answer the most appropriate intent name from the available intent list.`;
+Based on the above conversation history, analyze the last user question and identify all relevant intents.
+
+Instructions:
+1. First, decompose the last user question into action-based subqueries (each representing a distinct action or task)
+2. Then, map each subquery to its corresponding intent from the available intent list
+3. Multiple intents can be identified if the question covers various topics or actions
+4. Maintain the logical sequence of the original question when splitting into subqueries
+5. If any subquery doesn't match any intent in the available list, map it to "default" intent
+
+Output Format:
+Return the results as a JSON array with the following structure:
+[
+  {
+    "subquery": "<subquery_1>",
+    "intentName": "<intent_name_1>"
+  },
+  {
+    "subquery": "<subquery_2>",
+    "intentName": "<intent_name_2>"
+  },
+  ...
+]
+
+Requirements:
+- Each subquery should represent a single, actionable task or request
+- Preserve the original meaning and context when splitting queries
+- Select only from the provided intent list
+- Use "default" as the intent value for any subquery that doesn't match available intents.`;
 
 		const messages = modelInstance.generateMessages({
 			query: userMessage,
@@ -122,14 +169,19 @@ Please select and answer the most appropriate intent name from the available int
 
 		const response = await modelInstance.fetch(messages);
 		if (!response.content) {
-			throw new Error("No intent detected");
+			loggers.intent.debug("Cannot extract intent from query");
+			return [{ subquery: query }];
 		}
-		const intentName = response.content.trim();
-		const intent = await intentMemory.getIntentByName(intentName);
-		if (!intent) {
-			throw new Error(`No intent found: ${intentName}`);
+
+		const subqueries = JSON.parse(response.content);
+		const triggeredIntent: Array<TriggeredIntent> = [];
+		for (const { subquery, intentName } of subqueries) {
+			loggers.intent.debug(`Intent found: ${subquery}, ${intentName}`);
+			const intent = await intentMemory.getIntentByName(intentName);
+			triggeredIntent.push({ subquery, intent });
 		}
-		return intent;
+
+		return triggeredIntent;
 	}
 
 	/**
@@ -348,7 +400,6 @@ ${intent?.prompt || ""}
 		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
 		const { type, userId } = threadMetadata;
-		const queryStartAt = Date.now();
 		const threadMemory = this.memoryModule?.getThreadMemory();
 
 		// 1. Load or create thread
@@ -364,81 +415,49 @@ ${intent?.prompt || ""}
 		threadId ??= randomUUID();
 		if (!thread) {
 			const title = await this.generateTitle(query);
-
-			const metadata =
-				(await threadMemory?.createThread(type, userId, threadId, title)) ||
-				({
-					type,
-					threadId,
-					title,
-					updatedAt: Date.now(),
-				} as ThreadMetadata);
-			loggers.intentStream.info("Create new thread", { metadata });
-			yield { event: "thread_id", data: metadata };
+			thread = (await threadMemory?.createThread(
+				type,
+				userId,
+				threadId,
+				title,
+			)) || { type, userId, threadId, title, messages: [] };
+			loggers.intentStream.info(`Create new thread: ${threadId}`);
+			yield { event: "thread_id", data: { type, threadId, title } };
 		}
 
-		await threadMemory?.addMessagesToThread(userId, threadId, [
-			{
-				messageId: randomUUID(),
-				role: MessageRole.USER,
-				timestamp: queryStartAt,
-				content: { type: "text", parts: [query] },
-			},
-		]);
+		await this.addToThreadMessages(thread, {
+			role: MessageRole.USER,
+			content: query,
+		});
 
 		// 2. intent triggering
-		const intent = await this.intentTriggering(query, thread);
+		const triggeredIntent: Array<TriggeredIntent> = await this.intentTriggering(
+			query,
+			thread,
+		);
 
 		// 3. intent fulfillment
-		const stream = this.intentFulfilling(query, threadId, thread, intent);
-
-		let finalResponseText = "";
-		for await (const event of stream) {
-			if (event.event === "text_chunk" && event.data.delta) {
-				loggers.intentStream.debug("text_chunk", { event });
-				finalResponseText += event.data.delta;
-			} else if (event.event === "tool_start") {
-				await threadMemory?.addMessagesToThread(userId, threadId, [
-					{
-						messageId: randomUUID(),
-						role: MessageRole.MODEL,
-						timestamp: Date.now(),
-						content: {
-							type: "text",
-							parts: [JSON.stringify(event.data.toolArgs)],
-						},
-						metadata: {
-							toolCallId: event.data.toolCallId,
-							toolName: event.data.toolName,
-							protocol: event.data.protocol,
-						},
-					},
-				]);
-			} else if (event.event === "tool_output") {
-				await threadMemory?.addMessagesToThread(userId, threadId, [
-					{
-						messageId: randomUUID(),
-						role: MessageRole.MODEL,
-						timestamp: Date.now(),
-						content: { type: "text", parts: [event.data.result] },
-						metadata: {
-							toolCallId: event.data.toolCallId,
-							toolName: event.data.toolName,
-							protocol: event.data.protocol,
-						},
-					},
-				]);
-			}
-			yield event;
-		}
-
-		await threadMemory?.addMessagesToThread(userId, threadId, [
-			{
-				messageId: randomUUID(),
+		for (const { subquery, intent } of triggeredIntent) {
+			await this.addToThreadMessages(thread, {
 				role: MessageRole.MODEL,
-				timestamp: Date.now(),
-				content: { type: "text", parts: [finalResponseText] },
-			},
-		]);
+				content: subquery,
+			});
+
+			const stream = this.intentFulfilling(subquery, threadId, thread, intent);
+
+			let finalResponseText = "";
+			for await (const event of stream) {
+				if (event.event === "text_chunk" && event.data.delta) {
+					loggers.intentStream.debug("text_chunk", { event });
+					finalResponseText += event.data.delta;
+				}
+				yield event;
+			}
+
+			await this.addToThreadMessages(thread, {
+				role: MessageRole.MODEL,
+				content: finalResponseText,
+			});
+		}
 	}
 }

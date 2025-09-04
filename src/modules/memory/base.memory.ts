@@ -28,7 +28,7 @@ export interface IThreadMemory extends IMemory {
 		userId: string,
 		threadId: string,
 		title: string,
-	): Promise<ThreadMetadata>;
+	): Promise<ThreadObject>;
 	addMessagesToThread(
 		userId: string,
 		threadId: string,

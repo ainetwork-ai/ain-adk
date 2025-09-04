@@ -59,7 +59,6 @@ export type ThreadMetadata = {
 	type: ThreadType;
 	title: string;
 	threadId: string;
-	updatedAt: number;
 };
 
 /**
@@ -80,6 +79,8 @@ export type ThreadMetadata = {
  * ```
  */
 export type ThreadObject = {
+	userId: string;
+	threadId: string;
 	type: ThreadType;
 	title: string;
 	messages: Array<MessageObject>;
