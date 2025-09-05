@@ -58,6 +58,7 @@ export enum ThreadType {
 export type ThreadMetadata = {
 	type: ThreadType;
 	title: string;
+	userId: string;
 	threadId: string;
 };
 
