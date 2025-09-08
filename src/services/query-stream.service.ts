@@ -144,7 +144,7 @@ Based on the above conversation history, analyze the last user question and iden
 Instructions:
 1. First, decompose the last user question into action-based subqueries (each representing a distinct action or task)
 2. Then, map each subquery to its corresponding intent from the available intent list
-3. For each subquery, provide a 3-4 sentence summary of what actions will be performed
+3. For each subquery, provide a 2-3 sentence summary of what actions will be performed
 4. Multiple intents can be identified if the question covers various topics or actions
 5. Maintain the logical sequence of the original question when splitting into subqueries
 6. If any subquery doesn't match any intent in the available list, map it to "default" intent
@@ -155,12 +155,12 @@ Return the results as a JSON array with the following structure:
   {
     "subquery": "<subquery_1>",
     "intentName": "<intent_name_1>",
-		"actionPlan": "<3-4 sentence description of what will be done for this subquery>"
+		"actionPlan": "<2-3 sentence description of what will be done for this subquery>"
 	},
   {
     "subquery": "<subquery_2>",
     "intentName": "<intent_name_2>",
-		"actionPlan": "<3-4 sentence description of what will be done for this subquery>"
+		"actionPlan": "<2-3 sentence description of what will be done for this subquery>"
   },
   ...
 ]
@@ -454,8 +454,7 @@ ${intent?.prompt || ""}
 		for (let i = 0; i < triggeredIntent.length; i++) {
 			const { subquery, intent, actionPlan } = triggeredIntent[i];
 			loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
-
-			// add subquery as user message
+			loggers.intent.info(`Action plan: ${actionPlan}`);
 
 			// only use for inference, not stored in memory
 			finalResponseText !== "" &&
@@ -475,6 +474,11 @@ ${intent?.prompt || ""}
 				},
 			});
 
+			yield {
+				event: "intent_process",
+				data: { subquery, actionPlan: actionPlan || "" },
+			};
+
 			const stream = this.intentFulfilling(subquery, thread, intent);
 
 			finalResponseText = "";
@@ -482,6 +486,10 @@ ${intent?.prompt || ""}
 				if (event.event === "text_chunk" && event.data.delta) {
 					loggers.intentStream.debug("text_chunk", { event });
 					finalResponseText += event.data.delta;
+				}
+
+				if (event.event === "text_chunk" && i !== triggeredIntent.length - 1) {
+					continue; // skip intermediate text_chunk events
 				}
 				yield event;
 			}
