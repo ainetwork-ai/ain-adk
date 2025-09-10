@@ -469,6 +469,7 @@ ${intent?.prompt || ""}
 				role: MessageRole.MODEL,
 				content: subquery,
 				metadata: {
+					subquery,
 					isThinking: true,
 					actionPlan: actionPlan,
 				},
