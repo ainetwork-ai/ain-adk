@@ -58,8 +58,8 @@ export enum ThreadType {
 export type ThreadMetadata = {
 	type: ThreadType;
 	title: string;
+	userId: string;
 	threadId: string;
-	updatedAt: number;
 };
 
 /**
@@ -80,14 +80,18 @@ export type ThreadMetadata = {
  * ```
  */
 export type ThreadObject = {
+	userId: string;
+	threadId: string;
 	type: ThreadType;
 	title: string;
 	messages: Array<MessageObject>;
 };
 
 export interface Intent {
+	id: string;
 	name: string;
 	description: string;
 	prompt?: string;
-	llm?: string;
+	triggeringSentences?: Array<string>;
+	tags?: Array<string>;
 }

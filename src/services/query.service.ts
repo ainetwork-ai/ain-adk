@@ -323,14 +323,13 @@ ${intent?.prompt || ""}
 		if (!thread) {
 			const title = await this.generateTitle(query);
 
-			const metadata =
-				(await threadMemory?.createThread(type, userId, threadId, title)) ||
-				({
-					type,
-					threadId,
-					title,
-					updatedAt: Date.now(),
-				} as ThreadMetadata);
+			const metadata: ThreadMetadata = (await threadMemory?.createThread(
+				type,
+				userId,
+				threadId,
+				title,
+			)) || { type, threadId, userId, title };
+			thread = { ...metadata, messages: [] };
 			loggers.intent.info("Create new thread", { metadata });
 		}
 
