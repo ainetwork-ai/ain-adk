@@ -95,3 +95,9 @@ export interface Intent {
 	triggeringSentences?: Array<string>;
 	tags?: Array<string>;
 }
+
+export type TriggeredIntent = {
+	subquery: string;
+	intent?: Intent;
+	actionPlan?: string;
+};
