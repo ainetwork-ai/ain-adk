@@ -254,7 +254,6 @@ ${intent?.prompt || ""}
 		});
 
 		let finalResponseText = "";
-		let totalChunks = 0;
 
 		for (let i = 0; i < intents.length; i++) {
 			const { subquery, intent, actionPlan } = intents[i];
@@ -290,7 +289,6 @@ ${intent?.prompt || ""}
 			finalResponseText = "";
 			for await (const event of stream) {
 				if (event.event === "text_chunk" && event.data.delta) {
-					totalChunks++;
 					finalResponseText += event.data.delta;
 				}
 
@@ -312,7 +310,6 @@ ${intent?.prompt || ""}
 		loggers.intentStream.info("Stream session completed", {
 			threadId: thread.threadId,
 			duration: `${streamDuration}ms`,
-			totalChunks,
 			endTime: new Date(streamEndTime).toISOString(),
 		});
 	}
