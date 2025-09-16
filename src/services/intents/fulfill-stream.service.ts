@@ -40,7 +40,11 @@ export class IntentFulfillStreamService {
 
 	private async addToThreadMessages(
 		thread: ThreadObject,
-		params: { role: MessageRole; content: string; metadata?: any },
+		params: {
+			role: MessageRole;
+			content: string;
+			metadata?: Record<string, unknown>;
+		},
 	) {
 		try {
 			const threadMemory = this.memoryModule?.getThreadMemory();
@@ -80,6 +84,12 @@ export class IntentFulfillStreamService {
 		thread: ThreadObject,
 		intent?: Intent,
 	): AsyncGenerator<StreamEvent> {
+		loggers.intentStream.info("Intent fulfillment started", {
+			threadId: thread.threadId,
+			query: query.substring(0, 100) + (query.length > 100 ? "..." : ""),
+			intentName: intent?.name,
+		});
+
 		const systemPrompt = `
 Today is ${new Date().toLocaleDateString()}.
 
@@ -217,6 +227,12 @@ ${intent?.prompt || ""}
 				break;
 			}
 		}
+
+		loggers.intentStream.info("Intent fulfillment completed", {
+			threadId: thread.threadId,
+			toolCallsExecuted: processList.length,
+			intentName: intent?.name,
+		});
 	}
 
 	/**
@@ -230,7 +246,15 @@ ${intent?.prompt || ""}
 		intents: Array<TriggeredIntent>,
 		thread: ThreadObject,
 	): AsyncGenerator<StreamEvent> {
+		const streamStartTime = Date.now();
+		loggers.intentStream.info("Stream session started", {
+			threadId: thread.threadId,
+			intentCount: intents.length,
+			startTime: new Date(streamStartTime).toISOString(),
+		});
+
 		let finalResponseText = "";
+
 		for (let i = 0; i < intents.length; i++) {
 			const { subquery, intent, actionPlan } = intents[i];
 			loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
@@ -265,7 +289,6 @@ ${intent?.prompt || ""}
 			finalResponseText = "";
 			for await (const event of stream) {
 				if (event.event === "text_chunk" && event.data.delta) {
-					loggers.intentStream.debug("text_chunk", { event });
 					finalResponseText += event.data.delta;
 				}
 
@@ -279,6 +302,15 @@ ${intent?.prompt || ""}
 		await this.addToThreadMessages(thread, {
 			role: MessageRole.MODEL,
 			content: finalResponseText,
+		});
+
+		const streamEndTime = Date.now();
+		const streamDuration = streamEndTime - streamStartTime;
+
+		loggers.intentStream.info("Stream session completed", {
+			threadId: thread.threadId,
+			duration: `${streamDuration}ms`,
+			endTime: new Date(streamEndTime).toISOString(),
 		});
 	}
 }
