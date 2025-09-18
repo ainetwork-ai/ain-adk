@@ -75,7 +75,7 @@ export class IntentFulfillStreamService {
 	 * @param intent - Optional detected intent with custom prompt
 	 * @returns AsyncGenerator yielding StreamEvent objects
 	 */
-	public async *intentFulfilling(
+	private async *intentFulfilling(
 		query: string,
 		thread: ThreadObject,
 		intent?: Intent,

@@ -135,6 +135,10 @@ export class QueryStreamService {
 			yield { event: "thread_id", data: { type, userId, threadId, title } };
 		}
 
+		// 2. intent triggering
+		const triggeredIntent: Array<TriggeredIntent> =
+			await this.intentTriggerService.intentTriggering(query, thread);
+
 		// only add for storage, not for inference
 		await threadMemory?.addMessagesToThread(userId, threadId, [
 			{
@@ -144,10 +148,6 @@ export class QueryStreamService {
 				content: { type: "text", parts: [query] },
 			},
 		]);
-
-		// 2. intent triggering
-		const triggeredIntent: Array<TriggeredIntent> =
-			await this.intentTriggerService.intentTriggering(query, thread);
 
 		// 3. intent fulfillment
 		const stream = this.intentFulfillStreamService.intentFulfillStream(
