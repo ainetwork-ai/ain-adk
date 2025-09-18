@@ -91,6 +91,7 @@ export interface Intent {
 	id: string;
 	name: string;
 	description: string;
+	status: string;
 	prompt?: string;
 	triggeringSentences?: Array<string>;
 	tags?: Array<string>;
