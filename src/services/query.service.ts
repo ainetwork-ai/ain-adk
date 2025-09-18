@@ -133,6 +133,10 @@ export class QueryService {
 			loggers.intent.info(`Create new thread: ${threadId}`);
 		}
 
+		// 2. intent triggering
+		const triggeredIntent: Array<TriggeredIntent> =
+			await this.intentTriggerService.intentTriggering(query, thread);
+
 		// only add for storage, not for inference
 		await threadMemory?.addMessagesToThread(userId, threadId, [
 			{
@@ -140,12 +144,13 @@ export class QueryService {
 				role: MessageRole.USER,
 				timestamp: Date.now(),
 				content: { type: "text", parts: [query] },
+				metadata: {
+					intents: triggeredIntent
+						.filter((intent) => !!intent.intent)
+						.map((intent) => intent.intent?.id),
+				},
 			},
 		]);
-
-		// 2. intent triggering
-		const triggeredIntent: Array<TriggeredIntent> =
-			await this.intentTriggerService.intentTriggering(query, thread);
 
 		// 3. intent fulfillment
 		const result = await this.intentFulfillService.intentFulfill(
