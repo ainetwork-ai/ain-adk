@@ -146,6 +146,11 @@ export class QueryStreamService {
 				role: MessageRole.USER,
 				timestamp: Date.now(),
 				content: { type: "text", parts: [query] },
+				metadata: {
+					intents: triggeredIntent
+						.filter((intent) => !!intent.intent)
+						.map((intent) => intent.intent?.id),
+				},
 			},
 		]);
 
