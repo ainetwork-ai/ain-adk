@@ -14,7 +14,6 @@ import {
 	type ThreadObject,
 	type TriggeredIntent,
 } from "@/types/memory";
-import { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
 
 export class IntentFulfillService {
@@ -75,7 +74,7 @@ export class IntentFulfillService {
 	 * @param intent - Optional detected intent with custom prompt
 	 * @returns AsyncGenerator yielding StreamEvent objects
 	 */
-	public async intentFulfilling(
+	private async intentFulfilling(
 		query: string,
 		thread: ThreadObject,
 		intent?: Intent,

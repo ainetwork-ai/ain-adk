@@ -15,6 +15,7 @@ import type {
 	ModelModule,
 } from "./modules";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
+import { createIntentRouter } from "./routes/intent.routes";
 import type { AinAgentManifest } from "./types/agent";
 
 /**
@@ -202,6 +203,7 @@ export class AINAgent {
 			auth.middleware(),
 			createQueryRouter(this, allowStream),
 		);
+		this.app.use("/intent", auth.middleware(), createIntentRouter(this));
 		this.app.use("/api", auth.middleware(), createApiRouter(this));
 
 		if (this.isValidUrl(this.manifest.url)) {
