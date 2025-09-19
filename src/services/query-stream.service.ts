@@ -149,7 +149,10 @@ export class QueryStreamService {
 				metadata: {
 					intents: triggeredIntent
 						.filter((intent) => !!intent.intent)
-						.map((intent) => intent.intent?.id),
+						.map((intent) => ({
+							id: intent.intent?.id,
+							subquery: intent.subquery,
+						})),
 				},
 			},
 		]);
