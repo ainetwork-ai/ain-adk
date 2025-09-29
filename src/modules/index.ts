@@ -4,6 +4,7 @@ export { MCPModule } from "./mcp/mcp.module.js";
 export type {
 	IAgentMemory,
 	IIntentMemory,
+	IMemory,
 	IThreadMemory,
 } from "./memory/base.memory.js";
 export { MemoryModule } from "./memory/memory.module.js";
