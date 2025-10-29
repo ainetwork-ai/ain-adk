@@ -85,10 +85,9 @@ Instructions:
 3. For each subquery, provide a 2-3 sentence summary of what actions will be performed
 4. Multiple intents can be identified if the question covers various topics or actions
 5. Maintain the logical sequence of the original question when splitting into subqueries
-6. If any subquery doesn't match any intent in the available list, map it to "default" intent
 
 Output Format:
-Return the results as a JSON array with the following structure:
+You MUST return the output in the following JSON format. Do not include any other text before or after the JSON:
 [
   {
     "subquery": "<subquery_1>",
@@ -107,7 +106,7 @@ Requirements:
 - Each subquery should represent a single, actionable task or request
 - Preserve the original meaning and context when splitting queries
 - Select only from the provided intent list
-- Use "default" as the intent value for any subquery that doesn't match available intents.`;
+- DO NOT set intentName for any subquery that doesn't match available intents.`;
 
 		const messages = modelInstance.generateMessages({
 			query: userMessage,
@@ -120,11 +119,20 @@ Requirements:
 			return [{ subquery: query }];
 		}
 
-		const subqueries = JSON.parse(response.content);
+		let subqueries: any;
+		try {
+			subqueries = JSON.parse(response.content);
+		} catch (error: unknown) {
+			return [{ subquery: query }];
+		}
+
 		const triggeredIntent: Array<TriggeredIntent> = [];
 		for (const { subquery, intentName, actionPlan } of subqueries) {
-			const intent = await intentMemory.getIntentByName(intentName);
-			triggeredIntent.push({ subquery, intent, actionPlan });
+			const item = { subquery, actionPlan } as TriggeredIntent;
+			if (intentName) {
+				item.intent = await intentMemory.getIntentByName(intentName);
+			}
+			triggeredIntent.push(item);
 		}
 
 		return triggeredIntent;
