@@ -67,7 +67,8 @@ export class QueryStreamService {
 			const modelInstance = this.modelModule.getModel();
 			const messages = modelInstance.generateMessages({
 				query,
-				systemPrompt: `You are a helpful assistant that generates titles for conversations.
+				systemPrompt: `Today's date: ${new Date().toISOString().split("T")[0]} (YYYY-MM-DD format).
+	You are a helpful assistant that generates titles for conversations.
   Please analyze the user's query and create a concise title that accurately reflects the conversation's core topic.
   The title must be no more than 5 words long.
   Respond with only the title. Do not include any punctuation or extra explanations.`,
@@ -138,6 +139,7 @@ export class QueryStreamService {
 		// 2. intent triggering
 		const triggeredIntent: Array<TriggeredIntent> =
 			await this.intentTriggerService.intentTriggering(query, thread);
+		loggers.intent.debug("Triggered intents", { triggeredIntent });
 
 		// only add for storage, not for inference
 		await threadMemory?.addMessagesToThread(userId, threadId, [

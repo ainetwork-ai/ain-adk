@@ -111,11 +111,10 @@ ${intent?.prompt || ""}
 		this.mcpModule && tools.push(...this.mcpModule.getTools());
 		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
 
-		const functions = modelInstance.convertToolsToFunctions(tools);
-
 		const processList: string[] = [];
 
 		while (true) {
+			const functions = modelInstance.convertToolsToFunctions(tools);
 			const responseStream = await modelInstance.fetchStreamWithContextMessage(
 				messages,
 				functions,
@@ -160,9 +159,19 @@ ${intent?.prompt || ""}
 				for (const toolCall of assembledToolCalls) {
 					const toolCallId = randomUUID();
 					const toolName = toolCall.function.name;
-					const selectedTool = tools.filter(
-						(tool) => tool.toolName === toolName,
-					)[0];
+					let selectedTool: ConnectorTool | undefined;
+					for (const [index, toolTmp] of tools.entries()) {
+						if (toolTmp.toolName === toolName) {
+							// remove used tool to prevent infinite loop
+							selectedTool = tools.splice(index, 1)[0];
+							break;
+						}
+					}
+
+					if (!selectedTool) {
+						// it cannot be happened...
+						continue;
+					}
 
 					let toolResult = "";
 					if (
@@ -222,6 +231,8 @@ ${intent?.prompt || ""}
 
 					processList.push(toolResult);
 					modelInstance.appendMessages(messages, toolResult);
+
+					// remove used tool to prevent infinite loop
 				}
 			} else {
 				break;
