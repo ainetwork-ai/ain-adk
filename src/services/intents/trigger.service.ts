@@ -63,7 +63,9 @@ export class IntentTriggerService {
 					})
 					.join("\n");
 
-		const systemPrompt = `You are an expert in accurately identifying user intentions.
+		const systemPrompt = `
+Today is ${new Date().toLocaleDateString()}.
+You are an expert in accurately identifying user intentions.
 
 Available intent list:
 ${intentList}
@@ -85,6 +87,7 @@ Instructions:
 3. For each subquery, provide a 2-3 sentence summary of what actions will be performed
 4. Multiple intents can be identified if the question covers various topics or actions
 5. Maintain the logical sequence of the original question when splitting into subqueries
+6. **Important**: If the query cannot be split into multiple subqueries (i.e., it represents a single action or request), treat the entire query as one subquery and still follow the output format
 
 Output Format:
 You MUST return the output in the following JSON format. Do not include any other text before or after the JSON:
@@ -106,7 +109,8 @@ Requirements:
 - Each subquery should represent a single, actionable task or request
 - Preserve the original meaning and context when splitting queries
 - Select only from the provided intent list
-- DO NOT set intentName for any subquery that doesn't match available intents.`;
+- DO NOT set intentName for any subquery that doesn't match available intents.
+- Even if the query is simple and cannot be decomposed, return it as a single-element array with one subquery object`;
 
 		const messages = modelInstance.generateMessages({
 			query: userMessage,
