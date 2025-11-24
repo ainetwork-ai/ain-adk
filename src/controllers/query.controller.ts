@@ -60,6 +60,10 @@ export class QueryController {
 		res.flushHeaders();
 		res.write(":ok\n\n");
 
+		const keepaliveInterval = setInterval(() => {
+			res.write(":keepalive\n\n");
+		}, 10000); // 10초마다 keepalive 전송
+
 		const stream = this.queryStreamService.handleQueryStream(
 			{ type, userId, threadId },
 			message,
@@ -76,6 +80,7 @@ export class QueryController {
 				(error as Error)?.message || "Failed to handle query stream";
 			res.write(`event: error\ndata: ${errMsg}\n\n`);
 		} finally {
+			clearInterval(keepaliveInterval);
 			res.end();
 		}
 	};
