@@ -183,6 +183,17 @@ ${intent?.prompt || ""}
 							count: currentCount,
 							max: MAX_CALLS_PER_TOOL,
 						});
+						// LLM에게 tool 호출 실패를 알려서 사용자에게 적절한 응답을 생성하도록 함
+						const errorMessage = `Tool "${toolName}" has reached its maximum call limit (${MAX_CALLS_PER_TOOL} calls). Please provide a response to the user without using this tool further.`;
+						yield {
+							event: "tool_error",
+							data: {
+								toolCallId: randomUUID(),
+								toolName,
+								error: errorMessage,
+							},
+						};
+						modelInstance.appendMessages(messages, errorMessage);
 						continue;
 					}
 					toolCallCount[toolName] = currentCount + 1;

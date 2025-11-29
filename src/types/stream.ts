@@ -21,6 +21,14 @@ export type StreamEvent =
 				result: unknown;
 			};
 	  }
+	| {
+			event: "tool_error";
+			data: {
+				toolCallId: string;
+				toolName: string;
+				error: string;
+			};
+	  }
 	| { event: "error"; data: { message: string } }
 	| { event: "thread_id"; data: ThreadMetadata }
 	| { event: "intent_process"; data: { subquery: string; actionPlan: string } };
