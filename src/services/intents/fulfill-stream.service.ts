@@ -112,6 +112,8 @@ ${intent?.prompt || ""}
 		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
 
 		const processList: string[] = [];
+		const toolCallCount: Record<string, number> = {};
+		const MAX_CALLS_PER_TOOL = 5;
 
 		while (true) {
 			const functions = modelInstance.convertToolsToFunctions(tools);
@@ -160,18 +162,30 @@ ${intent?.prompt || ""}
 					const toolCallId = randomUUID();
 					const toolName = toolCall.function.name;
 					let selectedTool: ConnectorTool | undefined;
-					for (const [index, toolTmp] of tools.entries()) {
+					for (const toolTmp of tools) {
 						if (toolTmp.toolName === toolName) {
-							// remove used tool to prevent infinite loop
-							selectedTool = tools.splice(index, 1)[0];
+							selectedTool = toolTmp;
 							break;
 						}
 					}
 
 					if (!selectedTool) {
 						// it cannot be happened...
+						loggers.intentStream.warn("Tool not found", { toolName });
 						continue;
 					}
+
+					// 호출 횟수 제한으로 무한 루프 방지 (splice 대신)
+					const currentCount = toolCallCount[toolName] ?? 0;
+					if (currentCount >= MAX_CALLS_PER_TOOL) {
+						loggers.intentStream.warn("Tool call limit exceeded", {
+							toolName,
+							count: currentCount,
+							max: MAX_CALLS_PER_TOOL,
+						});
+						continue;
+					}
+					toolCallCount[toolName] = currentCount + 1;
 
 					let toolResult = "";
 					if (
