@@ -15,7 +15,6 @@ export const createQueryRouter = (
 		agent.a2aModule,
 		agent.mcpModule,
 		agent.memoryModule,
-		agent.manifest.prompts,
 	);
 
 	let queryStreamService: QueryStreamService | undefined;
@@ -26,7 +25,6 @@ export const createQueryRouter = (
 			agent.a2aModule,
 			agent.mcpModule,
 			agent.memoryModule,
-			agent.manifest.prompts,
 		);
 	}
 

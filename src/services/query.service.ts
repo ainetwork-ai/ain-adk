@@ -6,7 +6,7 @@ import type {
 	MemoryModule,
 	ModelModule,
 } from "@/modules/index.js";
-import { type AinAgentPrompts, AinHttpError } from "@/types/agent.js";
+import { AinHttpError } from "@/types/agent.js";
 import {
 	MessageRole,
 	type ThreadMetadata,
@@ -36,7 +36,6 @@ export class QueryService {
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		memoryModule?: MemoryModule,
-		prompts?: AinAgentPrompts,
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
@@ -49,7 +48,6 @@ export class QueryService {
 			a2aModule,
 			mcpModule,
 			memoryModule,
-			prompts,
 		);
 	}
 

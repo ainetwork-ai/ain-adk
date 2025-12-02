@@ -5,7 +5,6 @@ import type {
 	MemoryModule,
 	ModelModule,
 } from "@/modules";
-import type { AinAgentPrompts } from "@/types/agent";
 import { CONNECTOR_PROTOCOL_TYPE, type ConnectorTool } from "@/types/connector";
 import {
 	type Intent,
@@ -22,20 +21,17 @@ export class IntentFulfillStreamService {
 	private a2aModule?: A2AModule;
 	private mcpModule?: MCPModule;
 	private memoryModule?: MemoryModule;
-	private prompts?: AinAgentPrompts;
 
 	constructor(
 		modelModule: ModelModule,
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		memoryModule?: MemoryModule,
-		prompts?: AinAgentPrompts,
 	) {
 		this.modelModule = modelModule;
 		this.a2aModule = a2aModule;
 		this.mcpModule = mcpModule;
 		this.memoryModule = memoryModule;
-		this.prompts = prompts;
 	}
 
 	private async addToThreadMessages(
