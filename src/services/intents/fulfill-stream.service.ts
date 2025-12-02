@@ -137,6 +137,11 @@ ${intent?.prompt || ""}
 			systemPrompt: systemPrompt.trim(),
 		});
 
+		loggers.intent.debug("Intent fulfillment start", {
+			threadId: thread.threadId,
+			messages,
+		});
+
 		const tools: ConnectorTool[] = [];
 		this.mcpModule && tools.push(...this.mcpModule.getTools());
 		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
@@ -155,8 +160,6 @@ ${intent?.prompt || ""}
 				type: "function";
 				function: { name: string; arguments: string };
 			}[] = [];
-
-			loggers.intentStream.info("messages", { messages });
 
 			for await (const chunk of responseStream) {
 				const delta = chunk.delta;
@@ -182,6 +185,7 @@ ${intent?.prompt || ""}
 			}
 
 			loggers.intentStream.debug("assembledToolCalls", {
+				threadId: thread.threadId,
 				assembledToolCalls,
 			});
 
@@ -257,7 +261,8 @@ ${intent?.prompt || ""}
 							result: toolResult,
 						},
 					};
-					loggers.intent.debug("toolResult", { toolResult });
+
+					loggers.intent.debug("Tool Result", { toolResult });
 
 					processList.push(toolResult);
 					modelInstance.appendMessages(messages, toolResult);
@@ -269,7 +274,7 @@ ${intent?.prompt || ""}
 			}
 		}
 
-		loggers.intentStream.info("Intent fulfillment completed", {
+		loggers.intent.debug("Intent fulfillment completed", {
 			threadId: thread.threadId,
 			toolCallsExecuted: processList.length,
 			intentName: intent?.name,

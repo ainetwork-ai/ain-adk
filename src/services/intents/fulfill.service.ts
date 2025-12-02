@@ -132,22 +132,30 @@ ${intent?.prompt || ""}
 			systemPrompt: systemPrompt.trim(),
 		});
 
+		loggers.intent.debug("Intent fulfillment start", {
+			threadId: thread.threadId,
+			messages,
+		});
+
 		const tools: ConnectorTool[] = [];
 		this.mcpModule && tools.push(...this.mcpModule.getTools());
 		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
 
 		const functions = modelInstance.convertToolsToFunctions(tools);
-		let finalMessage = "";
 
+		let finalMessage = "";
 		while (true) {
 			const response = await modelInstance.fetchWithContextMessage(
 				messages,
 				functions,
 			);
 
-			loggers.intentStream.info("messages", { messages });
-
 			const { content, toolCalls } = response;
+			loggers.intent.debug("Tool calls", {
+				threadId: thread.threadId,
+				content,
+				toolCalls,
+			});
 
 			if (toolCalls) {
 				for (const toolCall of toolCalls) {
@@ -183,7 +191,10 @@ ${intent?.prompt || ""}
 						continue;
 					}
 
-					loggers.intent.debug("toolResult", { toolResult });
+					loggers.intent.debug("Tool Result", {
+						threadId: thread.threadId,
+						toolResult,
+					});
 
 					modelInstance.appendMessages(messages, toolResult);
 				}
