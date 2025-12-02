@@ -84,11 +84,8 @@ export class IntentFulfillStreamService {
 		thread: ThreadObject,
 		intent?: Intent,
 	): AsyncGenerator<StreamEvent> {
-		loggers.intentStream.info("Intent fulfillment started", {
-			threadId: thread.threadId,
-			query: query.substring(0, 100) + (query.length > 100 ? "..." : ""),
-			intentName: intent?.name,
-		});
+		const agentMemory = this.memoryModule?.getAgentMemory();
+		const agentPrompt = agentMemory ? await agentMemory.getAgentPrompt() : "";
 
 		const systemPrompt = `
 Today is ${new Date().toLocaleDateString()}.
@@ -128,7 +125,7 @@ Refer to the usage instructions below for each <tool_type>.
    There is no need to supplement the content with the same question or use new tools.
 </A2A_Tool>
 
-${this.prompts?.agent || ""}
+${agentPrompt}
 
 ${intent?.prompt || ""}
 	`.trim();
