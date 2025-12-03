@@ -122,6 +122,7 @@ ${intent?.prompt || ""}
 	`.trim();
 
 		const modelInstance = this.modelModule.getModel();
+		const modelOptions = this.modelModule.getModelOptions();
 		const messages = modelInstance.generateMessages({
 			query,
 			thread,
@@ -144,6 +145,7 @@ ${intent?.prompt || ""}
 			const response = await modelInstance.fetchWithContextMessage(
 				messages,
 				functions,
+				modelOptions,
 			);
 
 			const { content, toolCalls } = response;

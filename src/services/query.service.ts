@@ -62,6 +62,7 @@ export class QueryService {
 		const DEFAULT_TITLE = "New Chat";
 		try {
 			const modelInstance = this.modelModule.getModel();
+			const modelOptions = this.modelModule.getModelOptions();
 			const messages = modelInstance.generateMessages({
 				query,
 				systemPrompt: `
@@ -72,7 +73,7 @@ The title must be no more than 5 words long.
 Respond with only the title. Do not include any punctuation or extra explanations.
 Always respond in the same language as the user's input.`,
 			});
-			const response = await modelInstance.fetch(messages);
+			const response = await modelInstance.fetch(messages, modelOptions);
 			return response.content || DEFAULT_TITLE;
 		} catch (error) {
 			loggers.intent.error("Error generating title", {
