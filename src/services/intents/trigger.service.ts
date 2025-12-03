@@ -27,6 +27,7 @@ export class IntentTriggerService {
 		thread: ThreadObject | undefined,
 	): Promise<Array<TriggeredIntent>> {
 		const modelInstance = this.modelModule.getModel();
+		const modelOptions = this.modelModule.getModelOptions();
 		const intentMemory = this.memoryModule?.getIntentMemory();
 		if (!intentMemory) {
 			return [{ subquery: query }];
@@ -120,7 +121,7 @@ Requirements:
 			systemPrompt,
 		});
 
-		const response = await modelInstance.fetch(messages);
+		const response = await modelInstance.fetch(messages, modelOptions);
 		if (!response.content) {
 			loggers.intent.warn("Cannot extract intent from query");
 			return [{ subquery: query }];

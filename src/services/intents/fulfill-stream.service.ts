@@ -127,6 +127,7 @@ ${intent?.prompt || ""}
 	`.trim();
 
 		const modelInstance = this.modelModule.getModel();
+		const modelOptions = this.modelModule.getModelOptions();
 		const messages = modelInstance.generateMessages({
 			query,
 			thread,
@@ -149,6 +150,7 @@ ${intent?.prompt || ""}
 			const responseStream = await modelInstance.fetchStreamWithContextMessage(
 				messages,
 				functions,
+				modelOptions,
 			);
 
 			const assembledToolCalls: {
