@@ -6,7 +6,7 @@ import type {
 	MemoryModule,
 	ModelModule,
 } from "@/modules/index.js";
-import { type AinAgentPrompts, AinHttpError } from "@/types/agent.js";
+import { AinHttpError } from "@/types/agent.js";
 import {
 	MessageRole,
 	type ThreadMetadata,
@@ -37,7 +37,6 @@ export class QueryStreamService {
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		memoryModule?: MemoryModule,
-		prompts?: AinAgentPrompts,
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
@@ -50,7 +49,6 @@ export class QueryStreamService {
 			a2aModule,
 			mcpModule,
 			memoryModule,
-			prompts,
 		);
 	}
 
@@ -65,6 +63,7 @@ export class QueryStreamService {
 		const DEFAULT_TITLE = "New Chat";
 		try {
 			const modelInstance = this.modelModule.getModel();
+			const modelOptions = this.modelModule.getModelOptions();
 			const messages = modelInstance.generateMessages({
 				query,
 				systemPrompt: `Today's date: ${new Date().toISOString().split("T")[0]} (YYYY-MM-DD format).
@@ -73,7 +72,7 @@ export class QueryStreamService {
   The title must be no more than 5 words long.
   Respond with only the title. Do not include any punctuation or extra explanations.`,
 			});
-			const response = await modelInstance.fetch(messages);
+			const response = await modelInstance.fetch(messages, modelOptions);
 			return response.content || DEFAULT_TITLE;
 		} catch (error) {
 			loggers.intentStream.error("Error generating title", {

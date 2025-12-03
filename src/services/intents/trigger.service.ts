@@ -27,6 +27,7 @@ export class IntentTriggerService {
 		thread: ThreadObject | undefined,
 	): Promise<Array<TriggeredIntent>> {
 		const modelInstance = this.modelModule.getModel();
+		const modelOptions = this.modelModule.getModelOptions();
 		const intentMemory = this.memoryModule?.getIntentMemory();
 		if (!intentMemory) {
 			return [{ subquery: query }];
@@ -70,13 +71,16 @@ You are an expert in accurately identifying user intentions.
 Available intent list:
 ${intentList}
 
-Please select and answer only from the above intent list. 
-Please return only the exact intent name without any additional explanations or text.`;
+Please select and answer only from the above intent list.`;
 
-		const userMessage = `The following is the conversation history with the user:
+		const userMessage = `
+${
+	threadMessages !== ""
+		? `The following is the conversation history with the user: ${threadMessages}
 
-${threadMessages}
-
+	`
+		: ""
+}
 Last user question: "${query}"
 
 Based on the above conversation history, analyze the last user question and identify all relevant intents.
@@ -117,7 +121,7 @@ Requirements:
 			systemPrompt,
 		});
 
-		const response = await modelInstance.fetch(messages);
+		const response = await modelInstance.fetch(messages, modelOptions);
 		if (!response.content) {
 			loggers.intent.warn("Cannot extract intent from query");
 			return [{ subquery: query }];

@@ -1,4 +1,4 @@
-import type { BaseModel } from "./base.model.js";
+import type { BaseModel, ModelFetchOptions } from "./base.model.js";
 
 /**
  * Module for managing multiple AI model implementations.
@@ -20,6 +20,7 @@ import type { BaseModel } from "./base.model.js";
 export class ModelModule {
 	/** Registry of available models indexed by name */
 	private models: { [name: string]: BaseModel<unknown, unknown> } = {};
+	private options: { [name: string]: ModelFetchOptions } = {};
 	/** Name of the default model to use when none specified */
 	private defaultModelName?: string;
 
@@ -33,9 +34,11 @@ export class ModelModule {
 	public addModel(
 		name: string,
 		model: BaseModel<unknown, unknown>,
+		options?: ModelFetchOptions,
 		isDefault?: boolean,
 	) {
 		this.models[name] = model;
+		this.options[name] = options || {};
 		if (isDefault || !this.defaultModelName) {
 			this.defaultModelName = name;
 		}
@@ -57,6 +60,17 @@ export class ModelModule {
 			return this.models[this.defaultModelName];
 		}
 		return this.models[name];
+	}
+
+	public getModelOptions(name?: string): ModelFetchOptions {
+		if (!this.defaultModelName) {
+			throw Error("No default model");
+		}
+
+		if (!name || !this.models[name]) {
+			return this.options[this.defaultModelName];
+		}
+		return this.options[name];
 	}
 
 	/**
