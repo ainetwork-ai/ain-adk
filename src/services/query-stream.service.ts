@@ -4,9 +4,10 @@ import type {
 	A2AModule,
 	MCPModule,
 	MemoryModule,
+	ModelFetchOptions,
 	ModelModule,
 } from "@/modules/index.js";
-import { type AinAgentPrompts, AinHttpError } from "@/types/agent.js";
+import { AinHttpError } from "@/types/agent.js";
 import {
 	MessageRole,
 	type ThreadMetadata,
@@ -18,6 +19,7 @@ import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
 import { IntentFulfillStreamService } from "./intents/fulfill-stream.service";
 import { IntentTriggerService } from "./intents/trigger.service";
+import { generateTitle } from "./utils/query.common";
 
 /**
  * Service for processing user queries through the agent's AI pipeline.
@@ -37,7 +39,6 @@ export class QueryStreamService {
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		memoryModule?: MemoryModule,
-		prompts?: AinAgentPrompts,
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
@@ -50,38 +51,7 @@ export class QueryStreamService {
 			a2aModule,
 			mcpModule,
 			memoryModule,
-			prompts,
 		);
-	}
-
-	/**
-	 * Generates a title for the conversation based on the query.
-	 *
-	 * @param query - The user's input query
-	 * @returns Promise resolving to a generated title
-	 */
-
-	private async generateTitle(query: string): Promise<string> {
-		const DEFAULT_TITLE = "New Chat";
-		try {
-			const modelInstance = this.modelModule.getModel();
-			const messages = modelInstance.generateMessages({
-				query,
-				systemPrompt: `Today's date: ${new Date().toISOString().split("T")[0]} (YYYY-MM-DD format).
-	You are a helpful assistant that generates titles for conversations.
-  Please analyze the user's query and create a concise title that accurately reflects the conversation's core topic.
-  The title must be no more than 5 words long.
-  Respond with only the title. Do not include any punctuation or extra explanations.`,
-			});
-			const response = await modelInstance.fetch(messages);
-			return response.content || DEFAULT_TITLE;
-		} catch (error) {
-			loggers.intentStream.error("Error generating title", {
-				error,
-				query,
-			});
-			return DEFAULT_TITLE;
-		}
 	}
 
 	/**
@@ -105,11 +75,12 @@ export class QueryStreamService {
 			type: ThreadType;
 			userId: string;
 			threadId?: string;
+			options?: ModelFetchOptions;
 		},
 		query: string,
 		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
-		const { type, userId } = threadMetadata;
+		const { type, userId, options } = threadMetadata;
 		const threadMemory = this.memoryModule?.getThreadMemory();
 
 		// 1. Load or create thread
@@ -124,7 +95,7 @@ export class QueryStreamService {
 
 		threadId ??= randomUUID();
 		if (!thread) {
-			const title = await this.generateTitle(query);
+			const title = await generateTitle(this.modelModule, query, options);
 			const metadata: ThreadMetadata = (await threadMemory?.createThread(
 				type,
 				userId,

@@ -7,18 +7,21 @@ import type {
 } from "@/types/memory";
 
 /**
- * Base interface for all memory implementations
+ * Memory connection interface - manages the underlying connection
  */
 export interface IMemory {
 	connect(): Promise<void>;
 	disconnect(): Promise<void>;
 	isConnected(): boolean;
+	getThreadMemory(): IThreadMemory;
+	getIntentMemory(): IIntentMemory;
+	getAgentMemory(): IAgentMemory;
 }
 
 /**
- * Thread memory interface
+ * Thread memory interface - handles thread operations
  */
-export interface IThreadMemory extends IMemory {
+export interface IThreadMemory {
 	getThread(
 		userId: string,
 		threadId: string,
@@ -39,9 +42,9 @@ export interface IThreadMemory extends IMemory {
 }
 
 /**
- * Intent memory interface
+ * Intent memory interface - handles intent operations
  */
-export interface IIntentMemory extends IMemory {
+export interface IIntentMemory {
 	getIntent(intentId: string): Promise<Intent | undefined>;
 	getIntentByName(intentName: string): Promise<Intent | undefined>;
 	saveIntent(intent: Intent): Promise<void>;
@@ -53,4 +56,7 @@ export interface IIntentMemory extends IMemory {
 /**
  * Agent memory interface for storing agent configuration
  */
-export interface IAgentMemory extends IMemory {}
+export interface IAgentMemory {
+	getAgentPrompt(): Promise<string>;
+	updateAgentPrompt(prompt: string): Promise<void>;
+}

@@ -1,18 +1,6 @@
 import type { StatusCodes } from "http-status-codes";
 
 /**
- * Custom prompts configuration for the agent.
- *
- * Allows customization of agent behavior through system and agent-level prompts.
- */
-export type AinAgentPrompts = {
-	/** Agent-level prompt that defines the agent's personality and behavior */
-	agent?: string;
-	/** System-level prompt that provides context and instructions */
-	system?: string;
-};
-
-/**
  * Agent manifest containing essential metadata and configuration.
  *
  * The manifest defines the agent's identity, version, and optional configuration
@@ -39,8 +27,6 @@ export type AinAgentManifest = {
 	description: string;
 	/** Optional public URL for A2A protocol discovery and communication */
 	url?: string;
-	/** Optional custom prompts to configure agent behavior */
-	prompts?: AinAgentPrompts;
 };
 
 export class AinHttpError extends Error {

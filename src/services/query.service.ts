@@ -4,9 +4,10 @@ import type {
 	A2AModule,
 	MCPModule,
 	MemoryModule,
+	ModelFetchOptions,
 	ModelModule,
 } from "@/modules/index.js";
-import { type AinAgentPrompts, AinHttpError } from "@/types/agent.js";
+import { AinHttpError } from "@/types/agent.js";
 import {
 	MessageRole,
 	type ThreadMetadata,
@@ -17,6 +18,7 @@ import {
 import { loggers } from "@/utils/logger.js";
 import { IntentFulfillService } from "./intents/fulfill.service";
 import { IntentTriggerService } from "./intents/trigger.service";
+import { generateTitle } from "./utils/query.common";
 
 /**
  * Service for processing user queries through the agent's AI pipeline.
@@ -36,7 +38,6 @@ export class QueryService {
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		memoryModule?: MemoryModule,
-		prompts?: AinAgentPrompts,
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
@@ -49,37 +50,7 @@ export class QueryService {
 			a2aModule,
 			mcpModule,
 			memoryModule,
-			prompts,
 		);
-	}
-
-	/**
-	 * Generates a title for the conversation based on the query.
-	 *
-	 * @param query - The user's input query
-	 * @returns Promise resolving to a generated title
-	 */
-
-	private async generateTitle(query: string): Promise<string> {
-		const DEFAULT_TITLE = "New Chat";
-		try {
-			const modelInstance = this.modelModule.getModel();
-			const messages = modelInstance.generateMessages({
-				query,
-				systemPrompt: `You are a helpful assistant that generates titles for conversations.
-  Please analyze the user's query and create a concise title that accurately reflects the conversation's core topic.
-  The title must be no more than 5 words long.
-  Respond with only the title. Do not include any punctuation or extra explanations.`,
-			});
-			const response = await modelInstance.fetch(messages);
-			return response.content || DEFAULT_TITLE;
-		} catch (error) {
-			loggers.intent.error("Error generating title", {
-				error,
-				query,
-			});
-			return DEFAULT_TITLE;
-		}
 	}
 
 	/**
@@ -103,11 +74,12 @@ export class QueryService {
 			type: ThreadType;
 			userId: string;
 			threadId?: string;
+			options?: ModelFetchOptions;
 		},
 		query: string,
 		isA2A?: boolean,
 	) {
-		const { type, userId } = threadMetadata;
+		const { type, userId, options } = threadMetadata;
 		const threadMemory = this.memoryModule?.getThreadMemory();
 
 		// 1. Load or create thread
@@ -122,7 +94,7 @@ export class QueryService {
 
 		threadId ??= randomUUID();
 		if (!thread) {
-			const title = await this.generateTitle(query);
+			const title = await generateTitle(this.modelModule, query, options);
 			const metadata: ThreadMetadata = (await threadMemory?.createThread(
 				type,
 				userId,
@@ -136,6 +108,7 @@ export class QueryService {
 		// 2. intent triggering
 		const triggeredIntent: Array<TriggeredIntent> =
 			await this.intentTriggerService.intentTriggering(query, thread);
+		loggers.intent.debug("Triggered intents", { triggeredIntent });
 
 		// only add for storage, not for inference
 		await threadMemory?.addMessagesToThread(userId, threadId, [

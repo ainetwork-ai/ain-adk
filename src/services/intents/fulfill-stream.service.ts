@@ -5,7 +5,6 @@ import type {
 	MemoryModule,
 	ModelModule,
 } from "@/modules";
-import type { AinAgentPrompts } from "@/types/agent";
 import { CONNECTOR_PROTOCOL_TYPE, type ConnectorTool } from "@/types/connector";
 import {
 	type Intent,
@@ -16,26 +15,24 @@ import {
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
+import { createFulfillPrompt } from "../utils/fulfill.common";
 
 export class IntentFulfillStreamService {
 	private modelModule: ModelModule;
 	private a2aModule?: A2AModule;
 	private mcpModule?: MCPModule;
 	private memoryModule?: MemoryModule;
-	private prompts?: AinAgentPrompts;
 
 	constructor(
 		modelModule: ModelModule,
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		memoryModule?: MemoryModule,
-		prompts?: AinAgentPrompts,
 	) {
 		this.modelModule = modelModule;
 		this.a2aModule = a2aModule;
 		this.mcpModule = mcpModule;
 		this.memoryModule = memoryModule;
-		this.prompts = prompts;
 	}
 
 	private async addToThreadMessages(
@@ -84,27 +81,20 @@ export class IntentFulfillStreamService {
 		thread: ThreadObject,
 		intent?: Intent,
 	): AsyncGenerator<StreamEvent> {
-		loggers.intentStream.info("Intent fulfillment started", {
-			threadId: thread.threadId,
-			query: query.substring(0, 100) + (query.length > 100 ? "..." : ""),
-			intentName: intent?.name,
-		});
-
-		const systemPrompt = `
-Today is ${new Date().toLocaleDateString()}.
-
-${this.prompts?.agent || ""}
-
-${this.prompts?.system || ""}
-
-${intent?.prompt || ""}
-	`.trim();
+		const agentMemory = this.memoryModule?.getAgentMemory();
+		const fulfillPrompt = await createFulfillPrompt(agentMemory, intent);
 
 		const modelInstance = this.modelModule.getModel();
+		const modelOptions = this.modelModule.getModelOptions();
 		const messages = modelInstance.generateMessages({
 			query,
 			thread,
-			systemPrompt: systemPrompt.trim(),
+			systemPrompt: fulfillPrompt.trim(),
+		});
+
+		loggers.intent.debug("Intent fulfillment start", {
+			threadId: thread.threadId,
+			messages,
 		});
 
 		const tools: ConnectorTool[] = [];
@@ -118,6 +108,7 @@ ${intent?.prompt || ""}
 			const responseStream = await modelInstance.fetchStreamWithContextMessage(
 				messages,
 				functions,
+				modelOptions,
 			);
 
 			const assembledToolCalls: {
@@ -125,8 +116,6 @@ ${intent?.prompt || ""}
 				type: "function";
 				function: { name: string; arguments: string };
 			}[] = [];
-
-			loggers.intentStream.info("messages", { messages });
 
 			for await (const chunk of responseStream) {
 				const delta = chunk.delta;
@@ -152,6 +141,7 @@ ${intent?.prompt || ""}
 			}
 
 			loggers.intentStream.debug("assembledToolCalls", {
+				threadId: thread.threadId,
 				assembledToolCalls,
 			});
 
@@ -227,7 +217,8 @@ ${intent?.prompt || ""}
 							result: toolResult,
 						},
 					};
-					loggers.intent.debug("toolResult", { toolResult });
+
+					loggers.intent.debug("Tool Result", { toolResult });
 
 					processList.push(toolResult);
 					modelInstance.appendMessages(messages, toolResult);
@@ -239,7 +230,7 @@ ${intent?.prompt || ""}
 			}
 		}
 
-		loggers.intentStream.info("Intent fulfillment completed", {
+		loggers.intent.debug("Intent fulfillment completed", {
 			threadId: thread.threadId,
 			toolCallsExecuted: processList.length,
 			intentName: intent?.name,

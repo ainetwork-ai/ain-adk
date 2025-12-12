@@ -5,7 +5,6 @@ import type {
 	MemoryModule,
 	ModelModule,
 } from "@/modules";
-import type { AinAgentPrompts } from "@/types/agent";
 import { CONNECTOR_PROTOCOL_TYPE, type ConnectorTool } from "@/types/connector";
 import {
 	type Intent,
@@ -15,26 +14,24 @@ import {
 	type TriggeredIntent,
 } from "@/types/memory";
 import { loggers } from "@/utils/logger";
+import { createFulfillPrompt } from "../utils/fulfill.common";
 
 export class IntentFulfillService {
 	private modelModule: ModelModule;
 	private a2aModule?: A2AModule;
 	private mcpModule?: MCPModule;
 	private memoryModule?: MemoryModule;
-	private prompts?: AinAgentPrompts;
 
 	constructor(
 		modelModule: ModelModule,
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		memoryModule?: MemoryModule,
-		prompts?: AinAgentPrompts,
 	) {
 		this.modelModule = modelModule;
 		this.a2aModule = a2aModule;
 		this.mcpModule = mcpModule;
 		this.memoryModule = memoryModule;
-		this.prompts = prompts;
 	}
 
 	private async addToThreadMessages(
@@ -79,21 +76,20 @@ export class IntentFulfillService {
 		thread: ThreadObject,
 		intent?: Intent,
 	): Promise<string> {
-		const systemPrompt = `
-Today is ${new Date().toLocaleDateString()}.
-
-${this.prompts?.agent || ""}
-
-${this.prompts?.system || ""}
-
-${intent?.prompt || ""}
-	`.trim();
+		const agentMemory = this.memoryModule?.getAgentMemory();
+		const fulfillPrompt = await createFulfillPrompt(agentMemory, intent);
 
 		const modelInstance = this.modelModule.getModel();
+		const modelOptions = this.modelModule.getModelOptions();
 		const messages = modelInstance.generateMessages({
 			query,
 			thread,
-			systemPrompt: systemPrompt.trim(),
+			systemPrompt: fulfillPrompt.trim(),
+		});
+
+		loggers.intent.debug("Intent fulfillment start", {
+			threadId: thread.threadId,
+			messages,
 		});
 
 		const tools: ConnectorTool[] = [];
@@ -101,17 +97,21 @@ ${intent?.prompt || ""}
 		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
 
 		const functions = modelInstance.convertToolsToFunctions(tools);
-		let finalMessage = "";
 
+		let finalMessage = "";
 		while (true) {
 			const response = await modelInstance.fetchWithContextMessage(
 				messages,
 				functions,
+				modelOptions,
 			);
 
-			loggers.intentStream.info("messages", { messages });
-
 			const { content, toolCalls } = response;
+			loggers.intent.debug("Tool calls", {
+				threadId: thread.threadId,
+				content,
+				toolCalls,
+			});
 
 			if (toolCalls) {
 				for (const toolCall of toolCalls) {
@@ -147,7 +147,10 @@ ${intent?.prompt || ""}
 						continue;
 					}
 
-					loggers.intent.debug("toolResult", { toolResult });
+					loggers.intent.debug("Tool Result", {
+						threadId: thread.threadId,
+						toolResult,
+					});
 
 					modelInstance.appendMessages(messages, toolResult);
 				}
