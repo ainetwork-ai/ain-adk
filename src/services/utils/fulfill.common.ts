@@ -46,7 +46,5 @@ Refer to the usage instructions below for each <tool_type>.
 </A2A_Tool>
 
 ${agentPrompt}
-
-${intent?.prompt || ""}
 	`.trim();
 }

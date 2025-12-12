@@ -87,7 +87,7 @@ export class IntentFulfillStreamService {
 		const modelInstance = this.modelModule.getModel();
 		const modelOptions = this.modelModule.getModelOptions();
 		const messages = modelInstance.generateMessages({
-			query,
+			query: (intent?.prompt || query).trim(),
 			thread,
 			systemPrompt: fulfillPrompt.trim(),
 		});
