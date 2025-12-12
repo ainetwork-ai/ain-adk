@@ -152,9 +152,12 @@ export class IntentFulfillStreamService {
 					let selectedTool: ConnectorTool | undefined;
 					for (const [index, toolTmp] of tools.entries()) {
 						if (toolTmp.toolName === toolName) {
-							// remove used tool to prevent infinite loop
-							selectedTool = tools.splice(index, 1)[0];
-							break;
+							if (toolTmp.protocol === CONNECTOR_PROTOCOL_TYPE.A2A) {
+								// remove used tool to prevent infinite loop
+								selectedTool = tools.splice(index, 1)[0];
+								break;
+							}
+							selectedTool = toolTmp;
 						}
 					}
 
