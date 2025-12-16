@@ -88,7 +88,7 @@ export class IntentFulfillStreamService {
 		const modelOptions = this.modelModule.getModelOptions();
 		const messages = modelInstance.generateMessages({
 			query: `
-			${query}
+			User query: "${query}"
 
 			${(intent?.prompt || "").trim()}
 			`,
