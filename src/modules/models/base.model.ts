@@ -1,6 +1,11 @@
+import type { ConnectorTool, FetchResponse } from "@/types/connector.js";
 import type { ThreadObject } from "@/types/memory.js";
 import type { LLMStream } from "@/types/stream.js";
-import type { FetchResponse, IAgentTool } from "@/types/tool.js";
+
+export type ModelFetchOptions = {
+	reasoning?: "none" | "minimal" | "low" | "medium" | "high";
+	verbosity?: "low" | "medium" | "high";
+};
 
 /**
  * Abstract base class for AI model implementations.
@@ -41,7 +46,7 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	 * @param tools - Array of agent tools from MCP or A2A sources
 	 * @returns Array of functions in the format required by the model API
 	 */
-	abstract convertToolsToFunctions(tools: IAgentTool[]): FunctionType[];
+	abstract convertToolsToFunctions(tools: ConnectorTool[]): FunctionType[];
 
 	/**
 	 * Fetches a response from the model API without tool support.
@@ -49,7 +54,10 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	 * @param messages - Array of messages to send to the model
 	 * @returns Promise resolving to the model's response
 	 */
-	abstract fetch(messages: MessageType[]): Promise<FetchResponse>;
+	abstract fetch(
+		messages: MessageType[],
+		options?: ModelFetchOptions,
+	): Promise<FetchResponse>;
 
 	/**
 	 * Fetches a response from the model API with tool/function support.
@@ -61,6 +69,7 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	abstract fetchWithContextMessage(
 		messages: MessageType[],
 		functions: FunctionType[],
+		options?: ModelFetchOptions,
 	): Promise<FetchResponse>;
 
 	/**
@@ -77,5 +86,6 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	abstract fetchStreamWithContextMessage(
 		messages: MessageType[],
 		functions: FunctionType[],
+		options?: ModelFetchOptions,
 	): Promise<LLMStream>;
 }

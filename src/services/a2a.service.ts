@@ -7,18 +7,18 @@ import type {
 } from "@a2a-js/sdk/server";
 import type { ThreadType } from "@/types/memory.js";
 import { loggers } from "@/utils/logger.js";
-import type { QueryService } from "./query.service.js";
+import type { QueryStreamService } from "./query-stream.service.js";
 
 /**
  * Implements the AgentExecutor interface from the a2a-js-sdk.
  * This service is responsible for the core business logic of executing an A2A task.
  */
 export class A2AService implements AgentExecutor {
-	private queryService: QueryService;
+	private queryStreamService: QueryStreamService;
 	private canceledTasks: Set<string> = new Set<string>();
 
-	constructor(queryService: QueryService) {
-		this.queryService = queryService;
+	constructor(queryStreamService: QueryStreamService) {
+		this.queryStreamService = queryStreamService;
 	}
 
 	public cancelTask = async (
@@ -61,22 +61,22 @@ export class A2AService implements AgentExecutor {
 		eventBus: ExecutionEventBus,
 	): Promise<void> {
 		const userMessage = requestContext.userMessage;
-		const { agentId, type, threadId } = userMessage.metadata as {
+		// A2A context ID === AIN ADK thread ID
+		const threadId = userMessage.contextId!; // TODO: no context id case
+
+		const { agentId, type } = userMessage.metadata as {
 			agentId: string;
 			type: ThreadType;
-			threadId: string;
 		};
 		const existingTask = requestContext.task;
 
 		const taskId = existingTask?.id || randomUUID();
-		const contextId =
-			userMessage.contextId || existingTask?.contextId || randomUUID();
 
 		if (!existingTask) {
 			const initialTask: Task = {
 				kind: "task",
 				id: taskId,
-				contextId: contextId,
+				contextId: threadId,
 				status: {
 					state: "submitted",
 					timestamp: new Date().toISOString(),
@@ -90,7 +90,7 @@ export class A2AService implements AgentExecutor {
 
 		const workingStatusUpdate = this.createTaskStatusUpdateEvent(
 			taskId,
-			contextId,
+			threadId,
 			"working",
 		);
 		eventBus.publish(workingStatusUpdate);
@@ -103,7 +103,7 @@ export class A2AService implements AgentExecutor {
 			loggers.server.warn(`Empty message received for task ${taskId}.`);
 			const failureUpdate = this.createTaskStatusUpdateEvent(
 				taskId,
-				contextId,
+				threadId,
 				"failed",
 				"No message found to process.",
 			);
@@ -111,28 +111,52 @@ export class A2AService implements AgentExecutor {
 			return;
 		}
 
-		try {
-			const response = await this.queryService.handleQuery(
-				{ userId: agentId, type, threadId },
-				message,
-			);
+		const stream = this.queryStreamService.handleQueryStream(
+			{ userId: agentId, type, threadId },
+			message,
+			true,
+		);
 
-			if (this.canceledTasks.has(taskId)) {
-				loggers.server.info(`Task ${taskId} was canceled.`);
-				const canceledUpdate = this.createTaskStatusUpdateEvent(
-					taskId,
-					contextId,
-					"canceled",
-				);
-				eventBus.publish(canceledUpdate);
-				return;
+		try {
+			let finalResponseText = "";
+			for await (const event of stream) {
+				if (this.canceledTasks.has(taskId)) {
+					loggers.server.info(`Task ${taskId} was canceled.`);
+					const canceledUpdate = this.createTaskStatusUpdateEvent(
+						taskId,
+						threadId,
+						"canceled",
+					);
+					eventBus.publish(canceledUpdate);
+					return;
+				}
+
+				if (event.event === "text_chunk") {
+					finalResponseText += event.data.delta;
+				} else if (event.event === "tool_start") {
+					const toolStartUpdate = this.createTaskStatusUpdateEvent(
+						taskId,
+						threadId,
+						"working",
+						JSON.stringify(event.data),
+					);
+					eventBus.publish(toolStartUpdate);
+				} else if (event.event === "tool_output") {
+					const toolOutputUpdate = this.createTaskStatusUpdateEvent(
+						taskId,
+						threadId,
+						"working",
+						JSON.stringify(event.data),
+					);
+					eventBus.publish(toolOutputUpdate);
+				}
 			}
 
 			const finalUpdate = this.createTaskStatusUpdateEvent(
 				taskId,
-				contextId,
+				threadId,
 				"completed",
-				response.content,
+				finalResponseText,
 			);
 			eventBus.publish(finalUpdate);
 			loggers.server.info(`Task ${taskId} completed successfully.`);
@@ -140,7 +164,7 @@ export class A2AService implements AgentExecutor {
 			loggers.server.error(`Error processing task ${taskId}:`, error);
 			const errorUpdate = this.createTaskStatusUpdateEvent(
 				taskId,
-				contextId,
+				threadId,
 				"failed",
 				`Agent error: ${error.message}`,
 			);

@@ -8,19 +8,13 @@ import type {
 	TextPart,
 } from "@a2a-js/sdk";
 import { A2AClient } from "@a2a-js/sdk/client";
+import {
+	CONNECTOR_PROTOCOL_TYPE,
+	type ConnectorTool,
+} from "@/types/connector.js";
 import { ThreadType } from "@/types/memory.js";
 import { loggers } from "@/utils/logger.js";
-import { A2ATool } from "./a2a.tool.js";
-
-/**
- * Represents an active A2A communication session.
- */
-interface A2ASession {
-	/** Current task ID for multi-turn conversations */
-	taskId: string | undefined;
-	/** Context ID for maintaining conversation state */
-	contextId: string | undefined;
-}
+import { A2AConnector } from "./a2a.connector.js";
 
 /**
  * Module for managing Agent-to-Agent (A2A) protocol connections.
@@ -31,18 +25,36 @@ interface A2ASession {
  */
 export class A2AModule {
 	/** Map of A2A server URLs to their corresponding tool instances */
-	private a2aPeerServers: Map<string, A2ATool | null> = new Map();
+	private a2aConnectors: Map<string, A2AConnector> = new Map();
 	/** Map of session IDs to their A2A session state */
-	private a2aSessions: Map<string, A2ASession> = new Map();
+	private a2aTasks: Map<string, string> = new Map();
 	private agentId: string = randomUUID(); /* FIXME */
 
 	/**
 	 * Registers a new A2A peer server URL for connection.
 	 *
-	 * @param url - The URL of the A2A-compatible agent to connect to
+	 * @param conns - Set of name, url pair
 	 */
-	public async addA2APeerServer(url: string): Promise<void> {
-		this.a2aPeerServers.set(url, null);
+	public async addA2AConnector(conns: {
+		[name: string]: string;
+	}): Promise<void> {
+		for (const [name, url] of Object.entries(conns)) {
+			const conn = new A2AConnector(name, url);
+			this.a2aConnectors.set(name, conn);
+		}
+	}
+
+	public getA2AConnectors(): Array<{ name: string; url: string }> {
+		const connectors: Array<{ name: string; url: string }> = [];
+		for (const [name, connector] of this.a2aConnectors.entries()) {
+			connectors.push({ name, url: connector.url });
+		}
+		return connectors;
+	}
+
+	private getOrCreateClient(connector: A2AConnector): A2AClient {
+		connector.client ??= new A2AClient(connector.url);
+		return connector.client;
 	}
 
 	/**
@@ -53,48 +65,31 @@ export class A2AModule {
 	 *
 	 * @returns Promise resolving to array of available A2A tools
 	 */
-	public async getTools(): Promise<A2ATool[]> {
-		const tools: A2ATool[] = [];
-		for (const url of [...this.a2aPeerServers.keys()]) {
-			const tool = this.a2aPeerServers.get(url);
-			if (!tool || !tool.enabled) {
-				try {
-					const client = new A2AClient(url);
-					const card: AgentCard = await client.getAgentCard();
-					const toolName = card.name.replaceAll(" ", "-");
-					const a2aTool = new A2ATool(toolName, client, card);
+	public async getTools(): Promise<ConnectorTool[]> {
+		const tools: ConnectorTool[] = [];
+		for (const [name, conn] of this.a2aConnectors.entries()) {
+			if (!conn.enabled) {
+				continue; // skip disabled agent
+			}
 
-					tools.push(a2aTool);
-				} catch (_error: any) {
-					// Agent not responded
-					if (tool) {
-						tool.disable();
-					}
-				}
-			} else {
+			try {
+				const client = this.getOrCreateClient(conn);
+				const card: AgentCard = await client.getAgentCard();
+				/* TODO: add each skill as tool? */
+				const tool: ConnectorTool = {
+					toolName: card.name.replaceAll(" ", "-"),
+					connectorName: name,
+					protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
+					description: card.description,
+				};
+
 				tools.push(tool);
+			} catch (_error: any) {
+				// Agent not responded, just skip
 			}
 		}
 		return tools;
 	}
-
-	/**
-	 * Gets or creates an A2A session for the given session ID.
-	 *
-	 * @param threadId - The session identifier
-	 * @returns A2ASession object with task and context IDs
-	 */
-	private getA2ASessionWithId = (threadId: string): A2ASession => {
-		const a2aSession = this.a2aSessions.get(threadId) ?? {
-			taskId: undefined,
-			contextId: undefined,
-		};
-		if (!this.a2aSessions.has(threadId)) {
-			this.a2aSessions.set(threadId, a2aSession);
-		}
-
-		return a2aSession;
-	};
 
 	/**
 	 * Constructs a message payload for A2A communication.
@@ -114,7 +109,6 @@ export class A2AModule {
 			metadata: {
 				agentId: this.agentId,
 				type: ThreadType.CHAT,
-				threadId,
 			},
 			parts: [
 				{
@@ -122,14 +116,11 @@ export class A2AModule {
 					text: query,
 				},
 			],
+			contextId: threadId,
 		};
 
-		const a2aSession = this.getA2ASessionWithId(threadId);
-		if (a2aSession.taskId) {
-			messagePayload.taskId = a2aSession.taskId;
-		}
-		if (a2aSession.contextId) {
-			messagePayload.contextId = a2aSession.contextId;
+		if (this.a2aTasks.has(threadId)) {
+			messagePayload.taskId = this.a2aTasks.get(threadId);
 		}
 
 		return messagePayload;
@@ -142,23 +133,24 @@ export class A2AModule {
 	 * text content from various event types in the response stream.
 	 *
 	 * @param tool - The A2ATool instance to use
-	 * @param messagePayload - The message to send to the agent
+	 * @param query - The message to send to the agent
 	 * @param threadId - The session identifier for context tracking
 	 * @returns Promise resolving to array of text responses from the agent
 	 */
 	public async useTool(
-		tool: A2ATool,
-		messagePayload: Message,
+		tool: ConnectorTool,
+		query: string,
 		threadId: string,
 	): Promise<string> {
 		const finalText: string[] = [];
-		const client = tool.client;
+		const connector = this.a2aConnectors.get(tool.connectorName);
+		const messagePayload = this.getMessagePayload(query, threadId);
 		const params: MessageSendParams = {
 			message: messagePayload,
 		};
-		const a2aSession = this.getA2ASessionWithId(threadId);
 
 		try {
+			const client = this.getOrCreateClient(connector!);
 			const stream = client.sendMessageStream(params);
 			for await (const event of stream) {
 				if (event.kind === "status-update") {
@@ -167,7 +159,7 @@ export class A2AModule {
 						typedEvent.final &&
 						typedEvent.status.state !== "input-required"
 					) {
-						a2aSession.taskId = undefined;
+						this.a2aTasks.delete(threadId);
 					}
 					// TODO: handle 'file', 'data' parts
 					const texts = typedEvent.status.message?.parts
@@ -180,20 +172,15 @@ export class A2AModule {
 				} else if (event.kind === "message") {
 					// FIXME: handling text in 'message'?
 					const msg = event as Message;
-					if (msg.taskId && msg.taskId !== a2aSession.taskId) {
-						a2aSession.taskId = msg.taskId;
-					}
-					if (msg.contextId && msg.contextId !== a2aSession.contextId) {
-						a2aSession.contextId = msg.contextId;
+					const taskId = this.a2aTasks.get(threadId);
+					if (msg.taskId && msg.taskId !== taskId) {
+						this.a2aTasks.set(threadId, msg.taskId);
 					}
 				} else if (event.kind === "task") {
-					// FIXME: handling text in 'task'?
+					// establishing the Task ID
 					const task = event as Task;
-					if (task.id !== a2aSession.taskId) {
-						a2aSession.taskId = task.id;
-					}
-					if (task.contextId && task.contextId !== a2aSession.contextId) {
-						a2aSession.contextId = task.contextId;
+					if (task.id !== this.a2aTasks.get(threadId)) {
+						this.a2aTasks.set(threadId, task.id);
 					}
 				} else {
 					loggers.a2a.warn("Received unknown event structure from stream:", {
@@ -203,11 +190,10 @@ export class A2AModule {
 			}
 		} catch (error) {
 			loggers.a2a.error("Error communicating with agent:", { error });
-			tool.disable();
-			const toolResult = `[Bot Called A2A Tool ${tool.card.name}]\n${typeof error === "string" ? error : JSON.stringify(error, null, 2)}`;
+			const toolResult = `[Bot Called A2A Tool ${tool.toolName}]\n${typeof error === "string" ? error : JSON.stringify(error, null, 2)}`;
 			return toolResult;
 		}
 
-		return `[Bot Called A2A Tool ${tool.card.name}]\n${finalText.join("\n")}`;
+		return `[Bot Called A2A Tool ${tool.toolName}]\n${finalText.join("\n")}`;
 	}
 }

@@ -4,6 +4,7 @@ import express, { type Response } from "express";
 import helmet from "helmet";
 import { StatusCodes } from "http-status-codes";
 import { loggers } from "@/utils/logger";
+import { version } from "../package.json";
 import { AuthMiddleware } from "./middlewares/auth.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import type {
@@ -14,6 +15,7 @@ import type {
 	ModelModule,
 } from "./modules";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
+import { createIntentRouter } from "./routes/intent.routes";
 import type { AinAgentManifest } from "./types/agent";
 
 /**
@@ -27,7 +29,6 @@ import type { AinAgentManifest } from "./types/agent";
  * const manifest = {
  *   name: "MyAgent",
  *   description: "An example AI agent",
- *   version: "1.0.0"
  * };
  *
  * const agent = new AINAgent(manifest, {
@@ -64,8 +65,8 @@ export class AINAgent {
 	 * @param modules.a2aModule - Optional module for A2A protocol support
 	 * @param modules.mcpModule - Optional module for MCP server connections
 	 * @param modules.memoryModule - Optional module for memory management
-	 * @param modules.folModule - Optional module for fol management
 	 * @param authScheme - Optional authentication middleware for securing endpoints
+	 * @param allowStream - Enable streaming query endpoints (default: false)
 	 */
 	constructor(
 		manifest: AinAgentManifest,
@@ -142,7 +143,8 @@ export class AINAgent {
 		return {
 			name: this.manifest.name,
 			description: this.manifest.description,
-			version: this.manifest.version,
+			version: version,
+			protocolVersion: "0.3.0",
 			url: _url.toString(),
 			capabilities: {
 				streaming: true, // The new framework supports streaming
@@ -171,30 +173,37 @@ export class AINAgent {
 		const auth = new AuthMiddleware(this.authScheme);
 
 		this.app.get("/", async (_, res: Response) => {
-			const { name, description, version } = this.manifest;
+			const { name, description } = this.manifest;
 			res.status(200).send(
 				`
-        ⚡ AIN Agent: ${name} v${version}<br/>
+        ⚡ AIN Agent: ${name} with ain-adk v${version}<br/>
         ${description}<br/><br/>
         Agent status: Online and ready.
       `.trim(),
 			);
 		});
 
-		this.app.get("/.well-known/agent.json", async (_, res: Response) => {
-			try {
-				const card = this.generateAgentCard();
-				res.json(card);
-			} catch (_error) {
-				res.status(StatusCodes.NOT_FOUND).send("No agent card");
-			}
-		});
+		this.app.get(
+			[
+				"/.well-known/agent.json", // ~v0.2.0
+				"/.well-known/agent-card.json", // v0.3.0~
+			],
+			async (_, res: Response) => {
+				try {
+					const card = this.generateAgentCard();
+					res.json(card);
+				} catch (_error) {
+					res.status(StatusCodes.NOT_FOUND).send("No agent card");
+				}
+			},
+		);
 
 		this.app.use(
 			"/query",
 			auth.middleware(),
 			createQueryRouter(this, allowStream),
 		);
+		this.app.use("/intent", auth.middleware(), createIntentRouter(this));
 		this.app.use("/api", auth.middleware(), createApiRouter(this));
 
 		if (this.isValidUrl(this.manifest.url)) {
@@ -208,9 +217,44 @@ export class AINAgent {
 	 * @param port - The port number to listen on
 	 */
 	public async start(port: number): Promise<void> {
-		await this.memoryModule?.initialize();
-		this.app.listen(port, () => {
+		const server = this.app.listen(port, async () => {
+			await this.memoryModule?.initialize();
+			await this.mcpModule?.connectToServers();
 			loggers.agent.info(`AINAgent is running on port ${port}`);
 		});
+
+		// Graceful shutdown handling
+		const gracefulShutdown = async (signal: string) => {
+			loggers.agent.info(`Received ${signal}, starting graceful shutdown...`);
+
+			// Stop accepting new connections
+			server.close(() => {
+				loggers.agent.info("HTTP server closed");
+			});
+
+			try {
+				// Cleanup modules
+				if (this.mcpModule) {
+					loggers.agent.info("Disconnecting from MCP servers...");
+					await this.mcpModule.cleanup();
+				}
+
+				if (this.memoryModule) {
+					loggers.agent.info("Closing memory module...");
+					await this.memoryModule.shutdown();
+				}
+
+				loggers.agent.info("Graceful shutdown completed");
+				process.exit(0);
+			} catch (error) {
+				loggers.agent.error("Error during graceful shutdown:", error);
+				process.exit(1);
+			}
+		};
+
+		// Register signal handlers
+		process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+		process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+		process.on("SIGHUP", () => gracefulShutdown("SIGHUP"));
 	}
 }

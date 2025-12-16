@@ -51,6 +51,19 @@ export class QueryController {
 			return next(error);
 		}
 
+		res.writeHead(200, {
+			"Content-Type": "text/event-stream",
+			"Cache-Control": "no-cache",
+			Connection: "keep-alive",
+			"X-Accel-Buffering": "no", // nginx 버퍼링 비활성화
+		});
+		res.flushHeaders();
+		res.write(":ok\n\n");
+
+		const keepaliveInterval = setInterval(() => {
+			res.write(":keepalive\n\n");
+		}, 10000); // 10초마다 keepalive 전송
+
 		const stream = this.queryStreamService.handleQueryStream(
 			{ type, userId, threadId },
 			message,
@@ -67,6 +80,7 @@ export class QueryController {
 				(error as Error)?.message || "Failed to handle query stream";
 			res.write(`event: error\ndata: ${errMsg}\n\n`);
 		} finally {
+			clearInterval(keepaliveInterval);
 			res.end();
 		}
 	};

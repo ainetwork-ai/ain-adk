@@ -4,8 +4,9 @@ export { MCPModule } from "./mcp/mcp.module.js";
 export type {
 	IAgentMemory,
 	IIntentMemory,
+	IMemory,
 	IThreadMemory,
 } from "./memory/base.memory.js";
 export { MemoryModule } from "./memory/memory.module.js";
-export { BaseModel } from "./models/base.model.js";
+export { BaseModel, type ModelFetchOptions } from "./models/base.model.js";
 export { ModelModule } from "./models/model.module.js";
