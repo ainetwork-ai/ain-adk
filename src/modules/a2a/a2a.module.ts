@@ -7,7 +7,7 @@ import type {
 	TaskStatusUpdateEvent,
 	TextPart,
 } from "@a2a-js/sdk";
-import { A2AClient } from "@a2a-js/sdk/client";
+import { type Client as A2AClient, ClientFactory } from "@a2a-js/sdk/client";
 import {
 	CONNECTOR_PROTOCOL_TYPE,
 	type ConnectorTool,
@@ -52,8 +52,10 @@ export class A2AModule {
 		return connectors;
 	}
 
-	private getOrCreateClient(connector: A2AConnector): A2AClient {
-		connector.client ??= new A2AClient(connector.url);
+	private async getOrCreateClient(connector: A2AConnector): Promise<A2AClient> {
+		if (!connector.client) {
+			connector.client = await new ClientFactory().createFromUrl(connector.url);
+		}
 		return connector.client;
 	}
 
@@ -73,7 +75,7 @@ export class A2AModule {
 			}
 
 			try {
-				const client = this.getOrCreateClient(conn);
+				const client = await this.getOrCreateClient(conn);
 				const card: AgentCard = await client.getAgentCard();
 				/* TODO: add each skill as tool? */
 				const tool: ConnectorTool = {
@@ -144,13 +146,19 @@ export class A2AModule {
 	): Promise<string> {
 		const finalText: string[] = [];
 		const connector = this.a2aConnectors.get(tool.connectorName);
+		if (!connector) {
+			loggers.a2a.error("Unknown agent:", { tool });
+			const toolResult = `[Bot Called A2A Tool ${tool.connectorName}]\n"Unknown agent connector"`;
+			return toolResult;
+		}
+
 		const messagePayload = this.getMessagePayload(query, threadId);
 		const params: MessageSendParams = {
 			message: messagePayload,
 		};
 
 		try {
-			const client = this.getOrCreateClient(connector!);
+			const client = await this.getOrCreateClient(connector);
 			const stream = client.sendMessageStream(params);
 			for await (const event of stream) {
 				if (event.kind === "status-update") {
