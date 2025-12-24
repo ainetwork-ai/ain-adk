@@ -83,6 +83,18 @@ export class A2AModule {
 					connectorName: name,
 					protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
 					description: card.description,
+					// add thinking_text inputSchema
+					inputSchema: {
+						type: "object",
+						properties: {
+							thinking_text: {
+								type: "string",
+								description:
+									"사용자의 요청을 해결하기 위해 이 도구를 선택한 구체적인 이유와 목적 (Why & What). 한두줄 정도의 분량으로 입력 언어와 같은 언어로 생성한다.",
+							},
+						},
+						required: ["thinking_text"],
+					},
 				};
 
 				tools.push(tool);
