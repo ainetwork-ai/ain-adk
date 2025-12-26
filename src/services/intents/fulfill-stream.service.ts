@@ -195,11 +195,21 @@ export class IntentFulfillStreamService {
 						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.A2A
 					) {
 						loggers.intent.info("A2A tool call", { toolName });
-						toolResult = await this.a2aModule.useTool(
+						const a2aStream = this.a2aModule.useTool(
 							selectedTool,
 							query,
 							thread.threadId,
 						);
+						for await (const event of a2aStream) {
+							yield event;
+						}
+						// yield intermediate events and get final result
+						let result = await a2aStream.next();
+						while (!result.done) {
+							yield result.value;
+							result = await a2aStream.next();
+						}
+						toolResult = result.value;
 					} else {
 						// Unrecognized tool type. It cannot be happened...
 						loggers.intent.warn(
@@ -260,7 +270,10 @@ export class IntentFulfillStreamService {
 					metadata: { isThinking: true },
 				});
 
-			const thinkData = { title: subquery, description: actionPlan || "" };
+			const thinkData = {
+				title: `[] ${subquery}`,
+				description: actionPlan || "",
+			};
 			await this.addToThreadMessages(thread, {
 				role: MessageRole.MODEL,
 				content: subquery,
