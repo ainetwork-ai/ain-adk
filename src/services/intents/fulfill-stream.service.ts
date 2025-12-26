@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getManifest } from "@/config/manifest";
 import type {
 	A2AModule,
 	MCPModule,
@@ -167,7 +168,7 @@ export class IntentFulfillStreamService {
 
 					const toolArgs = JSON.parse(toolCall.function.arguments);
 					const thinkData = {
-						title: `${selectedTool.protocol} 실행: ${toolName}`,
+						title: `[${getManifest().name}] ${selectedTool.protocol} 실행: ${toolName}`,
 						description: `${toolArgs.thinking_text || ""}`,
 					};
 					await this.addToThreadMessages(thread, {
@@ -200,13 +201,12 @@ export class IntentFulfillStreamService {
 							query,
 							thread.threadId,
 						);
-						for await (const event of a2aStream) {
-							yield event;
-						}
 						// yield intermediate events and get final result
 						let result = await a2aStream.next();
 						while (!result.done) {
-							yield result.value;
+							if (result.value.event === "thinking_process") {
+								yield result.value;
+							}
 							result = await a2aStream.next();
 						}
 						toolResult = result.value;
@@ -271,7 +271,7 @@ export class IntentFulfillStreamService {
 				});
 
 			const thinkData = {
-				title: `[] ${subquery}`,
+				title: `[${getManifest().name}] ${subquery}`,
 				description: actionPlan || "",
 			};
 			await this.addToThreadMessages(thread, {
