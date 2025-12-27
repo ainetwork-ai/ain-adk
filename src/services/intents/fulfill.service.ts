@@ -5,6 +5,7 @@ import type {
 	MemoryModule,
 	ModelModule,
 } from "@/modules";
+import type { FallbackHandler } from "@/types/agent";
 import { CONNECTOR_PROTOCOL_TYPE, type ConnectorTool } from "@/types/connector";
 import {
 	type Intent,
@@ -21,17 +22,20 @@ export class IntentFulfillService {
 	private a2aModule?: A2AModule;
 	private mcpModule?: MCPModule;
 	private memoryModule?: MemoryModule;
+	private fallbackHandler?: FallbackHandler;
 
 	constructor(
 		modelModule: ModelModule,
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		memoryModule?: MemoryModule,
+		fallbackHandler?: FallbackHandler,
 	) {
 		this.modelModule = modelModule;
 		this.a2aModule = a2aModule;
 		this.mcpModule = mcpModule;
 		this.memoryModule = memoryModule;
+		this.fallbackHandler = fallbackHandler;
 	}
 
 	private async addToThreadMessages(
@@ -176,7 +180,8 @@ export class IntentFulfillService {
 	): Promise<string> {
 		let finalResponseText = "";
 		for (let i = 0; i < intents.length; i++) {
-			const { subquery, intent, actionPlan } = intents[i];
+			const triggeredIntent = intents[i];
+			const { subquery, intent, actionPlan } = triggeredIntent;
 			loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
 			loggers.intent.info(`Action plan: ${actionPlan}`);
 
@@ -198,6 +203,20 @@ export class IntentFulfillService {
 					actionPlan: actionPlan,
 				},
 			});
+
+			// If no intent matched and fallback handler is provided, use it
+			if (!intent && this.fallbackHandler) {
+				loggers.intent.info("No intent matched, calling fallback handler");
+				const fallbackResult = await this.fallbackHandler({
+					triggeredIntent,
+					thread,
+				});
+				if (fallbackResult !== undefined) {
+					finalResponseText = fallbackResult;
+					continue;
+				}
+				// If fallback returns undefined, fall through to default behavior
+			}
 
 			finalResponseText = await this.intentFulfilling(subquery, thread, intent);
 		}

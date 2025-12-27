@@ -7,7 +7,7 @@ import type {
 	ModelFetchOptions,
 	ModelModule,
 } from "@/modules/index.js";
-import { AinHttpError } from "@/types/agent.js";
+import { AinHttpError, type FallbackHandler } from "@/types/agent.js";
 import {
 	MessageRole,
 	type ThreadMetadata,
@@ -32,15 +32,18 @@ export class QueryService {
 	private memoryModule?: MemoryModule;
 	private intentTriggerService: IntentTriggerService;
 	private intentFulfillService: IntentFulfillService;
+	private fallbackHandler?: FallbackHandler;
 
 	constructor(
 		modelModule: ModelModule,
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		memoryModule?: MemoryModule,
+		fallbackHandler?: FallbackHandler,
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
+		this.fallbackHandler = fallbackHandler;
 		this.intentTriggerService = new IntentTriggerService(
 			modelModule,
 			memoryModule,
@@ -50,6 +53,7 @@ export class QueryService {
 			a2aModule,
 			mcpModule,
 			memoryModule,
+			fallbackHandler,
 		);
 	}
 

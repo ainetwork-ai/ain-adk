@@ -1,4 +1,19 @@
 import type { StatusCodes } from "http-status-codes";
+import type { ThreadObject, TriggeredIntent } from "./memory";
+import type { StreamEvent } from "./stream";
+
+export type FallbackContext = {
+	triggeredIntent: TriggeredIntent;
+	thread: ThreadObject;
+};
+
+export type FallbackHandler = (
+	context: FallbackContext,
+) => Promise<string | undefined> | string | undefined;
+
+export type FallbackStreamHandler = (
+	context: FallbackContext,
+) => AsyncGenerator<StreamEvent> | undefined;
 
 /**
  * Agent manifest containing essential metadata and configuration.

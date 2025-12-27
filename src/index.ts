@@ -16,7 +16,18 @@ import type {
 } from "./modules";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
-import type { AinAgentManifest } from "./types/agent";
+import type {
+	AinAgentManifest,
+	FallbackHandler,
+	FallbackStreamHandler,
+} from "./types/agent";
+
+export type {
+	AinAgentManifest,
+	FallbackContext,
+	FallbackHandler,
+	FallbackStreamHandler,
+} from "./types/agent";
 
 /**
  * Main class for AI Network Agent Development Kit (AIN-ADK).
@@ -56,6 +67,12 @@ export class AINAgent {
 	/** Optional authentication scheme for securing endpoints */
 	public authScheme: BaseAuth;
 
+	/** Optional fallback handler for non-streaming queries when intent matching fails */
+	public fallbackHandler?: FallbackHandler;
+
+	/** Optional fallback handler for streaming queries when intent matching fails */
+	public fallbackStreamHandler?: FallbackStreamHandler;
+
 	/**
 	 * Creates a new AINAgent instance.
 	 *
@@ -66,7 +83,10 @@ export class AINAgent {
 	 * @param modules.mcpModule - Optional module for MCP server connections
 	 * @param modules.memoryModule - Optional module for memory management
 	 * @param authScheme - Optional authentication middleware for securing endpoints
-	 * @param allowStream - Enable streaming query endpoints (default: false)
+	 * @param options - Optional configuration options
+	 * @param options.allowStream - Enable streaming query endpoints (default: false)
+	 * @param options.fallbackHandler - Handler for non-streaming queries when intent matching fails
+	 * @param options.fallbackStreamHandler - Handler for streaming queries when intent matching fails
 	 */
 	constructor(
 		manifest: AinAgentManifest,
@@ -77,8 +97,18 @@ export class AINAgent {
 			memoryModule?: MemoryModule;
 		},
 		authScheme: BaseAuth,
-		allowStream = false,
+		options:
+			| boolean
+			| {
+					allowStream?: boolean;
+					fallbackHandler?: FallbackHandler;
+					fallbackStreamHandler?: FallbackStreamHandler;
+			  } = false,
 	) {
+		// Handle backwards compatibility with boolean allowStream parameter
+		const opts =
+			typeof options === "boolean" ? { allowStream: options } : options;
+		const allowStream = opts.allowStream ?? false;
 		this.app = express();
 
 		// Set manifest
@@ -91,6 +121,10 @@ export class AINAgent {
 		this.memoryModule = modules.memoryModule;
 
 		this.authScheme = authScheme;
+
+		// Set fallback handlers
+		this.fallbackHandler = opts.fallbackHandler;
+		this.fallbackStreamHandler = opts.fallbackStreamHandler;
 
 		this.initializeMiddlewares();
 		this.initializeRoutes(allowStream);
