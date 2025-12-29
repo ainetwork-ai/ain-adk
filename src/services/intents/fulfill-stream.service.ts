@@ -171,14 +171,6 @@ export class IntentFulfillStreamService {
 						title: `[${getManifest().name}] ${selectedTool.protocol} 실행: ${toolName}`,
 						description: `${toolArgs.thinking_text || ""}`,
 					};
-					await this.addToThreadMessages(thread, {
-						role: MessageRole.MODEL,
-						content: thinkData.title,
-						metadata: {
-							isThinking: true,
-							thinkData,
-						},
-					});
 					yield {
 						event: "thinking_process",
 						data: thinkData,
@@ -274,14 +266,6 @@ export class IntentFulfillStreamService {
 				title: `[${getManifest().name}] ${subquery}`,
 				description: actionPlan || "",
 			};
-			await this.addToThreadMessages(thread, {
-				role: MessageRole.MODEL,
-				content: subquery,
-				metadata: {
-					isThinking: true,
-					thinkData,
-				},
-			});
 			yield {
 				event: "thinking_process",
 				data: thinkData,

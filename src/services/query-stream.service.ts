@@ -9,6 +9,7 @@ import type {
 } from "@/modules/index.js";
 import { AinHttpError } from "@/types/agent.js";
 import {
+	type MessageObject,
 	MessageRole,
 	type ThreadMetadata,
 	type ThreadObject,
@@ -52,6 +53,15 @@ export class QueryStreamService {
 			mcpModule,
 			memoryModule,
 		);
+	}
+
+	public async addToThreadMessages(
+		userId: string,
+		threadId: string,
+		messages: Array<MessageObject>,
+	) {
+		const threadMemory = this.memoryModule?.getThreadMemory();
+		await threadMemory?.addMessagesToThread(userId, threadId, messages);
 	}
 
 	/**
@@ -113,7 +123,7 @@ export class QueryStreamService {
 		loggers.intent.debug("Triggered intents", { triggeredIntent });
 
 		// only add for storage, not for inference
-		await threadMemory?.addMessagesToThread(userId, threadId, [
+		await this.addToThreadMessages(userId, threadId, [
 			{
 				messageId: randomUUID(),
 				role: MessageRole.USER,
