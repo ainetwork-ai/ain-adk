@@ -13,6 +13,7 @@ import {
 	type ConnectorTool,
 } from "@/types/connector.js";
 import { ThreadType } from "@/types/memory.js";
+import type { StreamEvent } from "@/types/stream.js";
 import { loggers } from "@/utils/logger.js";
 import { A2AConnector } from "./a2a.connector.js";
 
@@ -83,6 +84,18 @@ export class A2AModule {
 					connectorName: name,
 					protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
 					description: card.description,
+					// add thinking_text inputSchema
+					inputSchema: {
+						type: "object",
+						properties: {
+							thinking_text: {
+								type: "string",
+								description:
+									"사용자의 요청을 해결하기 위해 이 도구를 선택한 구체적인 이유와 목적 (Why & What). 한두줄 정도의 분량으로 입력 언어와 같은 언어로 생성한다.",
+							},
+						},
+						required: ["thinking_text"],
+					},
 				};
 
 				tools.push(tool);
@@ -137,13 +150,14 @@ export class A2AModule {
 	 * @param tool - The A2ATool instance to use
 	 * @param query - The message to send to the agent
 	 * @param threadId - The session identifier for context tracking
-	 * @returns Promise resolving to array of text responses from the agent
+	 * @yields StreamEvent objects for intermediate events
+	 * @returns Final text response from the agent
 	 */
-	public async useTool(
+	public async *useTool(
 		tool: ConnectorTool,
 		query: string,
 		threadId: string,
-	): Promise<string> {
+	): AsyncGenerator<StreamEvent, string, unknown> {
 		const finalText: string[] = [];
 		const connector = this.a2aConnectors.get(tool.connectorName);
 		if (!connector) {
@@ -169,13 +183,31 @@ export class A2AModule {
 					) {
 						this.a2aTasks.delete(threadId);
 					}
-					// TODO: handle 'file', 'data' parts
-					const texts = typedEvent.status.message?.parts
-						.filter((part) => part.kind === "text")
-						.map((part: TextPart) => part.text)
-						.join("\n");
-					if (texts) {
-						finalText.push(texts);
+
+					if (typedEvent.status.state === "working") {
+						// thinking process event
+						const eventData = JSON.parse(
+							(typedEvent.status.message?.parts[0] as TextPart).text,
+						);
+						yield {
+							event: "thinking_process",
+							data: eventData,
+						};
+					} else if (typedEvent.status.state === "completed") {
+						// TODO: handle 'file', 'data' parts
+						const texts = typedEvent.status.message?.parts
+							.filter((part) => part.kind === "text")
+							.map((part: TextPart) => part.text)
+							.join("\n");
+						if (texts) {
+							finalText.push(texts);
+							yield {
+								event: "text_chunk",
+								data: { delta: texts },
+							};
+						}
+					} else {
+						// ignore other status updates
 					}
 				} else if (event.kind === "message") {
 					// FIXME: handling text in 'message'?

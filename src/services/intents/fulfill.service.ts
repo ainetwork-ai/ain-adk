@@ -134,11 +134,17 @@ export class IntentFulfillService {
 						this.a2aModule &&
 						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.A2A
 					) {
-						toolResult = await this.a2aModule.useTool(
+						const a2aGenerator = this.a2aModule.useTool(
 							selectedTool,
 							query,
 							thread.threadId,
 						);
+						// consume generator to get final result (ignore intermediate events)
+						let result = await a2aGenerator.next();
+						while (!result.done) {
+							result = await a2aGenerator.next();
+						}
+						toolResult = result.value;
 					} else {
 						// Unrecognized tool type. It cannot be happened...
 						loggers.intent.warn(
