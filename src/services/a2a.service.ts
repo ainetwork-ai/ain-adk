@@ -88,13 +88,6 @@ export class A2AService implements AgentExecutor {
 			eventBus.publish(initialTask);
 		}
 
-		const workingStatusUpdate = this.createTaskStatusUpdateEvent(
-			taskId,
-			threadId,
-			"working",
-		);
-		eventBus.publish(workingStatusUpdate);
-
 		const message: string = userMessage.parts
 			.filter((part) => part.kind === "text")
 			.map((part) => part.text)
@@ -133,22 +126,14 @@ export class A2AService implements AgentExecutor {
 
 				if (event.event === "text_chunk") {
 					finalResponseText += event.data.delta;
-				} else if (event.event === "tool_start") {
-					const toolStartUpdate = this.createTaskStatusUpdateEvent(
+				} else if (event.event === "thinking_process") {
+					const thinkingProcessUpdate = this.createTaskStatusUpdateEvent(
 						taskId,
 						threadId,
 						"working",
 						JSON.stringify(event.data),
 					);
-					eventBus.publish(toolStartUpdate);
-				} else if (event.event === "tool_output") {
-					const toolOutputUpdate = this.createTaskStatusUpdateEvent(
-						taskId,
-						threadId,
-						"working",
-						JSON.stringify(event.data),
-					);
-					eventBus.publish(toolOutputUpdate);
+					eventBus.publish(thinkingProcessUpdate);
 				}
 			}
 

@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { QueryService, QueryStreamService } from "@/services";
 import { AinHttpError } from "@/types/agent";
+import { MessageRole } from "@/types/memory";
 
 export class QueryController {
 	private queryService;
@@ -64,6 +66,7 @@ export class QueryController {
 			res.write(":keepalive\n\n");
 		}, 10000); // 10초마다 keepalive 전송
 
+		let currentThreadId = threadId;
 		const stream = this.queryStreamService.handleQueryStream(
 			{ type, userId, threadId },
 			message,
@@ -71,6 +74,24 @@ export class QueryController {
 
 		try {
 			for await (const event of stream) {
+				if (event.event === "thread_id") {
+					currentThreadId = event.data.threadId;
+				} else if (event.event === "thinking_process") {
+					// a2a 호출에 대해서는 데이터베이스에 추가하지 않기 위해 여기서 thread message에 기록
+					this.queryStreamService.addToThreadMessages(userId, currentThreadId, [
+						{
+							messageId: randomUUID(),
+							role: MessageRole.MODEL,
+							timestamp: Date.now(),
+							content: { type: "text", parts: [event.data.title] },
+							metadata: {
+								isThinking: true,
+								thinkData: event.data,
+							},
+						},
+					]);
+				}
+
 				res.write(
 					`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`,
 				);

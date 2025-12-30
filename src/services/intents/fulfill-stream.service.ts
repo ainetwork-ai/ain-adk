@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getManifest } from "@/config/manifest";
 import type {
 	A2AModule,
 	MCPModule,
@@ -151,7 +152,6 @@ export class IntentFulfillStreamService {
 
 			if (assembledToolCalls.length > 0) {
 				for (const toolCall of assembledToolCalls) {
-					const toolCallId = randomUUID();
 					const toolName = toolCall.function.name;
 					let selectedTool: ConnectorTool | undefined;
 					for (const [index, toolTmp] of tools.entries()) {
@@ -170,44 +170,42 @@ export class IntentFulfillStreamService {
 						continue;
 					}
 
+					const toolArgs = JSON.parse(toolCall.function.arguments);
+					const thinkData = {
+						title: `[${getManifest().name}] ${selectedTool.protocol} 실행: ${toolName}`,
+						description: `${toolArgs.thinking_text || ""}`,
+					};
+					yield {
+						event: "thinking_process",
+						data: thinkData,
+					};
+
 					let toolResult = "";
 					if (
 						this.mcpModule &&
 						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.MCP
 					) {
-						const toolArgs = JSON.parse(toolCall.function.arguments) as
-							| { [x: string]: unknown }
-							| undefined;
-						yield {
-							event: "tool_start",
-							data: {
-								toolCallId,
-								protocol: CONNECTOR_PROTOCOL_TYPE.MCP,
-								toolName,
-								toolArgs,
-							},
-						};
 						loggers.intent.info("MCP tool call", { toolName, toolArgs });
 						toolResult = await this.mcpModule.useTool(selectedTool, toolArgs);
 					} else if (
 						this.a2aModule &&
 						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.A2A
 					) {
-						yield {
-							event: "tool_start",
-							data: {
-								toolCallId,
-								protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
-								toolName,
-								toolArgs: null,
-							},
-						};
 						loggers.intent.info("A2A tool call", { toolName });
-						toolResult = await this.a2aModule.useTool(
+						const a2aStream = this.a2aModule.useTool(
 							selectedTool,
 							query,
 							thread.threadId,
 						);
+						// yield intermediate events and get final result
+						let result = await a2aStream.next();
+						while (!result.done) {
+							if (result.value.event === "thinking_process") {
+								yield result.value;
+							}
+							result = await a2aStream.next();
+						}
+						toolResult = result.value;
 					} else {
 						// Unrecognized tool type. It cannot be happened...
 						loggers.intent.warn(
@@ -215,22 +213,11 @@ export class IntentFulfillStreamService {
 						);
 						continue;
 					}
-					yield {
-						event: "tool_output",
-						data: {
-							toolCallId,
-							protocol: selectedTool.protocol,
-							toolName,
-							result: toolResult,
-						},
-					};
 
 					loggers.intent.debug("Tool Result", { toolResult });
 
 					processList.push(toolResult);
 					modelInstance.appendMessages(messages, toolResult);
-
-					// remove used tool to prevent infinite loop
 				}
 			} else {
 				break;
@@ -278,19 +265,14 @@ export class IntentFulfillStreamService {
 					content: { type: "text", parts: [finalResponseText] },
 					metadata: { isThinking: true },
 				});
-			await this.addToThreadMessages(thread, {
-				role: MessageRole.MODEL,
-				content: subquery,
-				metadata: {
-					subquery,
-					isThinking: true,
-					actionPlan: actionPlan,
-				},
-			});
 
+			const thinkData = {
+				title: `[${getManifest().name}] ${subquery}`,
+				description: actionPlan || "",
+			};
 			yield {
-				event: "intent_process",
-				data: { subquery, actionPlan: actionPlan || "" },
+				event: "thinking_process",
+				data: thinkData,
 			};
 
 			const stream = this.intentFulfilling(subquery, thread, intent);

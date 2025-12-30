@@ -101,7 +101,29 @@ export class MCPModule {
 	getTools(): Array<ConnectorTool> {
 		const allTools: Array<ConnectorTool> = [];
 		for (const conn of this.mcpConnectors.values()) {
-			allTools.push(...conn.tools);
+			for (const tool of conn.tools) {
+				// add thinking_text inputSchema for each tool
+				const finalInputSchema: any = {
+					type: "object",
+					properties: { ...(tool.inputSchema?.properties || {}) },
+					required: [...(tool.inputSchema?.required || [])],
+				};
+
+				finalInputSchema.properties["thinking_text"] = {
+					type: "string",
+					description:
+						"사용자의 요청을 해결하기 위해 이 도구를 선택한 구체적인 이유와 목적 (Why & What). 한두줄 정도의 분량으로 입력 언어와 같은 언어로 생성한다.",
+				};
+				finalInputSchema.required.push("thinking_text");
+
+				allTools.push({
+					toolName: tool.toolName,
+					connectorName: tool.connectorName,
+					protocol: tool.protocol,
+					description: tool.description,
+					inputSchema: finalInputSchema,
+				});
+			}
 		}
 		return allTools;
 	}
