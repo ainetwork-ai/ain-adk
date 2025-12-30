@@ -1,0 +1,8 @@
+{
+  "hooks": {
+    "after:bump": "npm run build"
+  },
+  "npm": {
+    "publish": true
+  }
+}
