@@ -13,6 +13,7 @@ import type {
 	MCPModule,
 	MemoryModule,
 	ModelModule,
+	WalletModule,
 } from "./modules";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
@@ -53,6 +54,7 @@ export class AINAgent {
 	public a2aModule?: A2AModule;
 	public mcpModule?: MCPModule;
 	public memoryModule?: MemoryModule;
+	public walletModule?: WalletModule;
 
 	/** Optional authentication scheme for securing endpoints */
 	public authScheme: BaseAuth;
@@ -66,6 +68,7 @@ export class AINAgent {
 	 * @param modules.a2aModule - Optional module for A2A protocol support
 	 * @param modules.mcpModule - Optional module for MCP server connections
 	 * @param modules.memoryModule - Optional module for memory management
+	 * @param modules.walletModule - Optional module for blockchain wallet management
 	 * @param authScheme - Optional authentication middleware for securing endpoints
 	 * @param allowStream - Enable streaming query endpoints (default: false)
 	 */
@@ -76,6 +79,7 @@ export class AINAgent {
 			a2aModule?: A2AModule;
 			mcpModule?: MCPModule;
 			memoryModule?: MemoryModule;
+			walletModule?: WalletModule;
 		},
 		authScheme: BaseAuth,
 		allowStream = false,
@@ -91,6 +95,7 @@ export class AINAgent {
 		this.a2aModule = modules.a2aModule;
 		this.mcpModule = modules.mcpModule;
 		this.memoryModule = modules.memoryModule;
+		this.walletModule = modules.walletModule;
 
 		this.authScheme = authScheme;
 

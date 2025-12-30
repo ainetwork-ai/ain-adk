@@ -10,3 +10,5 @@ export type {
 export { MemoryModule } from "./memory/memory.module.js";
 export { BaseModel, type ModelFetchOptions } from "./models/base.model.js";
 export { ModelModule } from "./models/model.module.js";
+export { BaseWallet } from "./wallet/base.wallet.js";
+export { WalletModule } from "./wallet/wallet.module.js";
