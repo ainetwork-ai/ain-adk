@@ -42,7 +42,7 @@ export class QueryController {
 		res: Response,
 		next: NextFunction,
 	) => {
-		const { type, threadId, message } = req.body;
+		const { type, threadId, query, displayQuery } = req.body;
 		const userId = res.locals.userId;
 
 		if (!this.queryStreamService) {
@@ -69,7 +69,7 @@ export class QueryController {
 		let currentThreadId = threadId;
 		const stream = this.queryStreamService.handleQueryStream(
 			{ type, userId, threadId },
-			message,
+			{ query, displayQuery },
 		);
 
 		try {

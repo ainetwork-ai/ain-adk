@@ -87,10 +87,14 @@ export class QueryStreamService {
 			threadId?: string;
 			options?: ModelFetchOptions;
 		},
-		query: string,
+		queryData: {
+			query: string;
+			displayQuery?: string;
+		},
 		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
 		const { type, userId, options } = threadMetadata;
+		const { query, displayQuery } = queryData;
 		const threadMemory = this.memoryModule?.getThreadMemory();
 
 		// 1. Load or create thread
@@ -128,7 +132,8 @@ export class QueryStreamService {
 				messageId: randomUUID(),
 				role: MessageRole.USER,
 				timestamp: Date.now(),
-				content: { type: "text", parts: [query] },
+				// displayQuery used for better UX in chat applications
+				content: { type: "text", parts: [displayQuery || query] },
 				metadata: {
 					intents: triggeredIntent
 						.filter((intent) => !!intent.intent)
@@ -136,6 +141,7 @@ export class QueryStreamService {
 							id: intent.intent?.id,
 							subquery: intent.subquery,
 						})),
+					query: !displayQuery ? undefined : query,
 				},
 			},
 		]);
