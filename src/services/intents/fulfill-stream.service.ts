@@ -16,7 +16,10 @@ import {
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
-import { createFulfillPrompt } from "../utils/fulfill.common";
+import {
+	createAggregationPrompt,
+	createFulfillPrompt,
+} from "../utils/fulfill.common";
 
 export class IntentFulfillStreamService {
 	private modelModule: ModelModule;
@@ -228,6 +231,73 @@ export class IntentFulfillStreamService {
 	}
 
 	/**
+	 * Aggregates multiple intent responses into a coherent final response.
+	 *
+	 * @param intentResponses - Array of intent responses to aggregate
+	 * @param thread - Thread context for the conversation
+	 * @returns AsyncGenerator yielding StreamEvent objects and final aggregated text
+	 */
+	private async *aggregateIntentResponses(
+		intentResponses: Array<{
+			subquery: string;
+			intentName?: string;
+			response: string;
+		}>,
+		originalQuery: string,
+	): AsyncGenerator<StreamEvent, string, undefined> {
+		const agentMemory = this.memoryModule?.getAgentMemory();
+		const modelInstance = this.modelModule.getModel();
+		const modelOptions = this.modelModule.getModelOptions();
+
+		// Create aggregation prompt
+		const aggregationPrompt = await createAggregationPrompt(
+			agentMemory,
+			intentResponses,
+		);
+
+		// Construct aggregation query
+		const aggregationQuery = `Original user request: "${originalQuery}"\n\nPlease provide a comprehensive, integrated response that synthesizes all the information above.`;
+
+		// Generate messages for aggregation call
+		const messages = modelInstance.generateMessages({
+			query: aggregationQuery,
+			systemPrompt: aggregationPrompt.trim(),
+		});
+
+		// Fetch streaming response (NO tools - aggregation only synthesizes)
+		const responseStream = await modelInstance.fetchStreamWithContextMessage(
+			messages,
+			[], // Empty tools array prevents additional tool calls
+			modelOptions,
+		);
+
+		let aggregatedText = "";
+		for await (const chunk of responseStream) {
+			if (chunk.delta?.content) {
+				aggregatedText += chunk.delta.content;
+				yield {
+					event: "text_chunk",
+					data: { delta: chunk.delta.content },
+				};
+			}
+		}
+
+		if (!aggregatedText) {
+			loggers.intentStream.warn(
+				"Aggregation produced empty response, using last intent response",
+			);
+			return intentResponses[intentResponses.length - 1].response;
+		}
+
+		loggers.intentStream.info("Successfully aggregated intent responses", {
+			intentCount: intentResponses.length,
+			responseLength: aggregatedText.length,
+		});
+
+		return aggregatedText;
+	}
+
+	/**
 	 * Detects the intent from context.
 	 *
 	 * @param intents - The user's input query
@@ -236,6 +306,7 @@ export class IntentFulfillStreamService {
 	 */
 	public async *intentFulfillStream(
 		intents: Array<TriggeredIntent>,
+		originalQuery: string,
 		thread: ThreadObject,
 	): AsyncGenerator<StreamEvent> {
 		const streamStartTime = Date.now();
@@ -246,6 +317,11 @@ export class IntentFulfillStreamService {
 		});
 
 		let finalResponseText = "";
+		const intentResponses: Array<{
+			subquery: string;
+			intentName?: string;
+			response: string;
+		}> = [];
 
 		for (let i = 0; i < intents.length; i++) {
 			const { subquery, intent, actionPlan } = intents[i];
@@ -283,6 +359,46 @@ export class IntentFulfillStreamService {
 					continue; // skip intermediate text_chunk events
 				}
 				yield event;
+			}
+
+			// Store this intent's response for potential aggregation
+			intentResponses.push({
+				subquery,
+				intentName: intent?.name,
+				response: finalResponseText,
+			});
+		}
+
+		// Check if aggregation is needed for multiple intents
+		if (intents.length >= 2) {
+			// Yield thinking event for aggregation
+			yield {
+				event: "thinking_process",
+				data: {
+					title: `[${getManifest().name}] Integrating responses`,
+					description: `Synthesizing ${intents.length} task results into a coherent response`,
+				},
+			};
+
+			try {
+				// Perform aggregation
+				const aggregatedResponse = yield* this.aggregateIntentResponses(
+					intentResponses,
+					originalQuery,
+				);
+				finalResponseText = aggregatedResponse;
+			} catch (error) {
+				loggers.intentStream.error(
+					"Error during aggregation, using last intent response",
+					error,
+				);
+				yield {
+					event: "error",
+					data: {
+						message: "Failed to aggregate responses, returning last result",
+					},
+				};
+				// finalResponseText already contains last intent's response
 			}
 		}
 

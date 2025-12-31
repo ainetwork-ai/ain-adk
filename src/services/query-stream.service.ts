@@ -143,6 +143,7 @@ export class QueryStreamService {
 		// 3. intent fulfillment
 		const stream = this.intentFulfillStreamService.intentFulfillStream(
 			triggeredIntent,
+			query,
 			thread,
 		);
 

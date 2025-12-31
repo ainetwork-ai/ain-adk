@@ -50,3 +50,59 @@ ${agentPrompt}
 ${intent?.prompt || ""}
 	`.trim();
 }
+
+/**
+ * Creates a system prompt for aggregating multiple intent responses.
+ *
+ * @param agentMemory - Optional agent memory for agent-specific prompts
+ * @param intentResponses - Array of intent responses to be aggregated
+ * @returns System prompt string for aggregation
+ */
+export async function createAggregationPrompt(
+	agentMemory?: IAgentMemory,
+	intentResponses?: Array<{
+		subquery: string;
+		intentName?: string;
+		response: string;
+	}>,
+) {
+	const agentPrompt = agentMemory ? await agentMemory.getAgentPrompt() : "";
+
+	// Format intent responses for context
+	const responsesContext = intentResponses
+		? intentResponses
+				.map((item, idx) => {
+					const intentLabel = item.intentName
+						? `${item.intentName} (${item.subquery})`
+						: item.subquery;
+					return `Task ${idx + 1}: ${intentLabel}\nResponse:\n${item.response}`;
+				})
+				.join("\n\n---\n\n")
+		: "";
+
+	return `
+Today is ${new Date().toLocaleDateString()}.
+You are a highly sophisticated automated agent tasked with synthesizing multiple task results into a coherent, integrated response.
+
+${agentPrompt}
+
+You have completed multiple subtasks, each addressing a different aspect of the user's request.
+Your job now is to:
+
+1. **Integrate** the information from all task responses into a unified, coherent answer
+2. **Synthesize** insights across different tasks to provide a comprehensive response
+3. **Eliminate redundancy** - if multiple tasks provide similar information, present it once in the best way
+4. **Maintain context** - ensure the integrated response directly addresses the original user request
+5. **Be natural** - the response should read as a single, flowing answer, not a list of separate responses
+
+IMPORTANT RULES:
+- Do NOT make up new information beyond what's provided in the task responses
+- Do NOT call tools or perform additional actions - only synthesize what you already have
+- Do NOT simply concatenate responses - truly integrate and synthesize them
+- Do NOT mention that you completed multiple tasks unless relevant to understanding the answer
+
+Here are the task responses you need to integrate:
+
+${responsesContext}
+	`.trim();
+}
