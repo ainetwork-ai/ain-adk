@@ -3,8 +3,8 @@ import cors from "cors";
 import express, { type Response } from "express";
 import helmet from "helmet";
 import { StatusCodes } from "http-status-codes";
-import { loggers } from "@/utils/logger";
 import { version } from "../package.json";
+import { setManifest } from "./config/manifest";
 import { AuthMiddleware } from "./middlewares/auth.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import type {
@@ -17,6 +17,7 @@ import type {
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
 import type { AinAgentManifest } from "./types/agent";
+import isValidUrl from "./utils/isValidUrl";
 
 /**
  * Main class for AI Network Agent Development Kit (AIN-ADK).
@@ -83,6 +84,7 @@ export class AINAgent {
 
 		// Set manifest
 		this.manifest = manifest;
+		setManifest(manifest);
 
 		// Set modules
 		this.modelModule = modules.modelModule;
@@ -106,25 +108,6 @@ export class AINAgent {
 		this.app.use(cors());
 		this.app.use(express.json({ limit: "25mb" }));
 		this.app.use(express.urlencoded({ limit: "25mb", extended: true }));
-	}
-
-	/**
-	 * Validates if a string is a valid HTTP or HTTPS URL.
-	 *
-	 * @param urlString - The URL string to validate
-	 * @returns true if the URL is valid HTTP/HTTPS, false otherwise
-	 */
-	private isValidUrl(urlString: string | undefined): boolean {
-		if (!urlString) {
-			return false;
-		}
-
-		try {
-			const url = new URL(urlString);
-			return url.protocol === "http:" || url.protocol === "https:";
-		} catch (_error) {
-			return false;
-		}
 	}
 
 	/**
@@ -206,7 +189,7 @@ export class AINAgent {
 		this.app.use("/intent", auth.middleware(), createIntentRouter(this));
 		this.app.use("/api", auth.middleware(), createApiRouter(this));
 
-		if (this.isValidUrl(this.manifest.url)) {
+		if (isValidUrl(this.manifest.url)) {
 			this.app.use("/a2a", createA2ARouter(this));
 		}
 	};
@@ -220,34 +203,34 @@ export class AINAgent {
 		const server = this.app.listen(port, async () => {
 			await this.memoryModule?.initialize();
 			await this.mcpModule?.connectToServers();
-			loggers.agent.info(`AINAgent is running on port ${port}`);
+			console.log(`AINAgent is running on port ${port}`);
 		});
 
 		// Graceful shutdown handling
 		const gracefulShutdown = async (signal: string) => {
-			loggers.agent.info(`Received ${signal}, starting graceful shutdown...`);
+			console.log(`Received ${signal}, starting graceful shutdown...`);
 
 			// Stop accepting new connections
 			server.close(() => {
-				loggers.agent.info("HTTP server closed");
+				console.log("HTTP server closed");
 			});
 
 			try {
 				// Cleanup modules
 				if (this.mcpModule) {
-					loggers.agent.info("Disconnecting from MCP servers...");
+					console.log("Disconnecting from MCP servers...");
 					await this.mcpModule.cleanup();
 				}
 
 				if (this.memoryModule) {
-					loggers.agent.info("Closing memory module...");
+					console.log("Closing memory module...");
 					await this.memoryModule.shutdown();
 				}
 
-				loggers.agent.info("Graceful shutdown completed");
+				console.log("Graceful shutdown completed");
 				process.exit(0);
 			} catch (error) {
-				loggers.agent.error("Error during graceful shutdown:", error);
+				console.error("Error during graceful shutdown:", error);
 				process.exit(1);
 			}
 		};

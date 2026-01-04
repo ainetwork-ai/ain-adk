@@ -1,4 +1,4 @@
-import type { A2AClient } from "@a2a-js/sdk/client";
+import type { Client as A2AClient } from "@a2a-js/sdk/client";
 import {
 	CONNECTOR_PROTOCOL_TYPE,
 	type IAgentConnector,
