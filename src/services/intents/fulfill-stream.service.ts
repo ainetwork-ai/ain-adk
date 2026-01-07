@@ -375,8 +375,8 @@ export class IntentFulfillStreamService {
 			yield {
 				event: "thinking_process",
 				data: {
-					title: `[${getManifest().name}] Integrating responses`,
-					description: `Synthesizing ${intents.length} task results into a coherent response`,
+					title: `[${getManifest().name}] 응답 통합 중`,
+					description: `${intents.length}개의 작업 결과를 통합하는 중`,
 				},
 			};
 
