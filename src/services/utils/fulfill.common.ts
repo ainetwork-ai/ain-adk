@@ -92,8 +92,9 @@ Your job now is to:
 1. **Integrate** the information from all task responses into a unified, coherent answer
 2. **Synthesize** insights across different tasks to provide a comprehensive response
 3. **Eliminate redundancy** - if multiple tasks provide similar information, present it once in the best way
-4. **Maintain context** - ensure the integrated response directly addresses the original user request
-5. **Be natural** - the response should read as a single, flowing answer, not a list of separate responses
+4. **Deduplicate content** - when the same information appears across multiple task responses, include it only ONCE in the final summary. Do not repeat identical facts, data, or explanations even if they appear in different tasks
+5. **Maintain context** - ensure the integrated response directly addresses the original user request
+6. **Be natural** - the response should read as a single, flowing answer, not a list of separate responses
 
 IMPORTANT RULES:
 - Do NOT make up new information beyond what's provided in the task responses
