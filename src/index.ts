@@ -16,12 +16,12 @@ import type {
 } from "./modules";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
-import type { AinAgentManifest, OnFallback } from "./types/agent";
+import type { AinAgentManifest, OnModelCall } from "./types/agent";
 
 export type {
 	AinAgentManifest,
-	FallbackContext,
-	OnFallback,
+	ModelCallContext,
+	OnModelCall,
 } from "./types/agent";
 
 import isValidUrl from "./utils/isValidUrl";
@@ -64,8 +64,8 @@ export class AINAgent {
 	/** Optional authentication scheme for securing endpoints */
 	public authScheme: BaseAuth;
 
-	/** Optional fallback handler when intent matching fails */
-	public onFallback?: OnFallback;
+	/** Optional handler for external LLM API calls */
+	public onModelCall?: OnModelCall;
 
 	/**
 	 * Creates a new AINAgent instance.
@@ -76,9 +76,9 @@ export class AINAgent {
 	 * @param modules.a2aModule - Optional module for A2A protocol support
 	 * @param modules.mcpModule - Optional module for MCP server connections
 	 * @param modules.memoryModule - Optional module for memory management
-	 * @param authScheme - Optional authentication middleware for securing endpoints
-	 * @param allowStream - Enable streaming query endpoints (default: false)
-	 * @param onFallback - Handler when intent matching fails
+	 * @param authScheme - Authentication middleware for securing endpoints
+	 * @param options - Optional configuration options
+	 * @param options.onModelCall - Handler for external LLM API calls
 	 */
 	constructor(
 		manifest: AinAgentManifest,
@@ -89,8 +89,9 @@ export class AINAgent {
 			memoryModule?: MemoryModule;
 		},
 		authScheme: BaseAuth,
-		allowStream = false,
-		onFallback?: OnFallback,
+		options?: {
+			onModelCall?: OnModelCall;
+		},
 	) {
 		this.app = express();
 
@@ -105,10 +106,10 @@ export class AINAgent {
 		this.memoryModule = modules.memoryModule;
 
 		this.authScheme = authScheme;
-		this.onFallback = onFallback;
+		this.onModelCall = options?.onModelCall;
 
 		this.initializeMiddlewares();
-		this.initializeRoutes(allowStream);
+		this.initializeRoutes();
 		this.app.use(errorMiddleware);
 	}
 
@@ -165,7 +166,7 @@ export class AINAgent {
 	 * - /api/* - API endpoints for agent management
 	 * - /a2a/* - A2A protocol endpoints (only if valid URL is configured)
 	 */
-	private initializeRoutes = (allowStream = false): void => {
+	private initializeRoutes = (): void => {
 		const auth = new AuthMiddleware(this.authScheme);
 
 		this.app.get("/", async (_, res: Response) => {
@@ -194,11 +195,7 @@ export class AINAgent {
 			},
 		);
 
-		this.app.use(
-			"/query",
-			auth.middleware(),
-			createQueryRouter(this, allowStream),
-		);
+		this.app.use("/query", auth.middleware(), createQueryRouter(this));
 		this.app.use("/intent", auth.middleware(), createIntentRouter(this));
 		this.app.use("/api", auth.middleware(), createApiRouter(this));
 

@@ -1,20 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
-import { StatusCodes } from "http-status-codes";
-import type { QueryService, QueryStreamService } from "@/services";
-import { AinHttpError } from "@/types/agent";
+import type { QueryService } from "@/services";
 import { MessageRole } from "@/types/memory";
 
 export class QueryController {
-	private queryService;
-	private queryStreamService;
+	private queryService: QueryService;
 
-	constructor(
-		queryService: QueryService,
-		queryStreamService?: QueryStreamService,
-	) {
+	constructor(queryService: QueryService) {
 		this.queryService = queryService;
-		this.queryStreamService = queryStreamService;
 	}
 
 	public handleQueryRequest = async (
@@ -22,16 +15,27 @@ export class QueryController {
 		res: Response,
 		next: NextFunction,
 	) => {
-		const { type, message, threadId } = req.body;
+		const { type, threadId, query } = req.body;
 		const userId = res.locals.userId;
 
 		try {
-			const result = await this.queryService.handleQuery(
+			const stream = this.queryService.handleQuery(
 				{ type, userId, threadId },
-				message,
+				query,
 			);
 
-			res.status(200).json(result);
+			let content = "";
+			let responseThreadId = threadId;
+
+			for await (const event of stream) {
+				if (event.event === "thread_id") {
+					responseThreadId = event.data.threadId;
+				} else if (event.event === "text_chunk" && event.data.delta) {
+					content += event.data.delta;
+				}
+			}
+
+			res.status(200).json({ content, threadId: responseThreadId });
 		} catch (error) {
 			next(error);
 		}
@@ -40,18 +44,10 @@ export class QueryController {
 	public handleQueryStreamRequest = async (
 		req: Request,
 		res: Response,
-		next: NextFunction,
+		_next: NextFunction,
 	) => {
-		const { type, threadId, message } = req.body;
+		const { type, threadId, query } = req.body;
 		const userId = res.locals.userId;
-
-		if (!this.queryStreamService) {
-			const error = new AinHttpError(
-				StatusCodes.NOT_IMPLEMENTED,
-				"Stream query not supported",
-			);
-			return next(error);
-		}
 
 		res.writeHead(200, {
 			"Content-Type": "text/event-stream",
@@ -67,9 +63,9 @@ export class QueryController {
 		}, 10000); // 10초마다 keepalive 전송
 
 		let currentThreadId = threadId;
-		const stream = this.queryStreamService.handleQueryStream(
+		const stream = this.queryService.handleQuery(
 			{ type, userId, threadId },
-			message,
+			query,
 		);
 
 		try {
@@ -78,7 +74,7 @@ export class QueryController {
 					currentThreadId = event.data.threadId;
 				} else if (event.event === "thinking_process") {
 					// a2a 호출에 대해서는 데이터베이스에 추가하지 않기 위해 여기서 thread message에 기록
-					this.queryStreamService.addToThreadMessages(userId, currentThreadId, [
+					this.queryService.addToThreadMessages(userId, currentThreadId, [
 						{
 							messageId: randomUUID(),
 							role: MessageRole.MODEL,

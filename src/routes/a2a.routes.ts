@@ -1,7 +1,7 @@
 import { InMemoryTaskStore } from "@a2a-js/sdk/server";
 import { Router } from "express";
 import type { AINAgent } from "@/index.js";
-import { QueryStreamService } from "@/services/query-stream.service.js";
+import { QueryService } from "@/services/query.service.js";
 import { A2AController } from "../controllers/a2a.controller.js";
 import { A2AService } from "../services/a2a.service.js";
 
@@ -18,13 +18,13 @@ export const createA2ARouter = (agent: AINAgent): Router => {
 
 	// 1. Create dependencies for the A2A feature
 	const taskStore = new InMemoryTaskStore();
-	const queryStreamService = new QueryStreamService(
+	const queryService = new QueryService(
 		agent.modelModule,
 		agent.a2aModule,
 		agent.mcpModule,
 		agent.memoryModule,
 	);
-	const a2aService = new A2AService(queryStreamService);
+	const a2aService = new A2AService(queryService);
 	const a2aController = new A2AController(
 		a2aService,
 		taskStore,
