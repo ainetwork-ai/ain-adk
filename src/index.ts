@@ -16,12 +16,12 @@ import type {
 } from "./modules";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
-import type { AinAgentManifest, OnModelCall } from "./types/agent";
+import type { AinAgentManifest, OnIntentFallback } from "./types/agent";
 
 export type {
 	AinAgentManifest,
-	ModelCallContext,
-	OnModelCall,
+	IntentFallbackContext,
+	OnIntentFallback,
 } from "./types/agent";
 
 import isValidUrl from "./utils/isValidUrl";
@@ -64,8 +64,8 @@ export class AINAgent {
 	/** Optional authentication scheme for securing endpoints */
 	public authScheme: BaseAuth;
 
-	/** Optional handler for external LLM API calls */
-	public onModelCall?: OnModelCall;
+	/** Optional fallback handler when intent matching fails */
+	public onIntentFallback?: OnIntentFallback;
 
 	/**
 	 * Creates a new AINAgent instance.
@@ -78,7 +78,7 @@ export class AINAgent {
 	 * @param modules.memoryModule - Optional module for memory management
 	 * @param authScheme - Authentication middleware for securing endpoints
 	 * @param options - Optional configuration options
-	 * @param options.onModelCall - Handler for external LLM API calls
+	 * @param options.onIntentFallback - Fallback handler when intent matching fails
 	 */
 	constructor(
 		manifest: AinAgentManifest,
@@ -90,7 +90,7 @@ export class AINAgent {
 		},
 		authScheme: BaseAuth,
 		options?: {
-			onModelCall?: OnModelCall;
+			onIntentFallback?: OnIntentFallback;
 		},
 	) {
 		this.app = express();
@@ -106,7 +106,7 @@ export class AINAgent {
 		this.memoryModule = modules.memoryModule;
 
 		this.authScheme = authScheme;
-		this.onModelCall = options?.onModelCall;
+		this.onIntentFallback = options?.onIntentFallback;
 
 		this.initializeMiddlewares();
 		this.initializeRoutes();

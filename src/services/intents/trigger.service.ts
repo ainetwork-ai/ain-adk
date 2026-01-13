@@ -136,6 +136,7 @@ Requirements:
 
 		const triggeredIntent: Array<TriggeredIntent> = [];
 		for (const { subquery, intentName, actionPlan } of subqueries) {
+			if (!subquery) continue;
 			const item = { subquery, actionPlan } as TriggeredIntent;
 			if (intentName) {
 				item.intent = await intentMemory.getIntentByName(intentName);

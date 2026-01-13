@@ -2,13 +2,13 @@ import type { StatusCodes } from "http-status-codes";
 import type { ThreadObject, TriggeredIntent } from "./memory";
 import type { StreamEvent } from "./stream";
 
-export type FallbackContext = {
+export type IntentFallbackContext = {
 	triggeredIntent: TriggeredIntent;
 	thread: ThreadObject;
 };
 
-export type OnFallback = (
-	context: FallbackContext,
+export type OnIntentFallback = (
+	context: IntentFallbackContext,
 ) => AsyncGenerator<StreamEvent> | undefined;
 
 /**
