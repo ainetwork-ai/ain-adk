@@ -5,6 +5,7 @@ import type {
 	MemoryModule,
 	ModelModule,
 } from "@/modules";
+import type { OnFallback } from "@/types/agent";
 import { CONNECTOR_PROTOCOL_TYPE, type ConnectorTool } from "@/types/connector";
 import {
 	type Intent,
@@ -22,17 +23,20 @@ export class IntentFulfillStreamService {
 	private a2aModule?: A2AModule;
 	private mcpModule?: MCPModule;
 	private memoryModule?: MemoryModule;
+	private onFallback?: OnFallback;
 
 	constructor(
 		modelModule: ModelModule,
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		memoryModule?: MemoryModule,
+		onFallback?: OnFallback,
 	) {
 		this.modelModule = modelModule;
 		this.a2aModule = a2aModule;
 		this.mcpModule = mcpModule;
 		this.memoryModule = memoryModule;
+		this.onFallback = onFallback;
 	}
 
 	private async addToThreadMessages(
@@ -261,7 +265,8 @@ export class IntentFulfillStreamService {
 		let finalResponseText = "";
 
 		for (let i = 0; i < intents.length; i++) {
-			const { subquery, intent, actionPlan } = intents[i];
+			const triggeredIntent = intents[i];
+			const { subquery, intent, actionPlan } = triggeredIntent;
 			loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
 			loggers.intent.info(`Action plan: ${actionPlan}`);
 
@@ -288,6 +293,28 @@ export class IntentFulfillStreamService {
 				event: "intent_process",
 				data: { subquery, actionPlan: actionPlan || "" },
 			};
+
+			// If no intent matched and fallback handler is provided, use it
+			if (!intent && this.onFallback) {
+				loggers.intent.info("No intent matched, calling fallback handler");
+				const fallbackStream = this.onFallback({
+					triggeredIntent,
+					thread,
+				});
+				if (fallbackStream !== undefined) {
+					finalResponseText = "";
+					for await (const event of fallbackStream) {
+						if (event.event === "text_chunk" && event.data.delta) {
+							finalResponseText += event.data.delta;
+						}
+						if (event.event === "text_chunk" && i !== intents.length - 1) {
+							continue; // skip intermediate text_chunk events
+						}
+						yield event;
+					}
+					continue;
+				}
+			}
 
 			const stream = this.intentFulfilling(subquery, thread, intent);
 

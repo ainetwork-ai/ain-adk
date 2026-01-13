@@ -16,7 +16,13 @@ import type {
 } from "./modules";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
-import type { AinAgentManifest } from "./types/agent";
+import type { AinAgentManifest, OnFallback } from "./types/agent";
+
+export type {
+	AinAgentManifest,
+	FallbackContext,
+	OnFallback,
+} from "./types/agent";
 
 /**
  * Main class for AI Network Agent Development Kit (AIN-ADK).
@@ -56,6 +62,9 @@ export class AINAgent {
 	/** Optional authentication scheme for securing endpoints */
 	public authScheme: BaseAuth;
 
+	/** Optional fallback handler when intent matching fails */
+	public onFallback?: OnFallback;
+
 	/**
 	 * Creates a new AINAgent instance.
 	 *
@@ -67,6 +76,7 @@ export class AINAgent {
 	 * @param modules.memoryModule - Optional module for memory management
 	 * @param authScheme - Optional authentication middleware for securing endpoints
 	 * @param allowStream - Enable streaming query endpoints (default: false)
+	 * @param onFallback - Handler when intent matching fails
 	 */
 	constructor(
 		manifest: AinAgentManifest,
@@ -78,6 +88,7 @@ export class AINAgent {
 		},
 		authScheme: BaseAuth,
 		allowStream = false,
+		onFallback?: OnFallback,
 	) {
 		this.app = express();
 
@@ -91,6 +102,7 @@ export class AINAgent {
 		this.memoryModule = modules.memoryModule;
 
 		this.authScheme = authScheme;
+		this.onFallback = onFallback;
 
 		this.initializeMiddlewares();
 		this.initializeRoutes(allowStream);

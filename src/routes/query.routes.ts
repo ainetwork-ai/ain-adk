@@ -25,6 +25,7 @@ export const createQueryRouter = (
 			agent.a2aModule,
 			agent.mcpModule,
 			agent.memoryModule,
+			agent.onFallback,
 		);
 	}
 
