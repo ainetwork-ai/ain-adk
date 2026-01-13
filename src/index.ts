@@ -7,12 +7,23 @@ import { version } from "../package.json";
 import { setManifest } from "./config/manifest";
 import { AuthMiddleware } from "./middlewares/auth.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
-import type { A2AModule, BaseAuth, MCPModule, MemoryModule, ModelModule } from "./modules";
+import type {
+	A2AModule,
+	BaseAuth,
+	MCPModule,
+	MemoryModule,
+	ModelModule,
+} from "./modules";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
 import type { AinAgentManifest, OnFallback } from "./types/agent";
 
-export type { AinAgentManifest, FallbackContext, OnFallback } from "./types/agent";
+export type {
+	AinAgentManifest,
+	FallbackContext,
+	OnFallback,
+} from "./types/agent";
+
 import isValidUrl from "./utils/isValidUrl";
 
 /**
@@ -38,7 +49,7 @@ import isValidUrl from "./utils/isValidUrl";
  * ```
  */
 export class AINAgent {
-  /** Express application instance */
+	/** Express application instance */
 	public app: express.Application;
 
 	/** Agent manifest containing metadata and configuration */
@@ -69,173 +80,177 @@ export class AINAgent {
 	 * @param allowStream - Enable streaming query endpoints (default: false)
 	 * @param onFallback - Handler when intent matching fails
 	 */
-  constructor(
-    manifest: AinAgentManifest,
-    modules: {
-      modelModule: ModelModule;
-      a2aModule?: A2AModule;
-      mcpModule?: MCPModule;
-      memoryModule?: MemoryModule;
-    },
-    authScheme: BaseAuth,
-    allowStream = false,
-    onFallback?: OnFallback
-  ) {
-    this.app = express();
+	constructor(
+		manifest: AinAgentManifest,
+		modules: {
+			modelModule: ModelModule;
+			a2aModule?: A2AModule;
+			mcpModule?: MCPModule;
+			memoryModule?: MemoryModule;
+		},
+		authScheme: BaseAuth,
+		allowStream = false,
+		onFallback?: OnFallback,
+	) {
+		this.app = express();
 
-    // Set manifest
-    this.manifest = manifest;
-    setManifest(manifest);
+		// Set manifest
+		this.manifest = manifest;
+		setManifest(manifest);
 
-    // Set modules
-    this.modelModule = modules.modelModule;
-    this.a2aModule = modules.a2aModule;
-    this.mcpModule = modules.mcpModule;
-    this.memoryModule = modules.memoryModule;
+		// Set modules
+		this.modelModule = modules.modelModule;
+		this.a2aModule = modules.a2aModule;
+		this.mcpModule = modules.mcpModule;
+		this.memoryModule = modules.memoryModule;
 
-    this.authScheme = authScheme;
-    this.onFallback = onFallback;
+		this.authScheme = authScheme;
+		this.onFallback = onFallback;
 
-    this.initializeMiddlewares();
-    this.initializeRoutes(allowStream);
-    this.app.use(errorMiddleware);
-  }
+		this.initializeMiddlewares();
+		this.initializeRoutes(allowStream);
+		this.app.use(errorMiddleware);
+	}
 
-  /**
-   * Initializes Express middlewares for security, CORS, and body parsing.
-   * Also applies authentication middleware if configured.
-   */
-  private initializeMiddlewares(): void {
-    this.app.use(helmet());
-    this.app.use(cors());
-    this.app.use(express.json({ limit: "25mb" }));
-    this.app.use(express.urlencoded({ limit: "25mb", extended: true }));
-  }
+	/**
+	 * Initializes Express middlewares for security, CORS, and body parsing.
+	 * Also applies authentication middleware if configured.
+	 */
+	private initializeMiddlewares(): void {
+		this.app.use(helmet());
+		this.app.use(cors());
+		this.app.use(express.json({ limit: "25mb" }));
+		this.app.use(express.urlencoded({ limit: "25mb", extended: true }));
+	}
 
-  /**
-   * Generates an A2A protocol agent card for discovery.
-   *
-   * The agent card contains metadata about the agent's capabilities,
-   * supported input/output modes, and connection information.
-   *
-   * @returns AgentCard object with agent metadata and capabilities
-   * @throws Error if manifest URL is invalid or missing
-   */
-  public generateAgentCard = (): AgentCard => {
-    const _url = new URL(this.manifest.url || "");
-    _url.pathname = "a2a";
+	/**
+	 * Generates an A2A protocol agent card for discovery.
+	 *
+	 * The agent card contains metadata about the agent's capabilities,
+	 * supported input/output modes, and connection information.
+	 *
+	 * @returns AgentCard object with agent metadata and capabilities
+	 * @throws Error if manifest URL is invalid or missing
+	 */
+	public generateAgentCard = (): AgentCard => {
+		const _url = new URL(this.manifest.url || "");
+		_url.pathname = "a2a";
 
-    return {
-      name: this.manifest.name,
-      description: this.manifest.description,
-      version: version,
-      protocolVersion: "0.3.0",
-      url: _url.toString(),
-      capabilities: {
-        streaming: true, // The new framework supports streaming
-        pushNotifications: false, // Assuming not implemented for this agent yet
-        stateTransitionHistory: true, // Agent uses history
-      },
-      defaultInputModes: ["text"],
-      defaultOutputModes: ["text", "task-status"], // task-status is a common output mode
-      skills: [],
-      supportsAuthenticatedExtendedCard: false,
-    };
-  };
+		return {
+			name: this.manifest.name,
+			description: this.manifest.description,
+			version: version,
+			protocolVersion: "0.3.0",
+			url: _url.toString(),
+			capabilities: {
+				streaming: true, // The new framework supports streaming
+				pushNotifications: false, // Assuming not implemented for this agent yet
+				stateTransitionHistory: true, // Agent uses history
+			},
+			defaultInputModes: ["text"],
+			defaultOutputModes: ["text", "task-status"], // task-status is a common output mode
+			skills: [],
+			supportsAuthenticatedExtendedCard: false,
+		};
+	};
 
-  /**
-   * Initializes all HTTP routes including health check, agent discovery,
-   * query endpoints, and optional A2A endpoints.
-   *
-   * Routes initialized:
-   * - GET / - Health check endpoint
-   * - GET /.well-known/agent.json - Agent card discovery endpoint
-   * - /query/* - Query processing endpoints
-   * - /api/* - API endpoints for agent management
-   * - /a2a/* - A2A protocol endpoints (only if valid URL is configured)
-   */
-  private initializeRoutes = (allowStream = false): void => {
-    const auth = new AuthMiddleware(this.authScheme);
+	/**
+	 * Initializes all HTTP routes including health check, agent discovery,
+	 * query endpoints, and optional A2A endpoints.
+	 *
+	 * Routes initialized:
+	 * - GET / - Health check endpoint
+	 * - GET /.well-known/agent.json - Agent card discovery endpoint
+	 * - /query/* - Query processing endpoints
+	 * - /api/* - API endpoints for agent management
+	 * - /a2a/* - A2A protocol endpoints (only if valid URL is configured)
+	 */
+	private initializeRoutes = (allowStream = false): void => {
+		const auth = new AuthMiddleware(this.authScheme);
 
-    this.app.get("/", async (_, res: Response) => {
-      const { name, description } = this.manifest;
-      res.status(200).send(
-        `
+		this.app.get("/", async (_, res: Response) => {
+			const { name, description } = this.manifest;
+			res.status(200).send(
+				`
         ⚡ AIN Agent: ${name} with ain-adk v${version}<br/>
         ${description}<br/><br/>
         Agent status: Online and ready.
-      `.trim()
-      );
-    });
+      `.trim(),
+			);
+		});
 
-    this.app.get(
-      [
-        "/.well-known/agent.json", // ~v0.2.0
-        "/.well-known/agent-card.json", // v0.3.0~
-      ],
-      async (_, res: Response) => {
-        try {
-          const card = this.generateAgentCard();
-          res.json(card);
-        } catch (_error) {
-          res.status(StatusCodes.NOT_FOUND).send("No agent card");
-        }
-      }
-    );
+		this.app.get(
+			[
+				"/.well-known/agent.json", // ~v0.2.0
+				"/.well-known/agent-card.json", // v0.3.0~
+			],
+			async (_, res: Response) => {
+				try {
+					const card = this.generateAgentCard();
+					res.json(card);
+				} catch (_error) {
+					res.status(StatusCodes.NOT_FOUND).send("No agent card");
+				}
+			},
+		);
 
-    this.app.use("/query", auth.middleware(), createQueryRouter(this, allowStream));
-    this.app.use("/intent", auth.middleware(), createIntentRouter(this));
-    this.app.use("/api", auth.middleware(), createApiRouter(this));
+		this.app.use(
+			"/query",
+			auth.middleware(),
+			createQueryRouter(this, allowStream),
+		);
+		this.app.use("/intent", auth.middleware(), createIntentRouter(this));
+		this.app.use("/api", auth.middleware(), createApiRouter(this));
 
-    if (isValidUrl(this.manifest.url)) {
-      this.app.use("/a2a", createA2ARouter(this));
-    }
-  };
+		if (isValidUrl(this.manifest.url)) {
+			this.app.use("/a2a", createA2ARouter(this));
+		}
+	};
 
-  /**
-   * Starts the Express server on the specified port.
-   *
-   * @param port - The port number to listen on
-   */
-  public async start(port: number): Promise<void> {
-    const server = this.app.listen(port, async () => {
-      await this.memoryModule?.initialize();
-      await this.mcpModule?.connectToServers();
-      console.log(`AINAgent is running on port ${port}`);
-    });
+	/**
+	 * Starts the Express server on the specified port.
+	 *
+	 * @param port - The port number to listen on
+	 */
+	public async start(port: number): Promise<void> {
+		const server = this.app.listen(port, async () => {
+			await this.memoryModule?.initialize();
+			await this.mcpModule?.connectToServers();
+			console.log(`AINAgent is running on port ${port}`);
+		});
 
-    // Graceful shutdown handling
-    const gracefulShutdown = async (signal: string) => {
-      console.log(`Received ${signal}, starting graceful shutdown...`);
+		// Graceful shutdown handling
+		const gracefulShutdown = async (signal: string) => {
+			console.log(`Received ${signal}, starting graceful shutdown...`);
 
-      // Stop accepting new connections
-      server.close(() => {
-        console.log("HTTP server closed");
-      });
+			// Stop accepting new connections
+			server.close(() => {
+				console.log("HTTP server closed");
+			});
 
-      try {
-        // Cleanup modules
-        if (this.mcpModule) {
-          console.log("Disconnecting from MCP servers...");
-          await this.mcpModule.cleanup();
-        }
+			try {
+				// Cleanup modules
+				if (this.mcpModule) {
+					console.log("Disconnecting from MCP servers...");
+					await this.mcpModule.cleanup();
+				}
 
-        if (this.memoryModule) {
-          console.log("Closing memory module...");
-          await this.memoryModule.shutdown();
-        }
+				if (this.memoryModule) {
+					console.log("Closing memory module...");
+					await this.memoryModule.shutdown();
+				}
 
-        console.log("Graceful shutdown completed");
-        process.exit(0);
-      } catch (error) {
-        console.error("Error during graceful shutdown:", error);
-        process.exit(1);
-      }
-    };
+				console.log("Graceful shutdown completed");
+				process.exit(0);
+			} catch (error) {
+				console.error("Error during graceful shutdown:", error);
+				process.exit(1);
+			}
+		};
 
-    // Register signal handlers
-    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-    process.on("SIGHUP", () => gracefulShutdown("SIGHUP"));
-  }
+		// Register signal handlers
+		process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+		process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+		process.on("SIGHUP", () => gracefulShutdown("SIGHUP"));
+	}
 }
