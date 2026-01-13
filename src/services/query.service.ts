@@ -17,7 +17,7 @@ import {
 } from "@/types/memory.js";
 import { loggers } from "@/utils/logger.js";
 import { IntentFulfillService } from "./intents/fulfill.service";
-import { IntentTriggerService } from "./intents/trigger.service";
+import { IntentTriggerService } from "./intents/trigger.multi";
 import { generateTitle } from "./utils/query.common";
 
 /**

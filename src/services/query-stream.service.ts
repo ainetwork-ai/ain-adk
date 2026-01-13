@@ -19,7 +19,8 @@ import {
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
 import { IntentFulfillStreamService } from "./intents/fulfill-stream.service";
-import { IntentTriggerService } from "./intents/trigger.service";
+import { IntentTriggerService as MultiIntentTriggerService } from "./intents/trigger.multi";
+import { IntentTriggerService as SingleIntentTriggerService } from "./intents/trigger.single";
 import { generateTitle } from "./utils/query.common";
 
 /**
@@ -32,7 +33,8 @@ import { generateTitle } from "./utils/query.common";
 export class QueryStreamService {
 	private modelModule: ModelModule;
 	private memoryModule?: MemoryModule;
-	private intentTriggerService: IntentTriggerService;
+	private multiIntentTriggerService: MultiIntentTriggerService;
+	private singleIntentTriggerService: SingleIntentTriggerService;
 	private intentFulfillStreamService: IntentFulfillStreamService;
 
 	constructor(
@@ -43,7 +45,11 @@ export class QueryStreamService {
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
-		this.intentTriggerService = new IntentTriggerService(
+		this.multiIntentTriggerService = new MultiIntentTriggerService(
+			modelModule,
+			memoryModule,
+		);
+		this.singleIntentTriggerService = new SingleIntentTriggerService(
 			modelModule,
 			memoryModule,
 		);
@@ -122,8 +128,10 @@ export class QueryStreamService {
 		}
 
 		// 2. intent triggering
-		const triggeredIntent: Array<TriggeredIntent> =
-			await this.intentTriggerService.intentTriggering(query, thread);
+		const disableMultiIntents = process.env.DISABLE_MULTI_INTENTS === "true";
+		const triggeredIntent: Array<TriggeredIntent> = disableMultiIntents
+			? [await this.singleIntentTriggerService.intentTriggering(query, thread)]
+			: await this.multiIntentTriggerService.intentTriggering(query, thread);
 		loggers.intent.debug("Triggered intents", { triggeredIntent });
 
 		// only add for storage, not for inference
