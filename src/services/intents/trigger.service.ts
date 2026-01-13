@@ -87,7 +87,7 @@ Based on the above conversation history, analyze the last user question and iden
 
 Instructions:
 1. First, decompose the last user question into action-based subqueries (each representing a distinct action or task)
-	- Each subquery MUST be expressed as a complete sentence.
+	- Each subquery MUST be expressed as a noun phrase.
 2. Then, map each subquery to its corresponding intent from the available intent list
 3. For each subquery, provide a 2-3 sentence summary of what actions will be performed
 4. Multiple intents can be identified if the question covers various topics or actions
