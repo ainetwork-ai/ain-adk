@@ -43,9 +43,9 @@ export class ServiceContainer {
 		if (!this._intentFulfillService) {
 			this._intentFulfillService = new IntentFulfillService(
 				getModelModule(),
+				getMemoryModule(),
 				getA2AModule(),
 				getMCPModule(),
-				getMemoryModule(),
 				getOnIntentFallback(),
 			);
 		}

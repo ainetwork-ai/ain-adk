@@ -8,9 +8,9 @@ import { loggers } from "@/utils/logger";
 
 export class IntentTriggerService {
 	private modelModule: ModelModule;
-	private memoryModule?: MemoryModule;
+	private memoryModule: MemoryModule;
 
-	constructor(modelModule: ModelModule, memoryModule?: MemoryModule) {
+	constructor(modelModule: ModelModule, memoryModule: MemoryModule) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
 	}
@@ -28,7 +28,7 @@ export class IntentTriggerService {
 	): Promise<Array<TriggeredIntent>> {
 		const modelInstance = this.modelModule.getModel();
 		const modelOptions = this.modelModule.getModelOptions();
-		const intentMemory = this.memoryModule?.getIntentMemory();
+		const intentMemory = this.memoryModule.getIntentMemory();
 		if (!intentMemory) {
 			return [{ subquery: query }];
 		}

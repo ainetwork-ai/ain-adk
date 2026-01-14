@@ -19,7 +19,7 @@ export const createIntentApiRouter = (): Router => {
 		next: NextFunction,
 	) => {
 		const memoryModule = getMemoryModule();
-		const threadMemory = memoryModule?.getThreadMemory();
+		const threadMemory = memoryModule.getThreadMemory();
 		if (!threadMemory) {
 			const error = new AinHttpError(
 				StatusCodes.SERVICE_UNAVAILABLE,

@@ -1,5 +1,6 @@
 import type {
 	A2AModule,
+	AuthModule,
 	MCPModule,
 	MemoryModule,
 	ModelModule,
@@ -7,9 +8,10 @@ import type {
 
 export interface AgentModules {
 	modelModule: ModelModule;
+	memoryModule: MemoryModule;
+	authModule?: AuthModule;
 	a2aModule?: A2AModule;
 	mcpModule?: MCPModule;
-	memoryModule?: MemoryModule;
 }
 
 let _modules: AgentModules | null = null;
@@ -29,14 +31,18 @@ export function getModelModule(): ModelModule {
 	return getModules().modelModule;
 }
 
+export function getMemoryModule(): MemoryModule {
+	return getModules().memoryModule;
+}
+
+export function getAuthModule(): AuthModule | undefined {
+	return getModules().authModule;
+}
+
 export function getA2AModule(): A2AModule | undefined {
 	return getModules().a2aModule;
 }
 
 export function getMCPModule(): MCPModule | undefined {
 	return getModules().mcpModule;
-}
-
-export function getMemoryModule(): MemoryModule | undefined {
-	return getModules().memoryModule;
 }

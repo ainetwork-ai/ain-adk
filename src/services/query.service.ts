@@ -29,13 +29,13 @@ import { generateTitle } from "./utils/query.common";
  */
 export class QueryService {
 	private modelModule: ModelModule;
-	private memoryModule?: MemoryModule;
+	private memoryModule: MemoryModule;
 	private intentTriggerService: IntentTriggerService;
 	private intentFulfillService: IntentFulfillService;
 
 	constructor(
 		modelModule: ModelModule,
-		memoryModule: MemoryModule | undefined,
+		memoryModule: MemoryModule,
 		intentTriggerService: IntentTriggerService,
 		intentFulfillService: IntentFulfillService,
 	) {
@@ -50,7 +50,7 @@ export class QueryService {
 		threadId: string,
 		messages: Array<MessageObject>,
 	) {
-		const threadMemory = this.memoryModule?.getThreadMemory();
+		const threadMemory = this.memoryModule.getThreadMemory();
 		await threadMemory?.addMessagesToThread(userId, threadId, messages);
 	}
 
@@ -81,7 +81,7 @@ export class QueryService {
 		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
 		const { type, userId, options } = threadMetadata;
-		const threadMemory = this.memoryModule?.getThreadMemory();
+		const threadMemory = this.memoryModule.getThreadMemory();
 
 		// 1. Load or create thread
 		let threadId = threadMetadata.threadId;

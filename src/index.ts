@@ -60,10 +60,10 @@ export class AINAgent {
 
 	/** Modules */
 	public modelModule: ModelModule;
+	public memoryModule: MemoryModule;
+	public authModule?: AuthModule;
 	public a2aModule?: A2AModule;
 	public mcpModule?: MCPModule;
-	public memoryModule?: MemoryModule;
-	public authModule?: AuthModule;
 
 	/** Optional fallback handler when intent matching fails */
 	public onIntentFallback?: OnIntentFallback;
@@ -86,9 +86,9 @@ export class AINAgent {
 		modules: {
 			authModule: AuthModule;
 			modelModule: ModelModule;
+			memoryModule: MemoryModule;
 			a2aModule?: A2AModule;
 			mcpModule?: MCPModule;
-			memoryModule?: MemoryModule;
 		},
 		options?: {
 			onIntentFallback?: OnIntentFallback;
@@ -227,7 +227,7 @@ export class AINAgent {
 	 */
 	public async start(port: number): Promise<void> {
 		const server = this.app.listen(port, async () => {
-			await this.memoryModule?.initialize();
+			await this.memoryModule.initialize();
 			await this.mcpModule?.connectToServers();
 			console.log(`AINAgent is running on port ${port}`);
 		});

@@ -7,9 +7,9 @@ import type {
 } from "@/types/memory";
 
 export class ThreadService {
-	private memoryModule?: MemoryModule;
+	private memoryModule: MemoryModule;
 
-	constructor(memoryModule?: MemoryModule) {
+	constructor(memoryModule: MemoryModule) {
 		this.memoryModule = memoryModule;
 	}
 
@@ -17,8 +17,8 @@ export class ThreadService {
 		userId: string,
 		threadId: string,
 	): Promise<ThreadObject | undefined> {
-		const threadMemory = this.memoryModule?.getThreadMemory();
-		if (!this.memoryModule || !threadMemory) {
+		const threadMemory = this.memoryModule.getThreadMemory();
+		if (!threadMemory) {
 			return;
 		}
 
@@ -31,8 +31,8 @@ export class ThreadService {
 		threadId: string,
 		title: string,
 	): Promise<ThreadObject> {
-		const threadMemory = this.memoryModule?.getThreadMemory();
-		if (!this.memoryModule || !threadMemory) {
+		const threadMemory = this.memoryModule.getThreadMemory();
+		if (!threadMemory) {
 			return {
 				type,
 				userId,
@@ -56,8 +56,8 @@ export class ThreadService {
 		threadId: string,
 		messages: Array<MessageObject>,
 	): Promise<void> {
-		const threadMemory = this.memoryModule?.getThreadMemory();
-		if (!this.memoryModule || !threadMemory) {
+		const threadMemory = this.memoryModule.getThreadMemory();
+		if (!threadMemory) {
 			return;
 		}
 
