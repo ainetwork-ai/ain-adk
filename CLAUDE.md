@@ -42,45 +42,60 @@ yarn dev        # Run TypeScript directly with tsx
    - Graceful shutdown handling for all connected modules
 
 2. **Module System**
-   - **ModelModule** (`src/modules/models/`): AI model integrations
+   - **AuthModule** (`src/modules/auth/`): Authentication handling (required)
+     - Abstract class for custom authentication implementations
+     - Returns `AuthResponse` with `isAuthenticated` and `userId`
+   - **ModelModule** (`src/modules/models/`): AI model integrations (required)
      - Abstract `BaseModel` class for provider-agnostic implementation
      - Support for streaming and non-streaming responses
      - Unified tool/function conversion interface
-   - **MCPModule** (`src/modules/mcp/`): Model Context Protocol client connections
-     - Tool discovery and execution from MCP servers
-     - Protocol implementation via stdio
-   - **A2AModule** (`src/modules/a2a/`): Agent-to-Agent communication
-     - RESTful API for inter-agent communication
-     - Agent discovery via well-known endpoints
-     - Task delegation with context passing
-   - **MemoryModule** (`src/modules/memory/`): Data persistence
+   - **MemoryModule** (`src/modules/memory/`): Data persistence (required)
      - Thread management for conversation history
      - Intent storage and retrieval
      - Agent metadata management
+   - **MCPModule** (`src/modules/mcp/`): Model Context Protocol client connections (optional)
+     - Tool discovery and execution from MCP servers
+     - Protocol implementation via stdio
+   - **A2AModule** (`src/modules/a2a/`): Agent-to-Agent communication (optional)
+     - RESTful API for inter-agent communication
+     - Agent discovery via well-known endpoints
+     - Task delegation with context passing
 
-3. **Service Layer** (`src/services/`)
-   - `query.service.ts`: Non-streaming query processing
-     - Intent detection and fulfillment
-     - Tool orchestration across protocols
-     - Thread history management
-   - `query-stream.service.ts`: Streaming query processing
-     - Real-time response streaming
-     - Progressive tool execution updates
-     - Event-based communication via StreamEvent types
+3. **Configuration Layer** (`src/config/`)
+   - `agent.ts`: Global agent instance access
+   - `modules.ts`: Module registry (setModules/getModelModule/getMemoryModule/etc.)
+   - `options.ts`: Options registry (setOptions/getOnIntentFallback)
+   - `manifest.ts`: Agent manifest storage
+
+4. **DI Container** (`src/container/`)
+   - `index.ts`: Main Container class with convenience methods
+   - `services.ts`: ServiceContainer for service singletons
+     - ThreadService, IntentTriggerService, IntentFulfillService
+     - QueryService, A2AService
+   - `controllers.ts`: ControllerContainer for controller singletons
+     - QueryController, IntentController
+     - ModelApiController, AgentApiController, ThreadApiController, IntentApiController
+
+5. **Service Layer** (`src/services/`)
+   - `query.service.ts`: Query processing with intent detection and fulfillment
+   - `thread.service.ts`: Thread management operations
    - `a2a.service.ts`: A2A protocol operations
+   - `intents/trigger.service.ts`: Intent triggering logic
+   - `intents/fulfill.service.ts`: Intent fulfillment with tool execution
 
-4. **Controller Layer** (`src/controllers/`)
+6. **Controller Layer** (`src/controllers/`)
    - `query.controller.ts`: Query endpoint handlers (both streaming and non-streaming)
    - `a2a.controller.ts`: A2A-specific endpoint handlers
    - `api/threads.api.controller.ts`: Thread management API
    - `api/model.api.controller.ts`: Model management API
    - `api/agent.api.controller.ts`: Agent management API
 
-5. **Tool Abstraction**
-   - Unified `ConnectorTool` class for protocol-agnostic tool execution
+7. **Tool Abstraction**
+   - `ConnectorTool` type for protocol-agnostic tool representation
+   - `IAgentConnector` interface for connector management (MCP/A2A)
    - `CONNECTOR_PROTOCOL_TYPE` enum for tool source identification
 
-6. **Type System** (`src/types/`)
+8. **Type System** (`src/types/`)
    - `agent.ts`: Agent manifest and configuration types
    - `memory.ts`: Thread, Intent, and message types
    - `stream.ts`: Streaming event and chunk types
@@ -90,16 +105,20 @@ yarn dev        # Run TypeScript directly with tsx
 
 ### Key Patterns
 
-1. **Module Registration**: All modules follow a consistent registration pattern with the main agent
-2. **Tool Execution**: Tools are executed through a unified interface regardless of source (MCP/A2A)
-3. **Streaming Support**: Dual implementation pattern for query processing (streaming and non-streaming)
-4. **Logging**: Service-specific loggers with structured logging
-   - Available loggers: `agent`, `intent`, `intentStream`, `mcp`, `a2a`, `model`, `server`, `memory`
-5. **Error Handling**: 
+1. **DI Container Pattern**: Centralized dependency management via `src/container/`
+   - Services and controllers are created as singletons
+   - Routes use `container.getXxxController()` for clean, simple code
+   - `container.reset()` available for testing
+2. **Module Registration**: All modules follow a consistent registration pattern with the main agent
+3. **Tool Execution**: Tools are executed through a unified interface regardless of source (MCP/A2A)
+4. **Streaming Support**: Dual implementation pattern for query processing (streaming and non-streaming)
+5. **Logging**: Service-specific loggers with structured logging
+   - Available loggers: `agent`, `intent`, `intentStream`, `mcp`, `a2a`, `model`, `server`, `fol`
+6. **Error Handling**:
    - Global error middleware for uncaught errors
    - Custom `AinHttpError` for HTTP-specific errors
    - Graceful error propagation in streaming contexts
-6. **Type Safety**: 
+7. **Type Safety**:
    - Extensive use of TypeScript interfaces and strict mode
    - Generic types for model implementations
    - Discriminated unions for stream events
@@ -111,20 +130,26 @@ yarn dev        # Run TypeScript directly with tsx
    - Follow existing patterns in similar files
    - Maintain strict TypeScript types
 
-2. **Module Development**
+2. **Dependency Injection**
+   - Use `src/container/` for obtaining service/controller instances
+   - Services receive dependencies via constructor (testable)
+   - Global modules accessed via `src/config/modules.ts` getters
+
+3. **Module Development**
    - Extend base module classes when creating new modules
    - Implement proper initialization and cleanup methods
-   - Use dependency injection pattern
+   - Register modules via `setModules()` in AINAgent initialization
 
-3. **API Endpoints**
+4. **API Endpoints**
    - Standard query endpoints: `/query`
    - API for agent management: `/api`
    - A2A endpoints: `/a2a` (only available in A2A server mode)
 
-4. **Testing**
+5. **Testing**
    - Use Jest for unit tests
    - Test files should use `.test.ts` extension
    - Mock external dependencies appropriately
+   - Use `container.reset()` to clear singleton instances between tests
 
 ### Environment Configuration
 
