@@ -5,20 +5,21 @@ import {
 	Router,
 } from "express";
 import { StatusCodes } from "http-status-codes";
-import { IntentApiController } from "@/controllers/api/intent.api.controller";
-import type { MemoryModule } from "@/modules/index.js";
+import { getMemoryModule } from "@/config/modules";
+import { container } from "@/container";
 import { AinHttpError } from "@/types/agent";
 
-export const createIntentApiRouter = (memoryModule: MemoryModule): Router => {
+export const createIntentApiRouter = (): Router => {
 	const router = Router();
-	const intentApiController = new IntentApiController(memoryModule);
+	const intentApiController = container.getIntentApiController();
 
 	const checkThreadMemory = (
 		_req: Request,
 		_res: Response,
 		next: NextFunction,
 	) => {
-		const threadMemory = memoryModule.getThreadMemory();
+		const memoryModule = getMemoryModule();
+		const threadMemory = memoryModule?.getThreadMemory();
 		if (!threadMemory) {
 			const error = new AinHttpError(
 				StatusCodes.SERVICE_UNAVAILABLE,

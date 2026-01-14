@@ -1,13 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { StatusCodes } from "http-status-codes";
 import type {
-	A2AModule,
-	MCPModule,
 	MemoryModule,
 	ModelFetchOptions,
 	ModelModule,
 } from "@/modules/index.js";
-import { AinHttpError, OnIntentFallback } from "@/types/agent.js";
+import { AinHttpError } from "@/types/agent.js";
 import {
 	type MessageObject,
 	MessageRole,
@@ -18,8 +16,8 @@ import {
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
-import { IntentFulfillService } from "./intents/fulfill.service";
-import { IntentTriggerService } from "./intents/trigger.service";
+import type { IntentFulfillService } from "./intents/fulfill.service";
+import type { IntentTriggerService } from "./intents/trigger.service";
 import { generateTitle } from "./utils/query.common";
 
 /**
@@ -37,24 +35,14 @@ export class QueryService {
 
 	constructor(
 		modelModule: ModelModule,
-		a2aModule?: A2AModule,
-		mcpModule?: MCPModule,
-		memoryModule?: MemoryModule,
-		onIntentFallback?: OnIntentFallback,
+		memoryModule: MemoryModule | undefined,
+		intentTriggerService: IntentTriggerService,
+		intentFulfillService: IntentFulfillService,
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
-		this.intentTriggerService = new IntentTriggerService(
-			modelModule,
-			memoryModule,
-		);
-		this.intentFulfillService = new IntentFulfillService(
-			modelModule,
-			a2aModule,
-			mcpModule,
-			memoryModule,
-			onIntentFallback,
-		);
+		this.intentTriggerService = intentTriggerService;
+		this.intentFulfillService = intentFulfillService;
 	}
 
 	public async addToThreadMessages(

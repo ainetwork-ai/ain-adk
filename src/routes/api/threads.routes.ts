@@ -5,20 +5,21 @@ import {
 	Router,
 } from "express";
 import { StatusCodes } from "http-status-codes";
-import { ThreadApiController } from "@/controllers/api/threads.api.controller.js";
-import type { MemoryModule } from "@/modules/index.js";
+import { getMemoryModule } from "@/config/modules";
+import { container } from "@/container";
 import { AinHttpError } from "@/types/agent";
 
-export const createThreadApiRouter = (memoryModule: MemoryModule): Router => {
+export const createThreadApiRouter = (): Router => {
 	const router = Router();
-	const threadApiController = new ThreadApiController(memoryModule);
+	const threadApiController = container.getThreadApiController();
 
 	const checkThreadMemory = (
 		_req: Request,
 		_res: Response,
 		next: NextFunction,
 	) => {
-		const threadMemory = memoryModule.getThreadMemory();
+		const memoryModule = getMemoryModule();
+		const threadMemory = memoryModule?.getThreadMemory();
 		if (!threadMemory) {
 			const error = new AinHttpError(
 				StatusCodes.SERVICE_UNAVAILABLE,

@@ -1,18 +1,20 @@
 import { Router } from "express";
-import type { AINAgent } from "@/index.js";
+import { getMemoryModule } from "@/config/modules";
 import { createAgentApiRouter } from "./api/agent.routes.js";
 import { createIntentApiRouter } from "./api/intent.routes.js";
 import { createModelApiRouter } from "./api/model.routes.js";
 import { createThreadApiRouter } from "./api/threads.routes.js";
 
-export const createApiRouter = (agent: AINAgent): Router => {
+export const createApiRouter = (): Router => {
 	const router = Router();
 
-	router.use("/model", createModelApiRouter(agent.modelModule));
-	router.use("/agent", createAgentApiRouter(agent));
-	if (agent.memoryModule) {
-		router.use("/threads", createThreadApiRouter(agent.memoryModule));
-		router.use("/intent", createIntentApiRouter(agent.memoryModule));
+	router.use("/model", createModelApiRouter());
+	router.use("/agent", createAgentApiRouter());
+
+	const memoryModule = getMemoryModule();
+	if (memoryModule) {
+		router.use("/threads", createThreadApiRouter());
+		router.use("/intent", createIntentApiRouter());
 	}
 
 	return router;

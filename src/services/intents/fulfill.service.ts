@@ -25,6 +25,7 @@ export class IntentFulfillService {
 	private mcpModule?: MCPModule;
 	private memoryModule?: MemoryModule;
 	private onIntentFallback?: OnIntentFallback;
+
 	constructor(
 		modelModule: ModelModule,
 		a2aModule?: A2AModule,

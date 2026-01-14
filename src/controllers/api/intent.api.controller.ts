@@ -4,9 +4,9 @@ import type { MemoryModule } from "@/modules/index.js";
 import type { Intent } from "@/types/memory";
 
 export class IntentApiController {
-	private memoryModule: MemoryModule;
+	private memoryModule?: MemoryModule;
 
-	constructor(memoryModule: MemoryModule) {
+	constructor(memoryModule?: MemoryModule) {
 		this.memoryModule = memoryModule;
 	}
 
@@ -16,7 +16,7 @@ export class IntentApiController {
 		next: NextFunction,
 	) => {
 		try {
-			const intentMemory = this.memoryModule.getIntentMemory();
+			const intentMemory = this.memoryModule?.getIntentMemory();
 			const intents = await intentMemory?.listIntents();
 			res.json(intents);
 		} catch (error) {
@@ -31,7 +31,7 @@ export class IntentApiController {
 	) => {
 		try {
 			const intent = req.body as Intent;
-			const intentMemory = this.memoryModule.getIntentMemory();
+			const intentMemory = this.memoryModule?.getIntentMemory();
 			await intentMemory?.saveIntent(intent);
 			res.status(StatusCodes.OK).send();
 		} catch (error) {
@@ -46,7 +46,7 @@ export class IntentApiController {
 	) => {
 		try {
 			const { id } = req.params as { id: string };
-			const intentMemory = this.memoryModule.getIntentMemory();
+			const intentMemory = this.memoryModule?.getIntentMemory();
 			await intentMemory?.deleteIntent(id);
 			res.status(StatusCodes.OK).send();
 		} catch (error) {

@@ -4,12 +4,15 @@ import express, { type Response } from "express";
 import helmet from "helmet";
 import { StatusCodes } from "http-status-codes";
 import { version } from "../package.json";
+import { setAgent } from "./config/agent";
 import { setManifest } from "./config/manifest";
+import { setModules } from "./config/modules";
+import { setOptions } from "./config/options";
 import { AuthMiddleware } from "./middlewares/auth.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import type {
 	A2AModule,
-	BaseAuth,
+	AuthModule,
 	MCPModule,
 	MemoryModule,
 	ModelModule,
@@ -60,9 +63,7 @@ export class AINAgent {
 	public a2aModule?: A2AModule;
 	public mcpModule?: MCPModule;
 	public memoryModule?: MemoryModule;
-
-	/** Optional authentication scheme for securing endpoints */
-	public authScheme: BaseAuth;
+	public authModule?: AuthModule;
 
 	/** Optional fallback handler when intent matching fails */
 	public onIntentFallback?: OnIntentFallback;
@@ -83,12 +84,12 @@ export class AINAgent {
 	constructor(
 		manifest: AinAgentManifest,
 		modules: {
+			authModule: AuthModule;
 			modelModule: ModelModule;
 			a2aModule?: A2AModule;
 			mcpModule?: MCPModule;
 			memoryModule?: MemoryModule;
 		},
-		authScheme: BaseAuth,
 		options?: {
 			onIntentFallback?: OnIntentFallback;
 		},
@@ -104,9 +105,24 @@ export class AINAgent {
 		this.a2aModule = modules.a2aModule;
 		this.mcpModule = modules.mcpModule;
 		this.memoryModule = modules.memoryModule;
-
-		this.authScheme = authScheme;
+		this.authModule = modules.authModule;
 		this.onIntentFallback = options?.onIntentFallback;
+
+		// Set global modules for easy access
+		setModules({
+			modelModule: modules.modelModule,
+			a2aModule: modules.a2aModule,
+			mcpModule: modules.mcpModule,
+			memoryModule: modules.memoryModule,
+		});
+
+		// Set global options
+		setOptions({
+			onIntentFallback: options?.onIntentFallback,
+		});
+
+		// Set global agent reference
+		setAgent(this);
 
 		this.initializeMiddlewares();
 		this.initializeRoutes();
@@ -167,7 +183,7 @@ export class AINAgent {
 	 * - /a2a/* - A2A protocol endpoints (only if valid URL is configured)
 	 */
 	private initializeRoutes = (): void => {
-		const auth = new AuthMiddleware(this.authScheme);
+		const auth = new AuthMiddleware(this.authModule);
 
 		this.app.get("/", async (_, res: Response) => {
 			const { name, description } = this.manifest;
@@ -195,12 +211,12 @@ export class AINAgent {
 			},
 		);
 
-		this.app.use("/query", auth.middleware(), createQueryRouter(this));
-		this.app.use("/intent", auth.middleware(), createIntentRouter(this));
-		this.app.use("/api", auth.middleware(), createApiRouter(this));
+		this.app.use("/query", auth.middleware(), createQueryRouter());
+		this.app.use("/intent", auth.middleware(), createIntentRouter());
+		this.app.use("/api", auth.middleware(), createApiRouter());
 
 		if (isValidUrl(this.manifest.url)) {
-			this.app.use("/a2a", createA2ARouter(this));
+			this.app.use("/a2a", createA2ARouter());
 		}
 	};
 

@@ -1,10 +1,9 @@
 import { Router } from "express";
-import { ModelApiController } from "@/controllers/api/model.api.controller.js";
-import type { ModelModule } from "@/modules/index.js";
+import { container } from "@/container";
 
-export const createModelApiRouter = (modelModule: ModelModule): Router => {
+export const createModelApiRouter = (): Router => {
 	const router = Router();
-	const modelApiController = new ModelApiController(modelModule);
+	const modelApiController = container.getModelApiController();
 
 	// APIs (prefix: /api/model)
 	router.get("/", modelApiController.handleModelList);

@@ -1,17 +1,22 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { StatusCodes } from "http-status-codes";
-import type { BaseAuth } from "@/modules/auth/base.auth";
+import type { AuthModule } from "@/modules";
 import { AinHttpError } from "@/types/agent";
 import type { AuthResponse } from "@/types/auth";
 
 export class AuthMiddleware {
-	private auth: BaseAuth;
-	constructor(auth: BaseAuth) {
+	private auth: AuthModule | undefined;
+	constructor(auth: AuthModule | undefined) {
 		this.auth = auth;
 	}
 
 	public middleware(): RequestHandler {
 		return async (req: Request, res: Response, next: NextFunction) => {
+			if (!this.auth) {
+				// If no auth module is provided, skip authentication
+				return next();
+			}
+
 			try {
 				const authRes: AuthResponse = await this.auth.authenticate(req, res);
 				if (authRes.isAuthenticated) {
