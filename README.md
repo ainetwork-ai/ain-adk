@@ -163,7 +163,6 @@ modelLogger.error('Model API error');
 - `a2a`: Agent-to-agent communication (A2AModule)
 - `model`: AI model interactions (Model)
 - `server`: A2A server operations (A2AServer)
-- `fol`: First-order logic operations (FOL)
 
 ### Log Levels
 - `error`: Error conditions
