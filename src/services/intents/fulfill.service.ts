@@ -21,21 +21,22 @@ import { createFulfillPrompt } from "../utils/fulfill.common";
 
 export class IntentFulfillService {
 	private modelModule: ModelModule;
+	private memoryModule: MemoryModule;
 	private a2aModule?: A2AModule;
 	private mcpModule?: MCPModule;
-	private memoryModule?: MemoryModule;
 	private onIntentFallback?: OnIntentFallback;
+
 	constructor(
 		modelModule: ModelModule,
+		memoryModule: MemoryModule,
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
-		memoryModule?: MemoryModule,
 		onIntentFallback?: OnIntentFallback,
 	) {
 		this.modelModule = modelModule;
+		this.memoryModule = memoryModule;
 		this.a2aModule = a2aModule;
 		this.mcpModule = mcpModule;
-		this.memoryModule = memoryModule;
 		this.onIntentFallback = onIntentFallback;
 	}
 
@@ -48,7 +49,7 @@ export class IntentFulfillService {
 		},
 	) {
 		try {
-			const threadMemory = this.memoryModule?.getThreadMemory();
+			const threadMemory = this.memoryModule.getThreadMemory();
 			const { userId, threadId } = thread;
 			const newMessage: MessageObject = {
 				messageId: randomUUID(),
@@ -85,7 +86,7 @@ export class IntentFulfillService {
 		thread: ThreadObject,
 		intent?: Intent,
 	): AsyncGenerator<StreamEvent> {
-		const agentMemory = this.memoryModule?.getAgentMemory();
+		const agentMemory = this.memoryModule.getAgentMemory();
 		const fulfillPrompt = await createFulfillPrompt(agentMemory, intent);
 
 		const modelInstance = this.modelModule.getModel();

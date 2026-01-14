@@ -1,5 +1,5 @@
 export { A2AModule } from "./a2a/a2a.module.js";
-export { BaseAuth } from "./auth/base.auth.js";
+export { AuthModule } from "./auth/auth.module.js";
 export { MCPModule } from "./mcp/mcp.module.js";
 export type {
 	IAgentMemory,

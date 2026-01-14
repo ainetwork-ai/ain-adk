@@ -42,6 +42,7 @@ To see how to use this package in your project, check out our comprehensive exam
 ### Core Components
 
 - **AINAgent** (`src/index.ts`): Main Express.js server class that orchestrates all modules
+- **DI Container** (`src/container/`): Dependency injection container for services and controllers
 - **ModelModule** (`src/modules/models/`): Manages AI model integrations with streaming support
 - **MCPModule** (`src/modules/mcp/`): Handles Model Context Protocol connections
 - **A2AModule** (`src/modules/a2a/`): Manages agent-to-agent communication
@@ -53,14 +54,38 @@ The library uses a flexible module architecture:
 
 ```typescript
 interface AINAgentModules {
-  modelModule?: ModelModule;
-  mcpModule?: MCPModule;
-  a2aModule?: A2AModule;
-  memoryModule?: MemoryModule;
+  authModule: AuthModule;      // Required - authentication handling
+  modelModule: ModelModule;    // Required - AI model integrations
+  memoryModule: MemoryModule;  // Required - thread/intent storage
+  a2aModule?: A2AModule;       // Optional - agent-to-agent communication
+  mcpModule?: MCPModule;       // Optional - MCP server connections
 }
 ```
 
 Each module can be independently configured and passed to the agent constructor.
+
+### Dependency Injection
+
+The library uses a DI Container pattern for managing services and controllers:
+
+```
+src/
+├── config/              # Global configuration
+│   ├── agent.ts         # Agent instance access
+│   ├── modules.ts       # Module registry (ModelModule, MemoryModule, etc.)
+│   ├── options.ts       # Options registry (onIntentFallback, etc.)
+│   └── manifest.ts      # Agent manifest
+├── container/           # DI Container
+│   ├── index.ts         # Main container with convenience methods
+│   ├── services.ts      # Service factory (QueryService, ThreadService, etc.)
+│   └── controllers.ts   # Controller factory (QueryController, etc.)
+```
+
+Benefits:
+- Centralized dependency management
+- Singleton instances for memory efficiency
+- Easy testing with mock injection
+- Clean separation between configuration and runtime objects
 
 ### Protocol Support
 
@@ -79,13 +104,13 @@ Each module can be independently configured and passed to the agent constructor.
 
 ### Key Features
 
-- **Unified Tool Interface**: Protocol-agnostic `IAgentTool` interface
+- **Unified Tool Interface**: Protocol-agnostic `ConnectorTool` and `IAgentConnector` interfaces
 - **Streaming Support**: Dual implementation for streaming and non-streaming queries
 - **Intent System**: Intent detection and fulfillment with custom prompts
 - **Service Layer**: Clean separation with controllers and services
 - **Type Safety**: Comprehensive TypeScript types with strict mode
 - **Error Handling**: Global error middleware with structured logging
-- **Authentication**: Optional auth middleware via `BaseAuth` interface
+- **Authentication**: Required auth middleware via `AuthModule` interface
 - **Graceful Shutdown**: Proper cleanup of modules and connections
 
 ## Development
@@ -131,14 +156,13 @@ modelLogger.error('Model API error');
 ```
 
 ### Available Loggers
-- `agent`: Main agent operations
-- `intent`: Non-streaming query processing and intent analysis
-- `intentStream`: Streaming query processing
-- `mcp`: MCP server connections and tool execution
-- `a2a`: Agent-to-agent communication
-- `model`: AI model interactions
-- `server`: HTTP server operations
-- `memory`: Threads, intents, and agent data management
+- `agent`: Main agent operations (AINAgent)
+- `intent`: Non-streaming query processing and intent analysis (Intent)
+- `intentStream`: Streaming query processing (IntentStream)
+- `mcp`: MCP server connections and tool execution (MCPModule)
+- `a2a`: Agent-to-agent communication (A2AModule)
+- `model`: AI model interactions (Model)
+- `server`: A2A server operations (A2AServer)
 
 ### Log Levels
 - `error`: Error conditions
@@ -151,24 +175,28 @@ modelLogger.error('Model API error');
 ### Standard Endpoints
 - `GET /` - Welcome message and health check
 - `POST /query` - Process queries (non-streaming)
-  - Request: `{ message: string, threadId?: string, type?: string }`
-  - Response: `{ content: string }`
+  - Request: `{ query: string, threadId?: string, type?: string }`
+  - Response: `{ content: string, threadId: string }`
 - `POST /query/stream` - Process queries with streaming (SSE)
-  - Request: `{ message: string, threadId?: string, type?: string }`
+  - Request: `{ query: string, threadId?: string, type?: string }`
   - Response: Server-Sent Events stream with event types:
     - `text_chunk`: Incremental text response
     - `tool_start`: Tool execution started
     - `tool_output`: Tool execution result
     - `thread_id`: Thread metadata
+    - `intent_process`: Intent processing status
+    - `thinking_process`: Thinking/reasoning steps
     - `error`: Error message
 
 ### Agent Management
-- `GET /api/threads/:userId` - List user threads
-- `POST /api/threads/:userId` - Create new thread
-- `GET /api/threads/:userId/:threadId` - Get thread details
-- `DELETE /api/threads/:userId/:threadId` - Delete thread
-- `GET /api/model` - Get model configuration
-- `POST /api/model` - Set default model
+- `GET /api/threads` - List user threads (userId from auth)
+- `GET /api/threads/:id` - Get thread details
+- `DELETE /api/threads/:id` - Delete thread
+- `GET /api/model` - Get model list
+- `GET /api/agent/a2a` - Get A2A connectors
+- `GET /api/intent` - List all intents
+- `POST /api/intent/save` - Save intent
+- `DELETE /api/intent/:id` - Delete intent
 
 ### A2A Server Endpoints (when `manifest.url` is configured)
 - `GET /.well-known/agent.json` - Agent discovery endpoint (A2A ~v0.2.0)
@@ -204,19 +232,24 @@ All errors are logged with appropriate context for debugging.
 
 ## Authentication
 
-The library supports optional authentication middleware:
+The library requires an authentication module:
 
 ```typescript
-import { BaseAuth } from '@ainetwork/adk/modules';
+import { AuthModule } from '@ainetwork/adk/modules';
+import type { AuthResponse } from '@ainetwork/adk/types/auth';
 
-class MyAuth extends BaseAuth {
-  async authenticate(req: Request, res: Response): Promise<boolean> {
+class MyAuth extends AuthModule {
+  async authenticate(req: Request, res: Response): Promise<AuthResponse> {
     // Implement your auth logic
-    return true;
+    return { isAuthenticated: true, userId: 'user-123' };
   }
 }
 
-const agent = new AINAgent(manifest, modules, new MyAuth());
+const agent = new AINAgent(manifest, {
+  authModule: new MyAuth(),
+  modelModule,
+  memoryModule,
+});
 ```
 
 ## Contributing
