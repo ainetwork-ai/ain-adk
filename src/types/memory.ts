@@ -102,3 +102,18 @@ export type TriggeredIntent = {
 	intent?: Intent;
 	actionPlan?: string;
 };
+
+/**
+ * Result of fulfilling a single intent.
+ * Used to collect all results before the rewrite step.
+ */
+export type FulfillmentResult = {
+	/** Original subquery that was processed */
+	subquery: string;
+	/** Matched intent (may be undefined if no match) */
+	intent?: Intent;
+	/** Action plan description */
+	actionPlan?: string;
+	/** Response text generated for this intent */
+	response: string;
+};

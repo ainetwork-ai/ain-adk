@@ -9,6 +9,7 @@ import type {
 import type { OnIntentFallback } from "@/types/agent";
 import { CONNECTOR_PROTOCOL_TYPE, type ConnectorTool } from "@/types/connector";
 import {
+	type FulfillmentResult,
 	type Intent,
 	type MessageObject,
 	MessageRole,
@@ -18,6 +19,7 @@ import {
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
 import { createFulfillPrompt } from "../utils/fulfill.common";
+import { AggregateService } from "./aggregate.service";
 
 export class IntentFulfillService {
 	private modelModule: ModelModule;
@@ -25,6 +27,7 @@ export class IntentFulfillService {
 	private a2aModule?: A2AModule;
 	private mcpModule?: MCPModule;
 	private onIntentFallback?: OnIntentFallback;
+	private aggregateService: AggregateService;
 
 	constructor(
 		modelModule: ModelModule,
@@ -38,6 +41,7 @@ export class IntentFulfillService {
 		this.a2aModule = a2aModule;
 		this.mcpModule = mcpModule;
 		this.onIntentFallback = onIntentFallback;
+		this.aggregateService = new AggregateService(modelModule);
 	}
 
 	private async addToThreadMessages(
@@ -232,15 +236,47 @@ export class IntentFulfillService {
 	}
 
 	/**
-	 * Detects the intent from context.
+	 * Returns the appropriate stream for a triggered intent.
+	 * Uses fallback handler if no intent matched and fallback is configured.
+	 */
+	private getIntentStream(
+		triggeredIntent: TriggeredIntent,
+		thread: ThreadObject,
+	): AsyncGenerator<StreamEvent> | undefined {
+		const { subquery = "", intent } = triggeredIntent;
+
+		if (!intent && this.onIntentFallback) {
+			loggers.intent.info("No intent matched, calling fallback handler");
+			const fallbackStream = this.onIntentFallback({
+				triggeredIntent,
+				thread,
+			});
+			if (fallbackStream !== undefined) {
+				return fallbackStream;
+			}
+		}
+
+		return this.intentFulfilling(subquery, thread, intent);
+	}
+
+	/**
+	 * Processes all triggered intents and generates a unified response.
 	 *
-	 * @param intents - The user's input query
+	 * Workflow:
+	 * 1. Process each intent sequentially, collecting results
+	 * 2. Yield thinking_process events for progress visibility
+	 * 3. Use RewriteService to determine if results need unification
+	 * 4. Stream the final (possibly rewritten) response
+	 *
+	 * @param intents - Array of triggered intents to process
 	 * @param thread - The thread history
-	 * @returns The detected intent
+	 * @param originalQuery - The user's original query (for rewrite context)
+	 * @returns AsyncGenerator yielding StreamEvent objects
 	 */
 	public async *intentFulfill(
 		intents: Array<TriggeredIntent>,
 		thread: ThreadObject,
+		originalQuery: string,
 	): AsyncGenerator<StreamEvent> {
 		const streamStartTime = Date.now();
 		loggers.intentStream.info("Stream session started", {
@@ -249,7 +285,8 @@ export class IntentFulfillService {
 			startTime: new Date(streamStartTime).toISOString(),
 		});
 
-		let finalResponseText = "";
+		// Collect all fulfillment results
+		const fulfillmentResults: FulfillmentResult[] = [];
 
 		for (let i = 0; i < intents.length; i++) {
 			const triggeredIntent = intents[i];
@@ -257,62 +294,67 @@ export class IntentFulfillService {
 			loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
 			loggers.intent.info(`Action plan: ${actionPlan}`);
 
-			// only use for inference, not stored in memory
-			finalResponseText !== "" &&
+			// Add previous result to thread context for inference (not stored in memory)
+			if (fulfillmentResults.length > 0) {
+				const lastResult = fulfillmentResults[fulfillmentResults.length - 1];
 				thread.messages.push({
 					messageId: randomUUID(),
 					role: MessageRole.MODEL,
 					timestamp: Date.now(),
-					content: { type: "text", parts: [finalResponseText] },
+					content: { type: "text", parts: [lastResult.response] },
 					metadata: { isThinking: true },
 				});
+			}
 
-			const thinkData = {
-				title: `[${getManifest().name}] ${subquery}`,
-				description: actionPlan || "",
-			};
+			// Yield thinking_process for progress visibility
 			yield {
 				event: "thinking_process",
-				data: thinkData,
+				data: {
+					title: `[${getManifest().name}] ${subquery}`,
+					description: actionPlan || "",
+				},
 			};
 
-			// If no intent matched and fallback handler is provided, use it
-			if (!intent && this.onIntentFallback) {
-				loggers.intent.info("No intent matched, calling fallback handler");
-				const fallbackStream = this.onIntentFallback({
-					triggeredIntent,
-					thread,
-				});
-				if (fallbackStream !== undefined) {
-					finalResponseText = "";
-					for await (const event of fallbackStream) {
-						if (event.event === "text_chunk" && event.data.delta) {
-							finalResponseText += event.data.delta;
-						}
-						if (event.event === "text_chunk" && i !== intents.length - 1) {
-							continue; // skip intermediate text_chunk events
-						}
-						yield event;
-					}
-					continue;
-				}
+			// Get the stream for this intent
+			const stream = this.getIntentStream(triggeredIntent, thread);
+			if (!stream) {
+				continue;
 			}
 
-			const stream = this.intentFulfilling(subquery, thread, intent);
-
-			finalResponseText = "";
+			// Collect response text (don't yield text_chunk yet)
+			let responseText = "";
 			for await (const event of stream) {
 				if (event.event === "text_chunk" && event.data.delta) {
-					finalResponseText += event.data.delta;
+					responseText += event.data.delta;
+				} else if (event.event === "thinking_process") {
+					// Tool execution thinking_process events are yielded immediately
+					yield event;
 				}
-
-				if (event.event === "text_chunk" && i !== intents.length - 1) {
-					continue; // skip intermediate text_chunk events
-				}
-				yield event;
 			}
+
+			fulfillmentResults.push({
+				subquery,
+				intent,
+				actionPlan,
+				response: responseText,
+			});
 		}
 
+		// Aggregate step: determine if unification is needed and generate final response
+		let finalResponseText = "";
+		const aggregateStream = this.aggregateService.aggregateIfNeeded(
+			originalQuery,
+			fulfillmentResults,
+		);
+
+		for await (const event of aggregateStream) {
+			if (event.event === "text_chunk" && event.data.delta) {
+				finalResponseText += event.data.delta;
+			}
+			yield event;
+		}
+
+		// Save final response to memory
 		await this.addToThreadMessages(thread, {
 			role: MessageRole.MODEL,
 			content: finalResponseText,
