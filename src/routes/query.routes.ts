@@ -11,6 +11,7 @@ export const createQueryRouter = (agent: AINAgent): Router => {
 		agent.a2aModule,
 		agent.mcpModule,
 		agent.memoryModule,
+		agent.onIntentFallback,
 	);
 
 	const queryController = new QueryController(queryService);

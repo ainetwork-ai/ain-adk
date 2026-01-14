@@ -16,7 +16,14 @@ import type {
 } from "./modules";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
-import type { AinAgentManifest } from "./types/agent";
+import type { AinAgentManifest, OnIntentFallback } from "./types/agent";
+
+export type {
+	AinAgentManifest,
+	IntentFallbackContext,
+	OnIntentFallback,
+} from "./types/agent";
+
 import isValidUrl from "./utils/isValidUrl";
 
 /**
@@ -57,6 +64,9 @@ export class AINAgent {
 	/** Optional authentication scheme for securing endpoints */
 	public authScheme: BaseAuth;
 
+	/** Optional fallback handler when intent matching fails */
+	public onIntentFallback?: OnIntentFallback;
+
 	/**
 	 * Creates a new AINAgent instance.
 	 *
@@ -66,7 +76,9 @@ export class AINAgent {
 	 * @param modules.a2aModule - Optional module for A2A protocol support
 	 * @param modules.mcpModule - Optional module for MCP server connections
 	 * @param modules.memoryModule - Optional module for memory management
-	 * @param authScheme - Optional authentication middleware for securing endpoints
+	 * @param authScheme - Authentication middleware for securing endpoints
+	 * @param options - Optional configuration options
+	 * @param options.onIntentFallback - Fallback handler when intent matching fails
 	 */
 	constructor(
 		manifest: AinAgentManifest,
@@ -77,6 +89,9 @@ export class AINAgent {
 			memoryModule?: MemoryModule;
 		},
 		authScheme: BaseAuth,
+		options?: {
+			onIntentFallback?: OnIntentFallback;
+		},
 	) {
 		this.app = express();
 
@@ -91,6 +106,7 @@ export class AINAgent {
 		this.memoryModule = modules.memoryModule;
 
 		this.authScheme = authScheme;
+		this.onIntentFallback = options?.onIntentFallback;
 
 		this.initializeMiddlewares();
 		this.initializeRoutes();
