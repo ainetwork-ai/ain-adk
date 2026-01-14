@@ -8,7 +8,7 @@ Analyze the original query and the responses from each task.
 **Return JSON only:**
 {
   "needsAggregation": boolean,
-  "reason": string
+  "reason": string  // Write the reason in the same language as the original query
 }
 
 **Set needsAggregation to FALSE when:**
