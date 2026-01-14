@@ -67,7 +67,6 @@ export class AINAgent {
 	 * @param modules.mcpModule - Optional module for MCP server connections
 	 * @param modules.memoryModule - Optional module for memory management
 	 * @param authScheme - Optional authentication middleware for securing endpoints
-	 * @param allowStream - Enable streaming query endpoints (default: false)
 	 */
 	constructor(
 		manifest: AinAgentManifest,
@@ -78,7 +77,6 @@ export class AINAgent {
 			memoryModule?: MemoryModule;
 		},
 		authScheme: BaseAuth,
-		allowStream = false,
 	) {
 		this.app = express();
 
@@ -95,7 +93,7 @@ export class AINAgent {
 		this.authScheme = authScheme;
 
 		this.initializeMiddlewares();
-		this.initializeRoutes(allowStream);
+		this.initializeRoutes();
 		this.app.use(errorMiddleware);
 	}
 
@@ -152,7 +150,7 @@ export class AINAgent {
 	 * - /api/* - API endpoints for agent management
 	 * - /a2a/* - A2A protocol endpoints (only if valid URL is configured)
 	 */
-	private initializeRoutes = (allowStream = false): void => {
+	private initializeRoutes = (): void => {
 		const auth = new AuthMiddleware(this.authScheme);
 
 		this.app.get("/", async (_, res: Response) => {
@@ -181,11 +179,7 @@ export class AINAgent {
 			},
 		);
 
-		this.app.use(
-			"/query",
-			auth.middleware(),
-			createQueryRouter(this, allowStream),
-		);
+		this.app.use("/query", auth.middleware(), createQueryRouter(this));
 		this.app.use("/intent", auth.middleware(), createIntentRouter(this));
 		this.app.use("/api", auth.middleware(), createApiRouter(this));
 
