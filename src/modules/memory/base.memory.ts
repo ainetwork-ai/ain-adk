@@ -4,6 +4,7 @@ import type {
 	ThreadMetadata,
 	ThreadObject,
 	ThreadType,
+	Workflow,
 } from "@/types/memory";
 
 /**
@@ -16,6 +17,7 @@ export interface IMemory {
 	getThreadMemory(): IThreadMemory;
 	getIntentMemory(): IIntentMemory;
 	getAgentMemory(): IAgentMemory;
+	getWorkflowMemory(): IWorkflowMemory;
 }
 
 /**
@@ -59,4 +61,18 @@ export interface IIntentMemory {
 export interface IAgentMemory {
 	getAgentPrompt(): Promise<string>;
 	updateAgentPrompt(prompt: string): Promise<void>;
+}
+
+/**
+ * Workflow memory interface - handles workflow operations
+ */
+export interface IWorkflowMemory {
+	getWorkflow(workflowId: string): Promise<Workflow | undefined>;
+	createWorkflow(workflow: Workflow): Promise<Workflow>;
+	updateWorkflow(
+		workflowId: string,
+		workflow: Partial<Workflow>,
+	): Promise<void>;
+	deleteWorkflow(workflowId: string): Promise<void>;
+	listWorkflows(userId?: string): Promise<Workflow[]>;
 }
