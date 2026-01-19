@@ -52,6 +52,7 @@ yarn dev        # Run TypeScript directly with tsx
    - **MemoryModule** (`src/modules/memory/`): Data persistence (required)
      - Thread management for conversation history
      - Intent storage and retrieval
+     - Workflow storage and retrieval
      - Agent metadata management
    - **MCPModule** (`src/modules/mcp/`): Model Context Protocol client connections (optional)
      - Tool discovery and execution from MCP servers
@@ -70,18 +71,22 @@ yarn dev        # Run TypeScript directly with tsx
 4. **DI Container** (`src/container/`)
    - `index.ts`: Main Container class with convenience methods
    - `services.ts`: ServiceContainer for service singletons
-     - ThreadService, IntentTriggerService, IntentFulfillService
+     - ThreadService, IntentTriggerService, IntentFulfillService, AggregateService
+     - SingleIntentTriggerService, MultiIntentTriggerService
      - QueryService, A2AService
    - `controllers.ts`: ControllerContainer for controller singletons
      - QueryController, IntentController
-     - ModelApiController, AgentApiController, ThreadApiController, IntentApiController
+     - ModelApiController, AgentApiController, ThreadApiController, IntentApiController, WorkflowApiController
 
 5. **Service Layer** (`src/services/`)
    - `query.service.ts`: Query processing with intent detection and fulfillment
    - `thread.service.ts`: Thread management operations
    - `a2a.service.ts`: A2A protocol operations
-   - `intents/trigger.service.ts`: Intent triggering logic
+   - `intents/trigger.service.ts`: Intent triggering router (single/multi mode)
+   - `intents/single-trigger.service.ts`: Single intent triggering without query decomposition
+   - `intents/multi-trigger.service.ts`: Multi-intent triggering with query decomposition
    - `intents/fulfill.service.ts`: Intent fulfillment with tool execution
+   - `intents/aggregate.service.ts`: Intelligent response aggregation for multi-intent results
 
 6. **Controller Layer** (`src/controllers/`)
    - `query.controller.ts`: Query endpoint handlers (both streaming and non-streaming)
@@ -89,6 +94,8 @@ yarn dev        # Run TypeScript directly with tsx
    - `api/threads.api.controller.ts`: Thread management API
    - `api/model.api.controller.ts`: Model management API
    - `api/agent.api.controller.ts`: Agent management API
+   - `api/intent.api.controller.ts`: Intent management API
+   - `api/workflow.api.controller.ts`: Workflow management API
 
 7. **Tool Abstraction**
    - `ConnectorTool` type for protocol-agnostic tool representation
@@ -97,7 +104,7 @@ yarn dev        # Run TypeScript directly with tsx
 
 8. **Type System** (`src/types/`)
    - `agent.ts`: Agent manifest and configuration types
-   - `memory.ts`: Thread, Intent, and message types
+   - `memory.ts`: Thread, Intent, Workflow, and message types (includes FulfillmentResult)
    - `stream.ts`: Streaming event and chunk types
    - `tool.ts`: Tool interfaces and response types
    - `auth.ts`: Authentication scheme interfaces
@@ -159,6 +166,45 @@ The project uses environment variables for configuration. Key variables include:
 - A2A settings (agent URL, discovery endpoints)
 - Database connections (for memory modules)
 - Authentication credentials
+- **Intent System Configuration**:
+  - `DISABLE_MULTI_INTENTS=true` or `=1`: Enable single-intent mode (default: multi-intent mode)
+
+### Intent System Architecture
+
+The library supports two intent triggering modes:
+
+1. **Multi-Intent Mode (Default)**
+   - Decomposes queries into multiple subqueries
+   - Maps each subquery to an intent
+   - Collects all intent responses
+   - Uses `AggregateService` to determine if responses need unification
+   - LLM-based aggregation creates a cohesive final response if needed
+   - Services: `MultiIntentTriggerService`, `AggregateService`
+
+2. **Single-Intent Mode** (`DISABLE_MULTI_INTENTS=true`)
+   - No query decomposition
+   - Identifies single most relevant intent
+   - Streams response directly without aggregation
+   - Simplified prompts for faster processing
+   - Service: `SingleIntentTriggerService`
+
+The `IntentTriggerService` acts as a router, delegating to the appropriate service based on the environment variable.
+
+### Workflow System
+
+The library provides built-in workflow management:
+
+- **Workflow Memory Interface**: Abstract methods in `BaseMemoryModule`
+  - `saveWorkflow(workflow)`: Save workflow definition
+  - `getWorkflow(id, userId)`: Retrieve workflow by ID
+  - `listWorkflows(userId)`: List user's workflows
+  - `deleteWorkflow(id, userId)`: Delete workflow
+- **Workflow API**: RESTful endpoints via `WorkflowApiController`
+  - `GET /api/workflows`: List workflows
+  - `GET /api/workflows/:id`: Get workflow details
+  - `POST /api/workflows/save`: Save workflow
+  - `POST /api/workflows/:id/delete`: Delete workflow
+- **Display Query Support**: Queries can include optional `displayQuery` parameter for workflow visualization
 
 ### Build Considerations
 

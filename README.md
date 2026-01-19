@@ -11,6 +11,8 @@ A TypeScript library for building AI agents with multi-protocol support includin
 - **Modular Architecture**: Flexible module system for models, memory, MCP, and A2A
 - **Multiple AI Models**: Support for OpenAI and Gemini with easy extensibility
 - **Thread Management**: Built-in memory module for conversation history
+- **Intent System**: Single/multi-intent triggering with intelligent response aggregation
+- **Workflow Management**: Built-in workflow storage and execution with display query support
 - **Dual Build System**: Supports both ESM and CJS formats for maximum compatibility
 - **Structured Logging**: Winston-based logging system with service-specific loggers
 - **TypeScript First**: Built with strict TypeScript configuration
@@ -56,13 +58,30 @@ The library uses a flexible module architecture:
 interface AINAgentModules {
   authModule: AuthModule;      // Required - authentication handling
   modelModule: ModelModule;    // Required - AI model integrations
-  memoryModule: MemoryModule;  // Required - thread/intent storage
+  memoryModule: MemoryModule;  // Required - thread/intent/workflow storage
   a2aModule?: A2AModule;       // Optional - agent-to-agent communication
   mcpModule?: MCPModule;       // Optional - MCP server connections
 }
 ```
 
 Each module can be independently configured and passed to the agent constructor.
+
+### Intent System
+
+The library supports flexible intent triggering modes:
+
+- **Multi-Intent Mode (Default)**: Decomposes complex queries into multiple subqueries and maps each to an intent
+- **Single-Intent Mode**: Identifies a single intent without query decomposition (set `DISABLE_MULTI_INTENTS=true`)
+- **Intelligent Aggregation**: LLM-based aggregation determines if multiple intent responses need unification
+- **Streaming Support**: Real-time response streaming with `thinking_process` events for progress visibility
+
+### Workflow System
+
+Built-in workflow management capabilities:
+
+- **Workflow Storage**: Save, retrieve, list, and delete workflows via MemoryModule
+- **Display Query Support**: Separate display query for workflow execution visualization
+- **RESTful API**: Complete workflow management through `/api/workflows` endpoints
 
 ### Dependency Injection
 
@@ -106,7 +125,8 @@ Benefits:
 
 - **Unified Tool Interface**: Protocol-agnostic `ConnectorTool` and `IAgentConnector` interfaces
 - **Streaming Support**: Dual implementation for streaming and non-streaming queries
-- **Intent System**: Intent detection and fulfillment with custom prompts
+- **Intent System**: Single/multi-intent triggering with intelligent response aggregation
+- **Workflow Management**: Built-in workflow storage and execution with display query support
 - **Service Layer**: Clean separation with controllers and services
 - **Type Safety**: Comprehensive TypeScript types with strict mode
 - **Error Handling**: Global error middleware with structured logging
@@ -175,10 +195,10 @@ modelLogger.error('Model API error');
 ### Standard Endpoints
 - `GET /` - Welcome message and health check
 - `POST /query` - Process queries (non-streaming)
-  - Request: `{ query: string, threadId?: string, type?: string }`
+  - Request: `{ query: string, threadId?: string, type?: string, displayQuery?: string }`
   - Response: `{ content: string, threadId: string }`
 - `POST /query/stream` - Process queries with streaming (SSE)
-  - Request: `{ query: string, threadId?: string, type?: string }`
+  - Request: `{ query: string, threadId?: string, type?: string, displayQuery?: string }`
   - Response: Server-Sent Events stream with event types:
     - `text_chunk`: Incremental text response
     - `tool_start`: Tool execution started
@@ -191,12 +211,16 @@ modelLogger.error('Model API error');
 ### Agent Management
 - `GET /api/threads` - List user threads (userId from auth)
 - `GET /api/threads/:id` - Get thread details
-- `DELETE /api/threads/:id` - Delete thread
+- `POST /api/threads/:id/delete` - Delete thread
 - `GET /api/model` - Get model list
 - `GET /api/agent/a2a` - Get A2A connectors
 - `GET /api/intent` - List all intents
 - `POST /api/intent/save` - Save intent
-- `DELETE /api/intent/:id` - Delete intent
+- `POST /api/intent/:id/delete` - Delete intent
+- `GET /api/workflows` - List all workflows
+- `GET /api/workflows/:id` - Get workflow details
+- `POST /api/workflows/save` - Save workflow
+- `POST /api/workflows/:id/delete` - Delete workflow
 
 ### A2A Server Endpoints (when `manifest.url` is configured)
 - `GET /.well-known/agent.json` - Agent discovery endpoint (A2A ~v0.2.0)
