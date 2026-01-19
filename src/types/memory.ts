@@ -102,3 +102,12 @@ export type TriggeredIntent = {
 	intent?: Intent;
 	actionPlan?: string;
 };
+
+export interface Workflow {
+	workflowId: string;
+	userId?: string;
+	title: string;
+	description: string;
+	active: boolean;
+	content: string;
+}

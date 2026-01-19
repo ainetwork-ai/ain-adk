@@ -64,6 +64,9 @@ class Container {
 	getIntentApiController() {
 		return this._controllers.getIntentApiController();
 	}
+	getWorkflowApiController() {
+		return this._controllers.getWorkflowApiController();
+	}
 
 	/**
 	 * Reset all instances (useful for testing)
