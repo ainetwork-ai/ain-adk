@@ -1,10 +1,9 @@
 import { Router } from "express";
-import { AgentApiController } from "@/controllers/api/agent.api.controller";
-import type { AINAgent } from "@/index.js";
+import { container } from "@/container";
 
-export const createAgentApiRouter = (agent: AINAgent): Router => {
+export const createAgentApiRouter = (): Router => {
 	const router = Router();
-	const agentApiController = new AgentApiController(agent);
+	const agentApiController = container.getAgentApiController();
 
 	// APIs (prefix: /api/agent)
 	router.get("/a2a", agentApiController.handleGetA2AConnectors);

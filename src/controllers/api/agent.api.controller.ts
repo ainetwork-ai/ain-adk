@@ -1,11 +1,11 @@
 import type { NextFunction, Request, Response } from "express";
-import type { AINAgent } from "@/index";
+import type { A2AModule } from "@/modules";
 
 export class AgentApiController {
-	private agent: AINAgent;
+	private a2aModule?: A2AModule;
 
-	constructor(agent: AINAgent) {
-		this.agent = agent;
+	constructor(a2aModule?: A2AModule) {
+		this.a2aModule = a2aModule;
 	}
 
 	public handleGetA2AConnectors = async (
@@ -14,8 +14,7 @@ export class AgentApiController {
 		next: NextFunction,
 	) => {
 		try {
-			const a2aModule = this.agent.a2aModule;
-			const conns = a2aModule ? a2aModule.getA2AConnectors() : [];
+			const conns = this.a2aModule ? this.a2aModule.getA2AConnectors() : [];
 			res.json(conns);
 		} catch (error) {
 			next(error);

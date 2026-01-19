@@ -7,18 +7,18 @@ import type {
 } from "@a2a-js/sdk/server";
 import type { ThreadType } from "@/types/memory.js";
 import { loggers } from "@/utils/logger.js";
-import type { QueryStreamService } from "./query-stream.service.js";
+import type { QueryService } from "./query.service.js";
 
 /**
  * Implements the AgentExecutor interface from the a2a-js-sdk.
  * This service is responsible for the core business logic of executing an A2A task.
  */
 export class A2AService implements AgentExecutor {
-	private queryStreamService: QueryStreamService;
+	private queryService: QueryService;
 	private canceledTasks: Set<string> = new Set<string>();
 
-	constructor(queryStreamService: QueryStreamService) {
-		this.queryStreamService = queryStreamService;
+	constructor(queryService: QueryService) {
+		this.queryService = queryService;
 	}
 
 	public cancelTask = async (
@@ -88,13 +88,6 @@ export class A2AService implements AgentExecutor {
 			eventBus.publish(initialTask);
 		}
 
-		const workingStatusUpdate = this.createTaskStatusUpdateEvent(
-			taskId,
-			threadId,
-			"working",
-		);
-		eventBus.publish(workingStatusUpdate);
-
 		const message: string = userMessage.parts
 			.filter((part) => part.kind === "text")
 			.map((part) => part.text)
@@ -111,7 +104,7 @@ export class A2AService implements AgentExecutor {
 			return;
 		}
 
-		const stream = this.queryStreamService.handleQueryStream(
+		const stream = this.queryService.handleQuery(
 			{ userId: agentId, type, threadId },
 			message,
 			true,
@@ -133,22 +126,14 @@ export class A2AService implements AgentExecutor {
 
 				if (event.event === "text_chunk") {
 					finalResponseText += event.data.delta;
-				} else if (event.event === "tool_start") {
-					const toolStartUpdate = this.createTaskStatusUpdateEvent(
+				} else if (event.event === "thinking_process") {
+					const thinkingProcessUpdate = this.createTaskStatusUpdateEvent(
 						taskId,
 						threadId,
 						"working",
 						JSON.stringify(event.data),
 					);
-					eventBus.publish(toolStartUpdate);
-				} else if (event.event === "tool_output") {
-					const toolOutputUpdate = this.createTaskStatusUpdateEvent(
-						taskId,
-						threadId,
-						"working",
-						JSON.stringify(event.data),
-					);
-					eventBus.publish(toolOutputUpdate);
+					eventBus.publish(thinkingProcessUpdate);
 				}
 			}
 

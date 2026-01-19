@@ -23,7 +23,9 @@ export type StreamEvent =
 	  }
 	| { event: "error"; data: { message: string } }
 	| { event: "thread_id"; data: ThreadMetadata }
-	| { event: "intent_process"; data: { subquery: string; actionPlan: string } };
+	| { event: "intent_process"; data: { subquery: string; actionPlan: string } }
+	| { event: "collection_name"; data: { name: string } }
+	| { event: "thinking_process"; data: { title: string; description: string } };
 
 /**
  * Tool call delta for streaming tool invocations

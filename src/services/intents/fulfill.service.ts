@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { getManifest } from "@/config/manifest";
 import type {
 	A2AModule,
 	MCPModule,
 	MemoryModule,
 	ModelModule,
 } from "@/modules";
+import type { OnIntentFallback } from "@/types/agent";
 import { CONNECTOR_PROTOCOL_TYPE, type ConnectorTool } from "@/types/connector";
 import {
 	type Intent,
@@ -13,33 +15,41 @@ import {
 	type ThreadObject,
 	type TriggeredIntent,
 } from "@/types/memory";
+import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
 import { createFulfillPrompt } from "../utils/fulfill.common";
 
 export class IntentFulfillService {
 	private modelModule: ModelModule;
+	private memoryModule: MemoryModule;
 	private a2aModule?: A2AModule;
 	private mcpModule?: MCPModule;
-	private memoryModule?: MemoryModule;
+	private onIntentFallback?: OnIntentFallback;
 
 	constructor(
 		modelModule: ModelModule,
+		memoryModule: MemoryModule,
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
-		memoryModule?: MemoryModule,
+		onIntentFallback?: OnIntentFallback,
 	) {
 		this.modelModule = modelModule;
+		this.memoryModule = memoryModule;
 		this.a2aModule = a2aModule;
 		this.mcpModule = mcpModule;
-		this.memoryModule = memoryModule;
+		this.onIntentFallback = onIntentFallback;
 	}
 
 	private async addToThreadMessages(
 		thread: ThreadObject,
-		params: { role: MessageRole; content: string; metadata?: any },
+		params: {
+			role: MessageRole;
+			content: string;
+			metadata?: Record<string, unknown>;
+		},
 	) {
 		try {
-			const threadMemory = this.memoryModule?.getThreadMemory();
+			const threadMemory = this.memoryModule.getThreadMemory();
 			const { userId, threadId } = thread;
 			const newMessage: MessageObject = {
 				messageId: randomUUID(),
@@ -71,12 +81,12 @@ export class IntentFulfillService {
 	 * @param intent - Optional detected intent with custom prompt
 	 * @returns AsyncGenerator yielding StreamEvent objects
 	 */
-	private async intentFulfilling(
+	private async *intentFulfilling(
 		query: string,
 		thread: ThreadObject,
 		intent?: Intent,
-	): Promise<string> {
-		const agentMemory = this.memoryModule?.getAgentMemory();
+	): AsyncGenerator<StreamEvent> {
+		const agentMemory = this.memoryModule.getAgentMemory();
 		const fulfillPrompt = await createFulfillPrompt(agentMemory, intent);
 
 		const modelInstance = this.modelModule.getModel();
@@ -96,49 +106,106 @@ export class IntentFulfillService {
 		this.mcpModule && tools.push(...this.mcpModule.getTools());
 		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
 
-		const functions = modelInstance.convertToolsToFunctions(tools);
+		const processList: string[] = [];
 
-		let finalMessage = "";
 		while (true) {
-			const response = await modelInstance.fetchWithContextMessage(
+			const functions = modelInstance.convertToolsToFunctions(tools);
+			const responseStream = await modelInstance.fetchStreamWithContextMessage(
 				messages,
 				functions,
 				modelOptions,
 			);
 
-			const { content, toolCalls } = response;
-			loggers.intent.debug("Tool calls", {
+			const assembledToolCalls: {
+				id: string;
+				type: "function";
+				function: { name: string; arguments: string };
+			}[] = [];
+
+			for await (const chunk of responseStream) {
+				const delta = chunk.delta;
+				if (delta?.tool_calls) {
+					for (const { index, id, function: func } of delta.tool_calls) {
+						assembledToolCalls[index] ??= {
+							id: "",
+							type: "function",
+							function: { name: "", arguments: "" },
+						};
+
+						if (id) assembledToolCalls[index].id = id;
+						if (func?.name) assembledToolCalls[index].function.name = func.name;
+						if (func?.arguments)
+							assembledToolCalls[index].function.arguments += func.arguments;
+					}
+				} else if (chunk.delta?.content) {
+					yield {
+						event: "text_chunk",
+						data: { delta: chunk.delta.content },
+					};
+				}
+			}
+
+			loggers.intentStream.debug("assembledToolCalls", {
 				threadId: thread.threadId,
-				content,
-				toolCalls,
+				assembledToolCalls,
 			});
 
-			if (toolCalls) {
-				for (const toolCall of toolCalls) {
-					const toolName = toolCall.name;
-					const selectedTool = tools.filter(
-						(tool) => tool.toolName === toolName,
-					)[0];
+			if (assembledToolCalls.length > 0) {
+				for (const toolCall of assembledToolCalls) {
+					const toolName = toolCall.function.name;
+					let selectedTool: ConnectorTool | undefined;
+					for (const [index, toolTmp] of tools.entries()) {
+						if (toolTmp.toolName === toolName) {
+							if (toolTmp.protocol === CONNECTOR_PROTOCOL_TYPE.A2A) {
+								// remove used tool to prevent infinite loop
+								selectedTool = tools.splice(index, 1)[0];
+								break;
+							}
+							selectedTool = toolTmp;
+						}
+					}
+
+					if (!selectedTool) {
+						// it cannot be happened...
+						continue;
+					}
+
+					const toolArgs = JSON.parse(toolCall.function.arguments);
+					const thinkData = {
+						title: `[${getManifest().name}] ${selectedTool.protocol} 실행: ${toolName}`,
+						description: `${toolArgs.thinking_text || ""}`,
+					};
+					yield {
+						event: "thinking_process",
+						data: thinkData,
+					};
 
 					let toolResult = "";
 					if (
 						this.mcpModule &&
 						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.MCP
 					) {
-						const toolArgs = toolCall.arguments as
-							| { [x: string]: unknown }
-							| undefined;
-						loggers.intent.debug("MCP tool call", { toolName, toolArgs });
+						loggers.intent.info("MCP tool call", { toolName, toolArgs });
 						toolResult = await this.mcpModule.useTool(selectedTool, toolArgs);
 					} else if (
 						this.a2aModule &&
 						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.A2A
 					) {
-						toolResult = await this.a2aModule.useTool(
+						loggers.intent.info("A2A tool call", { toolName });
+						const a2aStream = this.a2aModule.useTool(
 							selectedTool,
 							query,
 							thread.threadId,
 						);
+						// yield intermediate events and get final result
+						let result = await a2aStream.next();
+						while (!result.done) {
+							if (result.value.event === "thinking_process") {
+								yield result.value;
+							}
+							result = await a2aStream.next();
+						}
+						toolResult = result.value;
 					} else {
 						// Unrecognized tool type. It cannot be happened...
 						loggers.intent.warn(
@@ -147,20 +214,21 @@ export class IntentFulfillService {
 						continue;
 					}
 
-					loggers.intent.debug("Tool Result", {
-						threadId: thread.threadId,
-						toolResult,
-					});
+					loggers.intent.debug("Tool Result", { toolResult });
 
+					processList.push(toolResult);
 					modelInstance.appendMessages(messages, toolResult);
 				}
-			} else if (content) {
-				finalMessage = content;
+			} else {
 				break;
 			}
 		}
 
-		return finalMessage;
+		loggers.intent.debug("Intent fulfillment completed", {
+			threadId: thread.threadId,
+			toolCallsExecuted: processList.length,
+			intentName: intent?.name,
+		});
 	}
 
 	/**
@@ -170,13 +238,22 @@ export class IntentFulfillService {
 	 * @param thread - The thread history
 	 * @returns The detected intent
 	 */
-	public async intentFulfill(
+	public async *intentFulfill(
 		intents: Array<TriggeredIntent>,
 		thread: ThreadObject,
-	): Promise<string> {
+	): AsyncGenerator<StreamEvent> {
+		const streamStartTime = Date.now();
+		loggers.intentStream.info("Stream session started", {
+			threadId: thread.threadId,
+			intentCount: intents.length,
+			startTime: new Date(streamStartTime).toISOString(),
+		});
+
 		let finalResponseText = "";
+
 		for (let i = 0; i < intents.length; i++) {
-			const { subquery, intent, actionPlan } = intents[i];
+			const triggeredIntent = intents[i];
+			const { subquery = "", intent, actionPlan } = triggeredIntent;
 			loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
 			loggers.intent.info(`Action plan: ${actionPlan}`);
 
@@ -189,17 +266,51 @@ export class IntentFulfillService {
 					content: { type: "text", parts: [finalResponseText] },
 					metadata: { isThinking: true },
 				});
-			await this.addToThreadMessages(thread, {
-				role: MessageRole.MODEL,
-				content: subquery,
-				metadata: {
-					subquery,
-					isThinking: true,
-					actionPlan: actionPlan,
-				},
-			});
 
-			finalResponseText = await this.intentFulfilling(subquery, thread, intent);
+			const thinkData = {
+				title: `[${getManifest().name}] ${subquery}`,
+				description: actionPlan || "",
+			};
+			yield {
+				event: "thinking_process",
+				data: thinkData,
+			};
+
+			// If no intent matched and fallback handler is provided, use it
+			if (!intent && this.onIntentFallback) {
+				loggers.intent.info("No intent matched, calling fallback handler");
+				const fallbackStream = this.onIntentFallback({
+					triggeredIntent,
+					thread,
+				});
+				if (fallbackStream !== undefined) {
+					finalResponseText = "";
+					for await (const event of fallbackStream) {
+						if (event.event === "text_chunk" && event.data.delta) {
+							finalResponseText += event.data.delta;
+						}
+						if (event.event === "text_chunk" && i !== intents.length - 1) {
+							continue; // skip intermediate text_chunk events
+						}
+						yield event;
+					}
+					continue;
+				}
+			}
+
+			const stream = this.intentFulfilling(subquery, thread, intent);
+
+			finalResponseText = "";
+			for await (const event of stream) {
+				if (event.event === "text_chunk" && event.data.delta) {
+					finalResponseText += event.data.delta;
+				}
+
+				if (event.event === "text_chunk" && i !== intents.length - 1) {
+					continue; // skip intermediate text_chunk events
+				}
+				yield event;
+			}
 		}
 
 		await this.addToThreadMessages(thread, {
@@ -207,6 +318,13 @@ export class IntentFulfillService {
 			content: finalResponseText,
 		});
 
-		return finalResponseText;
+		const streamEndTime = Date.now();
+		const streamDuration = streamEndTime - streamStartTime;
+
+		loggers.intentStream.info("Stream session completed", {
+			threadId: thread.threadId,
+			duration: `${streamDuration}ms`,
+			endTime: new Date(streamEndTime).toISOString(),
+		});
 	}
 }

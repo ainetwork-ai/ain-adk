@@ -3,20 +3,31 @@ import cors from "cors";
 import express, { type Response } from "express";
 import helmet from "helmet";
 import { StatusCodes } from "http-status-codes";
-import { loggers } from "@/utils/logger";
 import { version } from "../package.json";
+import { setAgent } from "./config/agent";
+import { setManifest } from "./config/manifest";
+import { setModules } from "./config/modules";
+import { setOptions } from "./config/options";
 import { AuthMiddleware } from "./middlewares/auth.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import type {
 	A2AModule,
-	BaseAuth,
+	AuthModule,
 	MCPModule,
 	MemoryModule,
 	ModelModule,
 } from "./modules";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
-import type { AinAgentManifest } from "./types/agent";
+import type { AinAgentManifest, OnIntentFallback } from "./types/agent";
+
+export type {
+	AinAgentManifest,
+	IntentFallbackContext,
+	OnIntentFallback,
+} from "./types/agent";
+
+import isValidUrl from "./utils/isValidUrl";
 
 /**
  * Main class for AI Network Agent Development Kit (AIN-ADK).
@@ -49,12 +60,13 @@ export class AINAgent {
 
 	/** Modules */
 	public modelModule: ModelModule;
+	public memoryModule: MemoryModule;
+	public authModule?: AuthModule;
 	public a2aModule?: A2AModule;
 	public mcpModule?: MCPModule;
-	public memoryModule?: MemoryModule;
 
-	/** Optional authentication scheme for securing endpoints */
-	public authScheme: BaseAuth;
+	/** Optional fallback handler when intent matching fails */
+	public onIntentFallback?: OnIntentFallback;
 
 	/**
 	 * Creates a new AINAgent instance.
@@ -65,35 +77,55 @@ export class AINAgent {
 	 * @param modules.a2aModule - Optional module for A2A protocol support
 	 * @param modules.mcpModule - Optional module for MCP server connections
 	 * @param modules.memoryModule - Optional module for memory management
-	 * @param authScheme - Optional authentication middleware for securing endpoints
-	 * @param allowStream - Enable streaming query endpoints (default: false)
+	 * @param authScheme - Authentication middleware for securing endpoints
+	 * @param options - Optional configuration options
+	 * @param options.onIntentFallback - Fallback handler when intent matching fails
 	 */
 	constructor(
 		manifest: AinAgentManifest,
 		modules: {
+			authModule: AuthModule;
 			modelModule: ModelModule;
+			memoryModule: MemoryModule;
 			a2aModule?: A2AModule;
 			mcpModule?: MCPModule;
-			memoryModule?: MemoryModule;
 		},
-		authScheme: BaseAuth,
-		allowStream = false,
+		options?: {
+			onIntentFallback?: OnIntentFallback;
+		},
 	) {
 		this.app = express();
 
 		// Set manifest
 		this.manifest = manifest;
+		setManifest(manifest);
 
 		// Set modules
 		this.modelModule = modules.modelModule;
 		this.a2aModule = modules.a2aModule;
 		this.mcpModule = modules.mcpModule;
 		this.memoryModule = modules.memoryModule;
+		this.authModule = modules.authModule;
+		this.onIntentFallback = options?.onIntentFallback;
 
-		this.authScheme = authScheme;
+		// Set global modules for easy access
+		setModules({
+			modelModule: modules.modelModule,
+			a2aModule: modules.a2aModule,
+			mcpModule: modules.mcpModule,
+			memoryModule: modules.memoryModule,
+		});
+
+		// Set global options
+		setOptions({
+			onIntentFallback: options?.onIntentFallback,
+		});
+
+		// Set global agent reference
+		setAgent(this);
 
 		this.initializeMiddlewares();
-		this.initializeRoutes(allowStream);
+		this.initializeRoutes();
 		this.app.use(errorMiddleware);
 	}
 
@@ -106,25 +138,6 @@ export class AINAgent {
 		this.app.use(cors());
 		this.app.use(express.json({ limit: "25mb" }));
 		this.app.use(express.urlencoded({ limit: "25mb", extended: true }));
-	}
-
-	/**
-	 * Validates if a string is a valid HTTP or HTTPS URL.
-	 *
-	 * @param urlString - The URL string to validate
-	 * @returns true if the URL is valid HTTP/HTTPS, false otherwise
-	 */
-	private isValidUrl(urlString: string | undefined): boolean {
-		if (!urlString) {
-			return false;
-		}
-
-		try {
-			const url = new URL(urlString);
-			return url.protocol === "http:" || url.protocol === "https:";
-		} catch (_error) {
-			return false;
-		}
 	}
 
 	/**
@@ -169,8 +182,8 @@ export class AINAgent {
 	 * - /api/* - API endpoints for agent management
 	 * - /a2a/* - A2A protocol endpoints (only if valid URL is configured)
 	 */
-	private initializeRoutes = (allowStream = false): void => {
-		const auth = new AuthMiddleware(this.authScheme);
+	private initializeRoutes = (): void => {
+		const auth = new AuthMiddleware(this.authModule);
 
 		this.app.get("/", async (_, res: Response) => {
 			const { name, description } = this.manifest;
@@ -198,16 +211,12 @@ export class AINAgent {
 			},
 		);
 
-		this.app.use(
-			"/query",
-			auth.middleware(),
-			createQueryRouter(this, allowStream),
-		);
-		this.app.use("/intent", auth.middleware(), createIntentRouter(this));
-		this.app.use("/api", auth.middleware(), createApiRouter(this));
+		this.app.use("/query", auth.middleware(), createQueryRouter());
+		this.app.use("/intent", auth.middleware(), createIntentRouter());
+		this.app.use("/api", auth.middleware(), createApiRouter());
 
-		if (this.isValidUrl(this.manifest.url)) {
-			this.app.use("/a2a", createA2ARouter(this));
+		if (isValidUrl(this.manifest.url)) {
+			this.app.use("/a2a", createA2ARouter());
 		}
 	};
 
@@ -218,36 +227,36 @@ export class AINAgent {
 	 */
 	public async start(port: number): Promise<void> {
 		const server = this.app.listen(port, async () => {
-			await this.memoryModule?.initialize();
+			await this.memoryModule.initialize();
 			await this.mcpModule?.connectToServers();
-			loggers.agent.info(`AINAgent is running on port ${port}`);
+			console.log(`AINAgent is running on port ${port}`);
 		});
 
 		// Graceful shutdown handling
 		const gracefulShutdown = async (signal: string) => {
-			loggers.agent.info(`Received ${signal}, starting graceful shutdown...`);
+			console.log(`Received ${signal}, starting graceful shutdown...`);
 
 			// Stop accepting new connections
 			server.close(() => {
-				loggers.agent.info("HTTP server closed");
+				console.log("HTTP server closed");
 			});
 
 			try {
 				// Cleanup modules
 				if (this.mcpModule) {
-					loggers.agent.info("Disconnecting from MCP servers...");
+					console.log("Disconnecting from MCP servers...");
 					await this.mcpModule.cleanup();
 				}
 
 				if (this.memoryModule) {
-					loggers.agent.info("Closing memory module...");
+					console.log("Closing memory module...");
 					await this.memoryModule.shutdown();
 				}
 
-				loggers.agent.info("Graceful shutdown completed");
+				console.log("Graceful shutdown completed");
 				process.exit(0);
 			} catch (error) {
-				loggers.agent.error("Error during graceful shutdown:", error);
+				console.error("Error during graceful shutdown:", error);
 				process.exit(1);
 			}
 		};

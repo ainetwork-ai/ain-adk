@@ -33,7 +33,9 @@ export class ThreadApiController {
 		next: NextFunction,
 	) => {
 		try {
-			const { id: threadId } = req.params;
+			const { id: threadId } = req.params as {
+				id: string;
+			};
 			const userId = res.locals.userId || "";
 			const threadMemory = this.memoryModule.getThreadMemory();
 			await threadMemory?.deleteThread(userId, threadId);

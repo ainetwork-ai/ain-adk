@@ -1,19 +1,10 @@
 import { Router } from "express";
-import { IntentController } from "@/controllers/intent.controller";
-import type { AINAgent } from "@/index.js";
-import { IntentTriggerService } from "@/services";
-import { ThreadService } from "@/services/thread.service";
+import { container } from "@/container";
 
-export const createIntentRouter = (agent: AINAgent): Router => {
+export const createIntentRouter = (): Router => {
 	const router = Router();
 
-	const threadService = new ThreadService(agent.memoryModule);
-	const triggerService = new IntentTriggerService(
-		agent.modelModule,
-		agent.memoryModule,
-	);
-
-	const intentController = new IntentController(threadService, triggerService);
+	const intentController = container.getIntentController();
 
 	router.post("/trigger", intentController.handleIntentTrigger);
 
