@@ -117,3 +117,12 @@ export type FulfillmentResult = {
 	/** Response text generated for this intent */
 	response: string;
 };
+
+export interface Workflow {
+	workflowId: string;
+	userId?: string;
+	title: string;
+	description: string;
+	active: boolean;
+	content: string;
+}
