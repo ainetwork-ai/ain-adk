@@ -21,6 +21,14 @@ import { loggers } from "@/utils/logger";
 import { createFulfillPrompt } from "../utils/fulfill.common";
 import { AggregateService } from "./aggregate.service";
 
+/**
+ * Check if multi-intent is disabled via environment variable.
+ */
+function isMultiIntentDisabled(): boolean {
+	const value = process.env.DISABLE_MULTI_INTENTS;
+	return value === "true" || value === "1";
+}
+
 export class IntentFulfillService {
 	private modelModule: ModelModule;
 	private memoryModule: MemoryModule;
@@ -285,26 +293,18 @@ export class IntentFulfillService {
 			startTime: new Date(streamStartTime).toISOString(),
 		});
 
-		// Collect all fulfillment results
-		const fulfillmentResults: FulfillmentResult[] = [];
+		let finalResponseText = "";
 
-		for (let i = 0; i < intents.length; i++) {
-			const triggeredIntent = intents[i];
+		if (isMultiIntentDisabled()) {
+			// Single-intent mode: stream response directly without aggregation
+			const triggeredIntent = intents[0];
+			if (!triggeredIntent) {
+				return;
+			}
+
 			const { subquery = "", intent, actionPlan } = triggeredIntent;
 			loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
 			loggers.intent.info(`Action plan: ${actionPlan}`);
-
-			// Add previous result to thread context for inference (not stored in memory)
-			if (fulfillmentResults.length > 0) {
-				const lastResult = fulfillmentResults[fulfillmentResults.length - 1];
-				thread.messages.push({
-					messageId: randomUUID(),
-					role: MessageRole.MODEL,
-					timestamp: Date.now(),
-					content: { type: "text", parts: [lastResult.response] },
-					metadata: { isThinking: true },
-				});
-			}
 
 			// Yield thinking_process for progress visibility
 			yield {
@@ -318,40 +318,84 @@ export class IntentFulfillService {
 			// Get the stream for this intent
 			const stream = this.getIntentStream(triggeredIntent, thread);
 			if (!stream) {
-				continue;
+				return;
 			}
 
-			// Collect response text (don't yield text_chunk yet)
-			let responseText = "";
+			// Stream response directly
 			for await (const event of stream) {
 				if (event.event === "text_chunk" && event.data.delta) {
-					responseText += event.data.delta;
-				} else if (event.event === "thinking_process") {
-					// Tool execution thinking_process events are yielded immediately
-					yield event;
+					finalResponseText += event.data.delta;
 				}
+				yield event;
+			}
+		} else {
+			// Multi-intent mode: collect all results then aggregate
+			const fulfillmentResults: FulfillmentResult[] = [];
+
+			for (let i = 0; i < intents.length; i++) {
+				const triggeredIntent = intents[i];
+				const { subquery = "", intent, actionPlan } = triggeredIntent;
+				loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
+				loggers.intent.info(`Action plan: ${actionPlan}`);
+
+				// Add previous result to thread context for inference (not stored in memory)
+				if (fulfillmentResults.length > 0) {
+					const lastResult = fulfillmentResults[fulfillmentResults.length - 1];
+					thread.messages.push({
+						messageId: randomUUID(),
+						role: MessageRole.MODEL,
+						timestamp: Date.now(),
+						content: { type: "text", parts: [lastResult.response] },
+						metadata: { isThinking: true },
+					});
+				}
+
+				// Yield thinking_process for progress visibility
+				yield {
+					event: "thinking_process",
+					data: {
+						title: `[${getManifest().name}] ${subquery}`,
+						description: actionPlan || "",
+					},
+				};
+
+				// Get the stream for this intent
+				const stream = this.getIntentStream(triggeredIntent, thread);
+				if (!stream) {
+					continue;
+				}
+
+				// Collect response text (don't yield text_chunk yet)
+				let responseText = "";
+				for await (const event of stream) {
+					if (event.event === "text_chunk" && event.data.delta) {
+						responseText += event.data.delta;
+					} else if (event.event === "thinking_process") {
+						// Tool execution thinking_process events are yielded immediately
+						yield event;
+					}
+				}
+
+				fulfillmentResults.push({
+					subquery,
+					intent,
+					actionPlan,
+					response: responseText,
+				});
 			}
 
-			fulfillmentResults.push({
-				subquery,
-				intent,
-				actionPlan,
-				response: responseText,
-			});
-		}
+			// Aggregate step: determine if unification is needed and generate final response
+			const aggregateStream = this.aggregateService.aggregateIfNeeded(
+				originalQuery,
+				fulfillmentResults,
+			);
 
-		// Aggregate step: determine if unification is needed and generate final response
-		let finalResponseText = "";
-		const aggregateStream = this.aggregateService.aggregateIfNeeded(
-			originalQuery,
-			fulfillmentResults,
-		);
-
-		for await (const event of aggregateStream) {
-			if (event.event === "text_chunk" && event.data.delta) {
-				finalResponseText += event.data.delta;
+			for await (const event of aggregateStream) {
+				if (event.event === "text_chunk" && event.data.delta) {
+					finalResponseText += event.data.delta;
+				}
+				yield event;
 			}
-			yield event;
 		}
 
 		// Save final response to memory
