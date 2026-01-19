@@ -130,10 +130,11 @@ export class QueryService {
 			},
 		]);
 
-		// 3. intent fulfillment
+		// 3. intent fulfillment (with rewrite step)
 		const stream = this.intentFulfillService.intentFulfill(
 			triggeredIntent,
 			thread,
+			query,
 		);
 
 		for await (const event of stream) {

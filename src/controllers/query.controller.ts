@@ -15,7 +15,7 @@ export class QueryController {
 		res: Response,
 		next: NextFunction,
 	) => {
-		const { type, threadId, query } = req.body;
+		const { type, threadId, message: query } = req.body;
 		const userId = res.locals.userId;
 
 		try {
@@ -46,7 +46,7 @@ export class QueryController {
 		res: Response,
 		_next: NextFunction,
 	) => {
-		const { type, threadId, query } = req.body;
+		const { type, threadId, message: query } = req.body;
 		const userId = res.locals.userId;
 
 		res.writeHead(200, {
