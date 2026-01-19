@@ -106,7 +106,7 @@ export class A2AService implements AgentExecutor {
 
 		const stream = this.queryService.handleQuery(
 			{ userId: agentId, type, threadId },
-			message,
+			{ query: message },
 			true,
 		);
 

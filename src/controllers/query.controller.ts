@@ -15,13 +15,18 @@ export class QueryController {
 		res: Response,
 		next: NextFunction,
 	) => {
-		const { type, threadId, message: query } = req.body;
+		const {
+			type,
+			threadId,
+			message: query,
+			displayMessage: displayQuery,
+		} = req.body;
 		const userId = res.locals.userId;
 
 		try {
 			const stream = this.queryService.handleQuery(
 				{ type, userId, threadId },
-				query,
+				{ query, displayQuery },
 			);
 
 			let content = "";
@@ -46,7 +51,12 @@ export class QueryController {
 		res: Response,
 		_next: NextFunction,
 	) => {
-		const { type, threadId, message: query } = req.body;
+		const {
+			type,
+			threadId,
+			message: query,
+			displayMessage: displayQuery,
+		} = req.body;
 		const userId = res.locals.userId;
 
 		res.writeHead(200, {
@@ -65,7 +75,7 @@ export class QueryController {
 		let currentThreadId = threadId;
 		const stream = this.queryService.handleQuery(
 			{ type, userId, threadId },
-			query,
+			{ query, displayQuery },
 		);
 
 		try {

@@ -77,10 +77,14 @@ export class QueryService {
 			threadId?: string;
 			options?: ModelFetchOptions;
 		},
-		query: string,
+		queryData: {
+			query: string;
+			displayQuery?: string;
+		},
 		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
 		const { type, userId, options } = threadMetadata;
+		const { query, displayQuery } = queryData;
 		const threadMemory = this.memoryModule.getThreadMemory();
 
 		// 1. Load or create thread
@@ -118,7 +122,8 @@ export class QueryService {
 				messageId: randomUUID(),
 				role: MessageRole.USER,
 				timestamp: Date.now(),
-				content: { type: "text", parts: [query] },
+				// use displayQuery for better UX in enterprise application
+				content: { type: "text", parts: [displayQuery || query] },
 				metadata: {
 					intents: triggeredIntent
 						.filter((intent) => !!intent.intent)
@@ -126,6 +131,7 @@ export class QueryService {
 							id: intent.intent?.id,
 							subquery: intent.subquery,
 						})),
+					query: !displayQuery ? undefined : query,
 				},
 			},
 		]);
