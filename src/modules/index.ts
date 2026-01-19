@@ -6,6 +6,7 @@ export type {
 	IIntentMemory,
 	IMemory,
 	IThreadMemory,
+	IWorkflowMemory,
 } from "./memory/base.memory.js";
 export { MemoryModule } from "./memory/memory.module.js";
 export { BaseModel, type ModelFetchOptions } from "./models/base.model.js";
