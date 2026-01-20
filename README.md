@@ -219,8 +219,9 @@ modelLogger.error('Model API error');
 - `POST /api/intent/:id/delete` - Delete intent
 - `GET /api/workflows` - List all workflows
 - `GET /api/workflows/:id` - Get workflow details
-- `POST /api/workflows/save` - Save workflow
-- `POST /api/workflows/:id/delete` - Delete workflow
+- `POST /api/workflows` - Create new workflow
+- `POST /api/workflows/update/:id` - Update workflow
+- `POST /api/workflows/delete/:id` - Delete workflow
 
 ### A2A Server Endpoints (when `manifest.url` is configured)
 - `GET /.well-known/agent.json` - Agent discovery endpoint (A2A ~v0.2.0)

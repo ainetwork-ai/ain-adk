@@ -195,15 +195,17 @@ The `IntentTriggerService` acts as a router, delegating to the appropriate servi
 The library provides built-in workflow management:
 
 - **Workflow Memory Interface**: Abstract methods in `BaseMemoryModule`
-  - `saveWorkflow(workflow)`: Save workflow definition
-  - `getWorkflow(id, userId)`: Retrieve workflow by ID
-  - `listWorkflows(userId)`: List user's workflows
-  - `deleteWorkflow(id, userId)`: Delete workflow
+  - `createWorkflow(workflow)`: Create new workflow
+  - `updateWorkflow(id, workflow)`: Update existing workflow
+  - `getWorkflow(id)`: Retrieve workflow by ID
+  - `listWorkflows(userId?)`: List workflows (optionally filtered by userId)
+  - `deleteWorkflow(id)`: Delete workflow
 - **Workflow API**: RESTful endpoints via `WorkflowApiController`
   - `GET /api/workflows`: List workflows
   - `GET /api/workflows/:id`: Get workflow details
-  - `POST /api/workflows/save`: Save workflow
-  - `POST /api/workflows/:id/delete`: Delete workflow
+  - `POST /api/workflows`: Create new workflow
+  - `POST /api/workflows/update/:id`: Update workflow
+  - `POST /api/workflows/delete/:id`: Delete workflow
 - **Display Query Support**: Queries can include optional `displayQuery` parameter for workflow visualization
 
 ### Build Considerations
