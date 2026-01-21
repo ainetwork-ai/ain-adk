@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import type { QueryService } from "@/services";
 import { MessageRole } from "@/types/memory";
+import { loggers } from "@/utils/logger";
 
 export class QueryController {
 	private queryService: QueryService;
@@ -72,6 +73,16 @@ export class QueryController {
 			res.write(":keepalive\n\n");
 		}, 10000); // 10초마다 keepalive 전송
 
+		// 클라이언트 연결 끊김 감지
+		let aborted = false;
+		req.on("close", () => {
+			aborted = true;
+			loggers.intentStream.info("Client connection closed", {
+				threadId: currentThreadId,
+				userId,
+			});
+		});
+
 		let currentThreadId = threadId;
 		const stream = this.queryService.handleQuery(
 			{ type, userId, threadId },
@@ -80,6 +91,10 @@ export class QueryController {
 
 		try {
 			for await (const event of stream) {
+				if (aborted) {
+					break;
+				}
+
 				if (event.event === "thread_id") {
 					currentThreadId = event.data.threadId;
 				} else if (event.event === "thinking_process") {
