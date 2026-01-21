@@ -21,14 +21,6 @@ import { loggers } from "@/utils/logger";
 import { createFulfillPrompt } from "../utils/fulfill.common";
 import { AggregateService } from "./aggregate.service";
 
-/**
- * Check if multi-intent is disabled via environment variable.
- */
-function isMultiIntentDisabled(): boolean {
-	const value = process.env.DISABLE_MULTI_INTENTS;
-	return value === "true" || value === "1";
-}
-
 export class IntentFulfillService {
 	private modelModule: ModelModule;
 	private memoryModule: MemoryModule;
@@ -298,11 +290,7 @@ export class IntentFulfillService {
 
 		let finalResponseText = "";
 
-		// Stream directly if: single-intent mode, single intent, or no aggregation needed
-		const shouldStreamDirectly =
-			isMultiIntentDisabled() || intents.length <= 1 || !needsAggregation;
-
-		if (shouldStreamDirectly && intents.length <= 1) {
+		if (intents.length <= 1) {
 			// Single intent: stream response directly
 			const triggeredIntent = intents[0];
 			if (!triggeredIntent) {
@@ -337,7 +325,7 @@ export class IntentFulfillService {
 				}
 				yield event;
 			}
-		} else if (shouldStreamDirectly) {
+		} else if (!needsAggregation) {
 			// Multiple intents but no aggregation needed: collect intermediate results, stream only last
 			for (let i = 0; i < intents.length; i++) {
 				const triggeredIntent = intents[i];
