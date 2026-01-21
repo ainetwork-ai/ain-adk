@@ -295,15 +295,17 @@ export class IntentFulfillService {
 
 		let finalResponseText = "";
 
-		if (isMultiIntentDisabled()) {
-			// Single-intent mode: stream response directly without aggregation
+		if (isMultiIntentDisabled() || intents.length <= 1) {
+			// Single intent: stream response directly without aggregation
 			const triggeredIntent = intents[0];
 			if (!triggeredIntent) {
 				return;
 			}
 
 			const { subquery = "", intent, actionPlan } = triggeredIntent;
-			loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
+			loggers.intent.info(
+				`Process single intent: ${subquery}, ${intent?.name}`,
+			);
 			loggers.intent.info(`Action plan: ${actionPlan}`);
 
 			// Yield thinking_process for progress visibility
@@ -329,7 +331,7 @@ export class IntentFulfillService {
 				yield event;
 			}
 		} else {
-			// Multi-intent mode: collect all results then aggregate
+			// Multi-intent mode with multiple intents: collect all results then aggregate
 			const fulfillmentResults: FulfillmentResult[] = [];
 
 			for (let i = 0; i < intents.length; i++) {

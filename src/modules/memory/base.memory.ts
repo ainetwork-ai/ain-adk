@@ -73,6 +73,6 @@ export interface IWorkflowMemory {
 		workflowId: string,
 		workflow: Partial<Workflow>,
 	): Promise<void>;
-	deleteWorkflow(workflowId: string): Promise<void>;
+	deleteWorkflow(workflowId: string, userId: string): Promise<void>;
 	listWorkflows(userId?: string): Promise<Workflow[]>;
 }

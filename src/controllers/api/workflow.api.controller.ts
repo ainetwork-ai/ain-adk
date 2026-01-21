@@ -50,9 +50,13 @@ export class WorkflowApiController {
 		next: NextFunction,
 	) => {
 		try {
+			const userId = res.locals.userId || "";
 			const workflow = req.body as Workflow;
 			const workflowMemory = this.memoryModule.getWorkflowMemory();
-			const created = await workflowMemory?.createWorkflow(workflow);
+			const created = await workflowMemory?.createWorkflow({
+				...workflow,
+				userId,
+			});
 			res.status(StatusCodes.CREATED).json(created);
 		} catch (error) {
 			next(error);
@@ -65,10 +69,14 @@ export class WorkflowApiController {
 		next: NextFunction,
 	) => {
 		try {
+			const userId = res.locals.userId || "";
 			const { id } = req.params as { id: string };
 			const workflow = req.body as Partial<Workflow>;
 			const workflowMemory = this.memoryModule.getWorkflowMemory();
-			await workflowMemory?.updateWorkflow(id, workflow);
+			await workflowMemory?.updateWorkflow(id, {
+				...workflow,
+				userId,
+			});
 			res.status(StatusCodes.OK).send();
 		} catch (error) {
 			next(error);
@@ -81,9 +89,10 @@ export class WorkflowApiController {
 		next: NextFunction,
 	) => {
 		try {
+			const userId = res.locals.userId || "";
 			const { id } = req.params as { id: string };
 			const workflowMemory = this.memoryModule.getWorkflowMemory();
-			await workflowMemory?.deleteWorkflow(id);
+			await workflowMemory?.deleteWorkflow(id, userId);
 			res.status(StatusCodes.OK).send();
 		} catch (error) {
 			next(error);
