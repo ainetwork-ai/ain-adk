@@ -16,7 +16,7 @@ export class WorkflowApiController {
 		next: NextFunction,
 	) => {
 		try {
-			const { userId } = req.query as { userId?: string };
+			const userId = res.locals.userId || "";
 			const workflowMemory = this.memoryModule.getWorkflowMemory();
 			const workflows = await workflowMemory?.listWorkflows(userId);
 			res.json(workflows);
