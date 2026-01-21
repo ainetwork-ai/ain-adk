@@ -12,7 +12,6 @@ import {
 	type ThreadMetadata,
 	type ThreadObject,
 	type ThreadType,
-	type TriggeredIntent,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
@@ -112,9 +111,15 @@ export class QueryService {
 		}
 
 		// 2. intent triggering
-		const triggeredIntent: Array<TriggeredIntent> =
-			await this.intentTriggerService.intentTriggering(query, thread);
-		loggers.intent.debug("Triggered intents", { triggeredIntent });
+		const triggerResult = await this.intentTriggerService.intentTriggering(
+			query,
+			thread,
+		);
+		const { intents: triggeredIntents, needsAggregation } = triggerResult;
+		loggers.intent.debug("Triggered intents", {
+			triggeredIntents,
+			needsAggregation,
+		});
 
 		// only add for storage, not for inference
 		await this.addToThreadMessages(userId, threadId, [
@@ -125,7 +130,7 @@ export class QueryService {
 				// use displayQuery for better UX in enterprise application
 				content: { type: "text", parts: [displayQuery || query] },
 				metadata: {
-					intents: triggeredIntent
+					intents: triggeredIntents
 						.filter((intent) => !!intent.intent)
 						.map((intent) => ({
 							id: intent.intent?.id,
@@ -138,9 +143,10 @@ export class QueryService {
 
 		// 3. intent fulfillment (with rewrite step)
 		const stream = this.intentFulfillService.intentFulfill(
-			triggeredIntent,
+			triggeredIntents,
 			thread,
 			query,
+			needsAggregation,
 		);
 
 		for await (const event of stream) {

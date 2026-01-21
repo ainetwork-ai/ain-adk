@@ -1,5 +1,6 @@
 import type { MemoryModule, ModelModule } from "@/modules";
 import type {
+	IntentTriggerResult,
 	MessageObject,
 	ThreadObject,
 	TriggeredIntent,
@@ -25,23 +26,23 @@ export class SingleIntentTriggerService {
 	 *
 	 * @param query - The user's input query
 	 * @param thread - The thread history
-	 * @returns Array with single TriggeredIntent
+	 * @returns IntentTriggerResult with single intent and needsAggregation=false
 	 */
 	public async intentTriggering(
 		query: string,
 		thread: ThreadObject | undefined,
-	): Promise<Array<TriggeredIntent>> {
+	): Promise<IntentTriggerResult> {
 		const modelInstance = this.modelModule.getModel();
 		const modelOptions = this.modelModule.getModelOptions();
 		const intentMemory = this.memoryModule.getIntentMemory();
 		if (!intentMemory) {
-			return [{ subquery: query }];
+			return { intents: [{ subquery: query }], needsAggregation: false };
 		}
 
 		const intents = await intentMemory.listIntents();
 		if (intents.length === 0) {
 			loggers.intentStream.warn("No intent found");
-			return [{ subquery: query }];
+			return { intents: [{ subquery: query }], needsAggregation: false };
 		}
 
 		const intentList = intents
@@ -108,14 +109,14 @@ You MUST return the output in the following JSON format. Do not include any othe
 		const response = await modelInstance.fetch(messages, modelOptions);
 		if (!response.content) {
 			loggers.intent.warn("Cannot extract intent from query");
-			return [{ subquery: query }];
+			return { intents: [{ subquery: query }], needsAggregation: false };
 		}
 
 		let parsed: { intentName?: string; actionPlan?: string };
 		try {
 			parsed = JSON.parse(response.content);
 		} catch (error: unknown) {
-			return [{ subquery: query }];
+			return { intents: [{ subquery: query }], needsAggregation: false };
 		}
 
 		const result: TriggeredIntent = {
@@ -127,6 +128,6 @@ You MUST return the output in the following JSON format. Do not include any othe
 			result.intent = await intentMemory.getIntentByName(parsed.intentName);
 		}
 
-		return [result];
+		return { intents: [result], needsAggregation: false };
 	}
 }
