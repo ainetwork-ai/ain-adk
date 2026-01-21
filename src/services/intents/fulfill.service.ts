@@ -273,30 +273,37 @@ export class IntentFulfillService {
 	 * Workflow:
 	 * 1. Process each intent sequentially, collecting results
 	 * 2. Yield thinking_process events for progress visibility
-	 * 3. Use RewriteService to determine if results need unification
-	 * 4. Stream the final (possibly rewritten) response
+	 * 3. Use AggregateService to unify results if needsAggregation is true
+	 * 4. Stream the final (possibly aggregated) response
 	 *
 	 * @param intents - Array of triggered intents to process
 	 * @param thread - The thread history
-	 * @param originalQuery - The user's original query (for rewrite context)
+	 * @param originalQuery - The user's original query (for aggregate context)
+	 * @param needsAggregation - Whether the results need to be aggregated
 	 * @returns AsyncGenerator yielding StreamEvent objects
 	 */
 	public async *intentFulfill(
 		intents: Array<TriggeredIntent>,
 		thread: ThreadObject,
 		originalQuery: string,
+		needsAggregation: boolean,
 	): AsyncGenerator<StreamEvent> {
 		const streamStartTime = Date.now();
 		loggers.intentStream.info("Stream session started", {
 			threadId: thread.threadId,
 			intentCount: intents.length,
+			needsAggregation,
 			startTime: new Date(streamStartTime).toISOString(),
 		});
 
 		let finalResponseText = "";
 
-		if (isMultiIntentDisabled() || intents.length <= 1) {
-			// Single intent: stream response directly without aggregation
+		// Stream directly if: single-intent mode, single intent, or no aggregation needed
+		const shouldStreamDirectly =
+			isMultiIntentDisabled() || intents.length <= 1 || !needsAggregation;
+
+		if (shouldStreamDirectly && intents.length <= 1) {
+			// Single intent: stream response directly
 			const triggeredIntent = intents[0];
 			if (!triggeredIntent) {
 				return;
@@ -330,8 +337,62 @@ export class IntentFulfillService {
 				}
 				yield event;
 			}
+		} else if (shouldStreamDirectly) {
+			// Multiple intents but no aggregation needed: collect intermediate results, stream only last
+			for (let i = 0; i < intents.length; i++) {
+				const triggeredIntent = intents[i];
+				const { subquery = "", intent, actionPlan } = triggeredIntent;
+				loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
+				loggers.intent.info(`Action plan: ${actionPlan}`);
+
+				const isLastIntent = i === intents.length - 1;
+
+				// Yield thinking_process for progress visibility
+				yield {
+					event: "thinking_process",
+					data: {
+						title: `[${getManifest().name}] ${subquery}`,
+						description: actionPlan || "",
+					},
+				};
+
+				// Get the stream for this intent
+				const stream = this.getIntentStream(triggeredIntent, thread);
+				if (!stream) {
+					continue;
+				}
+
+				if (isLastIntent) {
+					// Stream last intent response directly
+					for await (const event of stream) {
+						if (event.event === "text_chunk" && event.data.delta) {
+							finalResponseText += event.data.delta;
+						}
+						yield event;
+					}
+				} else {
+					// Collect intermediate results without streaming text_chunk
+					let responseText = "";
+					for await (const event of stream) {
+						if (event.event === "text_chunk" && event.data.delta) {
+							responseText += event.data.delta;
+						} else if (event.event === "thinking_process") {
+							// Tool execution thinking_process events are yielded immediately
+							yield event;
+						}
+					}
+					// Add intermediate result to thread context for next intent
+					thread.messages.push({
+						messageId: randomUUID(),
+						role: MessageRole.MODEL,
+						timestamp: Date.now(),
+						content: { type: "text", parts: [responseText] },
+						metadata: { isThinking: true },
+					});
+				}
+			}
 		} else {
-			// Multi-intent mode with multiple intents: collect all results then aggregate
+			// Multi-intent mode with aggregation: collect all results then aggregate
 			const fulfillmentResults: FulfillmentResult[] = [];
 
 			for (let i = 0; i < intents.length; i++) {
@@ -386,8 +447,8 @@ export class IntentFulfillService {
 				});
 			}
 
-			// Aggregate step: determine if unification is needed and generate final response
-			const aggregateStream = this.aggregateService.aggregateIfNeeded(
+			// Aggregate step: generate unified response
+			const aggregateStream = this.aggregateService.aggregate(
 				originalQuery,
 				fulfillmentResults,
 			);

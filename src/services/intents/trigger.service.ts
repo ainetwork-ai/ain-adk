@@ -1,5 +1,5 @@
 import type { MemoryModule, ModelModule } from "@/modules";
-import type { ThreadObject, TriggeredIntent } from "@/types/memory";
+import type { IntentTriggerResult, ThreadObject } from "@/types/memory";
 import { MultiIntentTriggerService } from "./multi-trigger.service";
 import { SingleIntentTriggerService } from "./single-trigger.service";
 
@@ -36,12 +36,12 @@ export class IntentTriggerService {
 	 *
 	 * @param query - The user's input query
 	 * @param thread - The thread history
-	 * @returns The detected intent(s)
+	 * @returns IntentTriggerResult containing intents and aggregation flag
 	 */
 	public async intentTriggering(
 		query: string,
 		thread: ThreadObject | undefined,
-	): Promise<Array<TriggeredIntent>> {
+	): Promise<IntentTriggerResult> {
 		if (isMultiIntentDisabled()) {
 			return this.singleTriggerService.intentTriggering(query, thread);
 		}

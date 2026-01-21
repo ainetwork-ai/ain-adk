@@ -104,6 +104,17 @@ export type TriggeredIntent = {
 };
 
 /**
+ * Result of multi-intent triggering.
+ * Contains the list of triggered intents and metadata about aggregation.
+ */
+export type IntentTriggerResult = {
+	/** List of triggered intents */
+	intents: Array<TriggeredIntent>;
+	/** Whether the results need to be aggregated into a unified response */
+	needsAggregation: boolean;
+};
+
+/**
  * Result of fulfilling a single intent.
  * Used to collect all results before the rewrite step.
  */
