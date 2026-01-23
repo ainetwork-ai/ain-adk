@@ -2,6 +2,7 @@ import { getManifest } from "@/config/manifest";
 import type { ModelModule } from "@/modules";
 import type { FulfillmentResult, ThreadType } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
+import { createTableBuffer } from "@/utils/tableBuffer";
 import { AGGREGATE_GENERATION_SYSTEM_PROMPT } from "../utils/aggregate.common";
 
 /**
@@ -84,13 +85,28 @@ export class AggregateService {
 			modelOptions,
 		);
 
+		const tableBuffer = createTableBuffer();
+
 		for await (const chunk of stream) {
 			if (chunk.delta?.content) {
-				yield {
-					event: "text_chunk",
-					data: { delta: chunk.delta.content },
-				};
+				// Buffer markdown tables to emit as single chunk
+				const chunks = tableBuffer.process(chunk.delta.content);
+				for (const c of chunks) {
+					yield {
+						event: "text_chunk",
+						data: { delta: c },
+					};
+				}
 			}
+		}
+
+		// Flush remaining table buffer
+		const remaining = tableBuffer.flush();
+		if (remaining) {
+			yield {
+				event: "text_chunk",
+				data: { delta: remaining },
+			};
 		}
 	}
 

@@ -18,6 +18,7 @@ import {
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
+import { createTableBuffer } from "@/utils/tableBuffer";
 import { createFulfillPrompt } from "../utils/fulfill.common";
 import { AggregateService } from "./aggregate.service";
 
@@ -111,6 +112,7 @@ export class IntentFulfillService {
 		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
 
 		const processList: string[] = [];
+		const tableBuffer = createTableBuffer();
 
 		while (true) {
 			const functions = modelInstance.convertToolsToFunctions(tools);
@@ -142,11 +144,24 @@ export class IntentFulfillService {
 							assembledToolCalls[index].function.arguments += func.arguments;
 					}
 				} else if (chunk.delta?.content) {
-					yield {
-						event: "text_chunk",
-						data: { delta: chunk.delta.content },
-					};
+					// Buffer markdown tables to emit as single chunk
+					const chunks = tableBuffer.process(chunk.delta.content);
+					for (const c of chunks) {
+						yield {
+							event: "text_chunk",
+							data: { delta: c },
+						};
+					}
 				}
+			}
+
+			// Flush remaining table buffer at end of stream iteration
+			const remaining = tableBuffer.flush();
+			if (remaining) {
+				yield {
+					event: "text_chunk",
+					data: { delta: remaining },
+				};
 			}
 
 			loggers.intentStream.debug("assembledToolCalls", {
