@@ -39,6 +39,11 @@ export class SingleIntentTriggerService {
 			return { intents: [{ subquery: query }], needsAggregation: false };
 		}
 
+		// Get agent memory for additional trigger prompt
+		const agentMemory = this.memoryModule.getAgentMemory();
+		const additionalTriggerPrompt =
+			(await agentMemory?.getAdditionalTriggerPrompt?.()) ?? "";
+
 		const intents = await intentMemory.listIntents();
 		if (intents.length === 0) {
 			loggers.intentStream.warn("No intent found");
@@ -71,7 +76,14 @@ export class SingleIntentTriggerService {
 		const systemPrompt = `
 Today is ${new Date().toLocaleDateString()}.
 You are an expert in accurately identifying user intentions.
-
+${
+	additionalTriggerPrompt
+		? `
+Additional Guidelines:
+${additionalTriggerPrompt}
+`
+		: ""
+}
 Available intent list:
 ${intentList}
 

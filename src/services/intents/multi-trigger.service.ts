@@ -38,6 +38,11 @@ export class MultiIntentTriggerService {
 			return { intents: [{ subquery: query }], needsAggregation: false };
 		}
 
+		// Get agent memory for additional trigger prompt
+		const agentMemory = this.memoryModule.getAgentMemory();
+		const additionalTriggerPrompt =
+			(await agentMemory?.getAdditionalTriggerPrompt?.()) ?? "";
+
 		// 인텐트 목록 가져오기
 		const intents = await intentMemory.listIntents();
 
@@ -72,7 +77,14 @@ export class MultiIntentTriggerService {
 		const systemPrompt = `
 Today is ${new Date().toLocaleDateString()}.
 You are an expert in accurately identifying user intentions.
-
+${
+	additionalTriggerPrompt
+		? `
+Additional Guidelines:
+${additionalTriggerPrompt}
+`
+		: ""
+}
 Available intent list:
 ${intentList}
 
