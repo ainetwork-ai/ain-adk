@@ -60,11 +60,11 @@ export interface IIntentMemory {
  */
 export interface IAgentMemory {
 	getAgentPrompt(): Promise<string>;
-	updateAgentPrompt(prompt: string): Promise<void>;
-	getAggregatePrompt(): Promise<string>;
-	getGenerateTitlePrompt(): Promise<string>;
-	getSingleTriggerPrompt(): Promise<string>;
-	getMultiTriggerPrompt(): Promise<string>;
+	updateAgentPrompt?(prompt: string): Promise<void>;
+	getAggregatePrompt?(): Promise<string>;
+	getGenerateTitlePrompt?(): Promise<string>;
+	getSingleTriggerPrompt?(): Promise<string>;
+	getMultiTriggerPrompt?(): Promise<string>;
 }
 
 /**
