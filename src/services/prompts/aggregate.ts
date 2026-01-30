@@ -1,7 +1,9 @@
-/**
- * System prompt for generating a unified response from multiple results.
- */
-export const AGGREGATE_GENERATION_SYSTEM_PROMPT = `You are an assistant that combines multiple task responses into a single, coherent response.
+import type { MemoryModule } from "@/modules";
+
+async function aggregatePrompt(memoryModule: MemoryModule) {
+	const aggregatePrompt =
+		(await memoryModule?.getAgentMemory()?.getAggregatePrompt?.()) ||
+		`You are an assistant that combines multiple task responses into a single, coherent response.
 
 Guidelines:
 - Preserve all important information from each response
@@ -11,3 +13,8 @@ Guidelines:
 - Keep the tone consistent with the original responses
 - Be concise - don't add unnecessary filler
 - Respond in the same language as the original query`;
+
+	return aggregatePrompt;
+}
+
+export default aggregatePrompt;

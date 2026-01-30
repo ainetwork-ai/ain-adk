@@ -1,10 +1,11 @@
-import type { IAgentMemory } from "@/modules";
+import type { MemoryModule } from "@/modules";
 import type { Intent } from "@/types/memory";
 
-export async function createFulfillPrompt(
-	agentMemory?: IAgentMemory,
+export async function fulfillPrompt(
+	memoryModule: MemoryModule,
 	intent?: Intent,
 ) {
+	const agentMemory = memoryModule.getAgentMemory();
 	const agentPrompt = agentMemory ? await agentMemory.getAgentPrompt() : "";
 
 	return `
