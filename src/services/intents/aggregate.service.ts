@@ -64,7 +64,7 @@ export class AggregateService {
 		const modelInstance = this.modelModule.getModel();
 		const modelOptions = this.modelModule.getModelOptions();
 
-		const prompt = this.buildAggregateQuery(originalQuery, results);
+		const query = this.buildAggregateQuery(originalQuery, results);
 
 		const emptyThread = {
 			messages: [],
@@ -75,7 +75,7 @@ export class AggregateService {
 		};
 
 		const messages = modelInstance.generateMessages({
-			query: prompt,
+			query,
 			thread: emptyThread,
 			systemPrompt: await aggregatePrompts(this.memoryModule),
 		});

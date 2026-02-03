@@ -98,7 +98,7 @@ export class MCPModule {
 	 *
 	 * @returns Array of MCPTool instances representing available tools
 	 */
-	getTools(): Array<ConnectorTool> {
+	getTools(prompt: string): Array<ConnectorTool> {
 		const allTools: Array<ConnectorTool> = [];
 		for (const conn of this.mcpConnectors.values()) {
 			for (const tool of conn.tools) {
@@ -111,8 +111,7 @@ export class MCPModule {
 
 				finalInputSchema.properties["thinking_text"] = {
 					type: "string",
-					description:
-						"사용자의 요청을 해결하기 위해 이 도구를 선택한 구체적인 이유와 목적 (Why & What). 한두줄 정도의 분량으로 입력 언어와 같은 언어로 생성하며, 정중한 표현을 쓴다.",
+					description: prompt,
 				};
 				finalInputSchema.required.push("thinking_text");
 

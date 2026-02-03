@@ -65,6 +65,7 @@ export interface IAgentMemory {
 	getGenerateTitlePrompt?(): Promise<string>;
 	getSingleTriggerPrompt?(): Promise<string>;
 	getMultiTriggerPrompt?(): Promise<string>;
+	getToolSelectPrompt?(): Promise<string>;
 }
 
 /**

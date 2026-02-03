@@ -18,7 +18,8 @@ import {
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
-import { fulfillPrompt } from "../prompts/fulfill";
+import fulfillPrompt from "../prompts/fulfill";
+import toolSelectPrompt from "../prompts/tool-select";
 import { AggregateService } from "./aggregate.service";
 
 export class IntentFulfillService {
@@ -106,8 +107,10 @@ export class IntentFulfillService {
 		});
 
 		const tools: ConnectorTool[] = [];
-		this.mcpModule && tools.push(...this.mcpModule.getTools());
-		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
+		const toolPrompt = await toolSelectPrompt(this.memoryModule);
+		this.mcpModule && tools.push(...this.mcpModule.getTools(toolPrompt));
+		this.a2aModule &&
+			tools.push(...(await this.a2aModule.getTools(toolPrompt)));
 
 		const processList: string[] = [];
 
