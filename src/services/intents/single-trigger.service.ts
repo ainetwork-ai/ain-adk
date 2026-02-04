@@ -6,6 +6,7 @@ import type {
 	TriggeredIntent,
 } from "@/types/memory";
 import { loggers } from "@/utils/logger";
+import singleTriggerPrompt from "../prompts/single-trigger";
 
 /**
  * Service for single-intent triggering.
@@ -68,41 +69,28 @@ export class SingleIntentTriggerService {
 					})
 					.join("\n");
 
-		const systemPrompt = `
-Today is ${new Date().toLocaleDateString()}.
-You are an expert in accurately identifying user intentions.
+		const systemPrompt = await singleTriggerPrompt(
+			this.memoryModule,
+			intentList,
+		);
 
-Available intent list:
-${intentList}
-
-Please select and answer only from the above intent list.`;
-
-		const userMessage = `
+		const triggerMessage = `
 ${
 	threadMessages !== ""
-		? `The following is the conversation history with the user: ${threadMessages}
+		? `
+The following is the conversation history with the user:
+${threadMessages}
 
-	`
+`
 		: ""
 }
 User question: "${query}"
 
 Based on the above conversation history, analyze the user question and identify the most relevant intent.
-
-Instructions:
-1. Select the single most appropriate intent from the available intent list
-2. If no intent matches well, do not set intentName
-3. Provide a 2-3 sentence action plan describing what will be done
-
-Output Format:
-You MUST return the output in the following JSON format. Do not include any other text before or after the JSON:
-{
-  "intentName": "<intent_name or null>",
-  "actionPlan": "<2-3 sentence description of what will be done>"
-}`;
+`;
 
 		const messages = modelInstance.generateMessages({
-			query: userMessage,
+			query: triggerMessage,
 			systemPrompt,
 		});
 

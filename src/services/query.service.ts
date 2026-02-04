@@ -17,7 +17,7 @@ import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
 import type { IntentFulfillService } from "./intents/fulfill.service";
 import type { IntentTriggerService } from "./intents/trigger.service";
-import { generateTitle } from "./utils/query.common";
+import generateTitlePrompt from "./prompts/generate-title";
 
 /**
  * Service for processing user queries through the agent's AI pipeline.
@@ -51,6 +51,32 @@ export class QueryService {
 	) {
 		const threadMemory = this.memoryModule.getThreadMemory();
 		await threadMemory?.addMessagesToThread(userId, threadId, messages);
+	}
+
+	public async generateTitle(
+		query: string,
+		options?: ModelFetchOptions,
+	): Promise<string> {
+		const DEFAULT_TITLE = "New Chat";
+		try {
+			const modelInstance = this.modelModule.getModel();
+			const modelOptions = this.modelModule.getModelOptions();
+			const messages = modelInstance.generateMessages({
+				query,
+				systemPrompt: await generateTitlePrompt(this.memoryModule),
+			});
+			const response = await modelInstance.fetch(
+				messages,
+				options ?? modelOptions,
+			);
+			return response.content || DEFAULT_TITLE;
+		} catch (error) {
+			loggers.intent.error("Error generating title", {
+				error,
+				query,
+			});
+			return DEFAULT_TITLE;
+		}
 	}
 
 	/**
@@ -98,7 +124,7 @@ export class QueryService {
 
 		threadId ??= randomUUID();
 		if (!thread) {
-			const title = await generateTitle(this.modelModule, query, options);
+			const title = await this.generateTitle(query, options);
 			const metadata: ThreadMetadata = (await threadMemory?.createThread(
 				type,
 				userId,

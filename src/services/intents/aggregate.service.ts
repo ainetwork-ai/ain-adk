@@ -1,8 +1,8 @@
 import { getManifest } from "@/config/manifest";
-import type { ModelModule } from "@/modules";
+import type { MemoryModule, ModelModule } from "@/modules";
 import type { FulfillmentResult, ThreadType } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
-import { AGGREGATE_GENERATION_SYSTEM_PROMPT } from "../utils/aggregate.common";
+import aggregatePrompts from "../prompts/aggregate";
 
 /**
  * Service for determining whether multiple fulfillment results need to be
@@ -10,9 +10,11 @@ import { AGGREGATE_GENERATION_SYSTEM_PROMPT } from "../utils/aggregate.common";
  */
 export class AggregateService {
 	private modelModule: ModelModule;
+	private memoryModule: MemoryModule;
 
-	constructor(modelModule: ModelModule) {
+	constructor(modelModule: ModelModule, memoryModule: MemoryModule) {
 		this.modelModule = modelModule;
+		this.memoryModule = memoryModule;
 	}
 
 	/**
@@ -62,7 +64,7 @@ export class AggregateService {
 		const modelInstance = this.modelModule.getModel();
 		const modelOptions = this.modelModule.getModelOptions();
 
-		const prompt = this.buildAggregatePrompt(originalQuery, results);
+		const query = this.buildAggregateQuery(originalQuery, results);
 
 		const emptyThread = {
 			messages: [],
@@ -73,9 +75,9 @@ export class AggregateService {
 		};
 
 		const messages = modelInstance.generateMessages({
-			query: prompt,
+			query,
 			thread: emptyThread,
-			systemPrompt: AGGREGATE_GENERATION_SYSTEM_PROMPT,
+			systemPrompt: await aggregatePrompts(this.memoryModule),
 		});
 
 		const stream = await modelInstance.fetchStreamWithContextMessage(
@@ -95,9 +97,9 @@ export class AggregateService {
 	}
 
 	/**
-	 * Builds the prompt for generating an aggregated response.
+	 * Builds the query for generating an aggregated response.
 	 */
-	private buildAggregatePrompt(
+	private buildAggregateQuery(
 		originalQuery: string,
 		results: FulfillmentResult[],
 	): string {

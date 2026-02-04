@@ -18,7 +18,8 @@ import {
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
-import { createFulfillPrompt } from "../utils/fulfill.common";
+import fulfillPrompt from "../prompts/fulfill";
+import toolSelectPrompt from "../prompts/tool-select";
 import { AggregateService } from "./aggregate.service";
 
 export class IntentFulfillService {
@@ -41,7 +42,7 @@ export class IntentFulfillService {
 		this.a2aModule = a2aModule;
 		this.mcpModule = mcpModule;
 		this.onIntentFallback = onIntentFallback;
-		this.aggregateService = new AggregateService(modelModule);
+		this.aggregateService = new AggregateService(modelModule, memoryModule);
 	}
 
 	private async addToThreadMessages(
@@ -90,15 +91,14 @@ export class IntentFulfillService {
 		thread: ThreadObject,
 		intent?: Intent,
 	): AsyncGenerator<StreamEvent> {
-		const agentMemory = this.memoryModule.getAgentMemory();
-		const fulfillPrompt = await createFulfillPrompt(agentMemory, intent);
+		const prompt = await fulfillPrompt(this.memoryModule, intent);
 
 		const modelInstance = this.modelModule.getModel();
 		const modelOptions = this.modelModule.getModelOptions();
 		const messages = modelInstance.generateMessages({
 			query,
 			thread,
-			systemPrompt: fulfillPrompt.trim(),
+			systemPrompt: prompt.trim(),
 		});
 
 		loggers.intent.debug("Intent fulfillment start", {
@@ -107,8 +107,10 @@ export class IntentFulfillService {
 		});
 
 		const tools: ConnectorTool[] = [];
-		this.mcpModule && tools.push(...this.mcpModule.getTools());
-		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
+		const toolPrompt = await toolSelectPrompt(this.memoryModule);
+		this.mcpModule && tools.push(...this.mcpModule.getTools(toolPrompt));
+		this.a2aModule &&
+			tools.push(...(await this.a2aModule.getTools(toolPrompt)));
 
 		const processList: string[] = [];
 

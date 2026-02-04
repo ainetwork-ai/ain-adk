@@ -68,7 +68,7 @@ export class A2AModule {
 	 *
 	 * @returns Promise resolving to array of available A2A tools
 	 */
-	public async getTools(): Promise<ConnectorTool[]> {
+	public async getTools(prompt: string): Promise<ConnectorTool[]> {
 		const tools: ConnectorTool[] = [];
 		for (const [name, conn] of this.a2aConnectors.entries()) {
 			if (!conn.enabled) {
@@ -90,8 +90,7 @@ export class A2AModule {
 						properties: {
 							thinking_text: {
 								type: "string",
-								description:
-									"사용자의 요청을 해결하기 위해 이 도구를 선택한 구체적인 이유와 목적 (Why & What). 한두줄 정도의 분량으로 입력 언어와 같은 언어로 생성한다.",
+								description: prompt,
 							},
 						},
 						required: ["thinking_text"],
