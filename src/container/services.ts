@@ -8,6 +8,7 @@ import { getOnIntentFallback } from "@/config/options";
 import { A2AService } from "@/services/a2a.service";
 import { IntentFulfillService } from "@/services/intents/fulfill.service";
 import { IntentTriggerService } from "@/services/intents/trigger.service";
+import { PIIService } from "@/services/pii.service";
 import { QueryService } from "@/services/query.service";
 import { ThreadService } from "@/services/thread.service";
 
@@ -21,6 +22,7 @@ export class ServiceContainer {
 	private _intentFulfillService?: IntentFulfillService;
 	private _queryService?: QueryService;
 	private _a2aService?: A2AService;
+	private _piiService?: PIIService;
 
 	getThreadService(): ThreadService {
 		if (!this._threadService) {
@@ -39,6 +41,13 @@ export class ServiceContainer {
 		return this._intentTriggerService;
 	}
 
+	getPIIService(): PIIService {
+		if (!this._piiService) {
+			this._piiService = new PIIService(getModelModule(), getMemoryModule());
+		}
+		return this._piiService;
+	}
+
 	getIntentFulfillService(): IntentFulfillService {
 		if (!this._intentFulfillService) {
 			this._intentFulfillService = new IntentFulfillService(
@@ -47,6 +56,7 @@ export class ServiceContainer {
 				getA2AModule(),
 				getMCPModule(),
 				getOnIntentFallback(),
+				this.getPIIService(),
 			);
 		}
 		return this._intentFulfillService;
@@ -59,6 +69,7 @@ export class ServiceContainer {
 				getMemoryModule(),
 				this.getIntentTriggerService(),
 				this.getIntentFulfillService(),
+				this.getPIIService(),
 			);
 		}
 		return this._queryService;
@@ -77,5 +88,6 @@ export class ServiceContainer {
 		this._intentFulfillService = undefined;
 		this._queryService = undefined;
 		this._a2aService = undefined;
+		this._piiService = undefined;
 	}
 }
