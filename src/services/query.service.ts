@@ -17,7 +17,7 @@ import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
 import type { IntentFulfillService } from "./intents/fulfill.service";
 import type { IntentTriggerService } from "./intents/trigger.service";
-import type { PIIService } from "./pii.service";
+import { PIIFilterMode, type PIIService } from "./pii.service";
 import generateTitlePrompt from "./prompts/generate-title";
 
 /**
@@ -113,15 +113,23 @@ export class QueryService {
 		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
 		const { type, userId, options } = threadMetadata;
-		let { query, displayQuery } = queryData;
+		const { displayQuery } = queryData;
+		let { query } = queryData;
 		const threadMemory = this.memoryModule.getThreadMemory();
 
 		// PII filtering on input
-		if (this.piiService?.isEnabled()) {
-			query = await this.piiService.filterText(query);
-			if (displayQuery) {
-				displayQuery = await this.piiService.filterText(displayQuery);
+		const piiMode = this.piiService?.getMode() ?? PIIFilterMode.DISABLED;
+		if (piiMode === PIIFilterMode.REJECT && this.piiService) {
+			const hasPII = await this.piiService.containsPII(query);
+			if (hasPII) {
+				yield {
+					event: "text_chunk",
+					data: { delta: "개인정보 내역은 처리할 수 없습니다." },
+				};
+				return;
 			}
+		} else if (piiMode === PIIFilterMode.MASK && this.piiService) {
+			query = await this.piiService.filterText(query);
 		}
 
 		// 1. Load or create thread

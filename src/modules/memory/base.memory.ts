@@ -67,6 +67,7 @@ export interface IAgentMemory {
 	getMultiTriggerPrompt?(): Promise<string>;
 	getToolSelectPrompt?(): Promise<string>;
 	getPIIFilterPrompt?(): Promise<string>;
+	getPIIDetectPrompt?(): Promise<string>;
 }
 
 /**

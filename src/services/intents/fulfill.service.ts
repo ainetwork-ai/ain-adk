@@ -18,7 +18,7 @@ import {
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
-import type { PIIService } from "../pii.service";
+import { PIIFilterMode, type PIIService } from "../pii.service";
 import fulfillPrompt from "../prompts/fulfill";
 import toolSelectPrompt from "../prompts/tool-select";
 import { AggregateService } from "./aggregate.service";
@@ -455,8 +455,8 @@ export class IntentFulfillService {
 			}
 		}
 
-		// PII filtering on output before saving to memory
-		if (this.piiService?.isEnabled()) {
+		// PII filtering on output before saving to memory (mask mode only)
+		if (this.piiService?.getMode() === PIIFilterMode.MASK) {
 			finalResponseText = await this.piiService.filterText(finalResponseText);
 		}
 
