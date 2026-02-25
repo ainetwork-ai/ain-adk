@@ -33,7 +33,7 @@ export class PIIService {
 		if (!text.trim()) return false;
 
 		try {
-			const modelInstance = this.modelModule.getModel();
+			const modelInstance = this.modelModule.getModel("pii-model");
 			const modelOptions = this.modelModule.getModelOptions();
 			const messages = modelInstance.generateMessages({
 				query: text,
