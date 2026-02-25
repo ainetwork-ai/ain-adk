@@ -17,6 +17,7 @@ import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
 import type { IntentFulfillService } from "./intents/fulfill.service";
 import type { IntentTriggerService } from "./intents/trigger.service";
+import { PIIFilterMode, type PIIService } from "./pii.service";
 import generateTitlePrompt from "./prompts/generate-title";
 
 /**
@@ -31,17 +32,20 @@ export class QueryService {
 	private memoryModule: MemoryModule;
 	private intentTriggerService: IntentTriggerService;
 	private intentFulfillService: IntentFulfillService;
+	private piiService?: PIIService;
 
 	constructor(
 		modelModule: ModelModule,
 		memoryModule: MemoryModule,
 		intentTriggerService: IntentTriggerService,
 		intentFulfillService: IntentFulfillService,
+		piiService?: PIIService,
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
 		this.intentTriggerService = intentTriggerService;
 		this.intentFulfillService = intentFulfillService;
+		this.piiService = piiService;
 	}
 
 	public async addToThreadMessages(
@@ -109,8 +113,24 @@ export class QueryService {
 		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
 		const { type, userId, options } = threadMetadata;
-		const { query, displayQuery } = queryData;
+		const { displayQuery } = queryData;
+		let { query } = queryData;
 		const threadMemory = this.memoryModule.getThreadMemory();
+
+		// PII filtering on input
+		const piiMode = this.piiService?.getMode() ?? PIIFilterMode.DISABLED;
+		if (piiMode === PIIFilterMode.REJECT && this.piiService) {
+			const hasPII = await this.piiService.containsPII(query);
+			if (hasPII) {
+				yield {
+					event: "text_chunk",
+					data: { delta: "개인정보 내역은 처리할 수 없습니다." },
+				};
+				return;
+			}
+		} else if (piiMode === PIIFilterMode.MASK && this.piiService) {
+			query = await this.piiService.filterText(query);
+		}
 
 		// 1. Load or create thread
 		let threadId = threadMetadata.threadId;

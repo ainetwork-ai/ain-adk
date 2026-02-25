@@ -18,6 +18,7 @@ import {
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
+import { PIIFilterMode, type PIIService } from "../pii.service";
 import fulfillPrompt from "../prompts/fulfill";
 import toolSelectPrompt from "../prompts/tool-select";
 import { AggregateService } from "./aggregate.service";
@@ -29,6 +30,7 @@ export class IntentFulfillService {
 	private mcpModule?: MCPModule;
 	private onIntentFallback?: OnIntentFallback;
 	private aggregateService: AggregateService;
+	private piiService?: PIIService;
 
 	constructor(
 		modelModule: ModelModule,
@@ -36,6 +38,7 @@ export class IntentFulfillService {
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		onIntentFallback?: OnIntentFallback,
+		piiService?: PIIService,
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
@@ -43,6 +46,7 @@ export class IntentFulfillService {
 		this.mcpModule = mcpModule;
 		this.onIntentFallback = onIntentFallback;
 		this.aggregateService = new AggregateService(modelModule, memoryModule);
+		this.piiService = piiService;
 	}
 
 	private async addToThreadMessages(
@@ -449,6 +453,11 @@ export class IntentFulfillService {
 				}
 				yield event;
 			}
+		}
+
+		// PII filtering on output before saving to memory (mask mode only)
+		if (this.piiService?.getMode() === PIIFilterMode.MASK) {
+			finalResponseText = await this.piiService.filterText(finalResponseText);
 		}
 
 		// Save final response to memory
