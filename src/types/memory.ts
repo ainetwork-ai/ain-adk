@@ -135,6 +135,7 @@ export interface WorkflowVariable {
 	id: string; // e.g. "workplace_id"
 	label: string; // e.g. "분석할 업장을 선택해주세요"
 	type: WorkflowVariableType;
+	options?: Array<{ value: string; label: string }>; // for "select" type
 }
 
 export interface Workflow {
