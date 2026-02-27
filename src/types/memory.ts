@@ -129,6 +129,14 @@ export type FulfillmentResult = {
 	response: string;
 };
 
+export type WorkflowVariableType = "select" | "date_range" | "text" | "number";
+
+export interface WorkflowVariable {
+	id: string; // e.g. "workplace_id"
+	label: string; // e.g. "분석할 업장을 선택해주세요"
+	type: WorkflowVariableType;
+}
+
 export interface Workflow {
 	workflowId: string;
 	userId?: string;
@@ -136,4 +144,5 @@ export interface Workflow {
 	description: string;
 	active: boolean;
 	content: string;
+	variables?: Record<string, WorkflowVariable>;
 }
