@@ -295,6 +295,7 @@ export class IntentFulfillService {
 		});
 
 		let finalResponseText = "";
+		let collectionName: string | undefined;
 
 		if (intents.length <= 1) {
 			// Single intent: stream response directly
@@ -328,6 +329,8 @@ export class IntentFulfillService {
 			for await (const event of stream) {
 				if (event.event === "text_chunk" && event.data.delta) {
 					finalResponseText += event.data.delta;
+				} else if (event.event === "collection_name") {
+					collectionName = event.data.name;
 				}
 				yield event;
 			}
@@ -361,6 +364,8 @@ export class IntentFulfillService {
 					for await (const event of stream) {
 						if (event.event === "text_chunk" && event.data.delta) {
 							finalResponseText += event.data.delta;
+						} else if (event.event === "collection_name") {
+							collectionName = event.data.name;
 						}
 						yield event;
 					}
@@ -370,6 +375,8 @@ export class IntentFulfillService {
 					for await (const event of stream) {
 						if (event.event === "text_chunk" && event.data.delta) {
 							responseText += event.data.delta;
+						} else if (event.event === "collection_name") {
+							collectionName = event.data.name;
 						} else if (event.event === "thinking_process") {
 							// Tool execution thinking_process events are yielded immediately
 							yield event;
@@ -427,6 +434,8 @@ export class IntentFulfillService {
 				for await (const event of stream) {
 					if (event.event === "text_chunk" && event.data.delta) {
 						responseText += event.data.delta;
+					} else if (event.event === "collection_name") {
+						collectionName = event.data.name;
 					} else if (event.event === "thinking_process") {
 						// Tool execution thinking_process events are yielded immediately
 						yield event;
@@ -464,6 +473,7 @@ export class IntentFulfillService {
 		await this.addToThreadMessages(thread, {
 			role: MessageRole.MODEL,
 			content: finalResponseText,
+			metadata: collectionName ? { collectionName } : undefined,
 		});
 
 		const streamEndTime = Date.now();
