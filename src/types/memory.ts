@@ -60,6 +60,7 @@ export type ThreadMetadata = {
 	title: string;
 	userId: string;
 	threadId: string;
+	isPinned?: boolean;
 };
 
 /**
@@ -84,6 +85,7 @@ export type ThreadObject = {
 	threadId: string;
 	type: ThreadType;
 	title: string;
+	isPinned?: boolean;
 	messages: Array<MessageObject>;
 };
 
