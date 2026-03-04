@@ -41,6 +41,11 @@ export interface IThreadMemory {
 	): Promise<void>;
 	deleteThread(userId: string, threadId: string): Promise<void>;
 	listThreads(userId: string): Promise<ThreadMetadata[]>;
+	updateThreadPin(
+		userId: string,
+		threadId: string,
+		isPinned: boolean,
+	): Promise<void>;
 }
 
 /**

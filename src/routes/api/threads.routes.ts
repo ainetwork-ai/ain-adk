@@ -34,6 +34,11 @@ export const createThreadApiRouter = (): Router => {
 	router.get("/", checkThreadMemory, threadApiController.handleGetUserThreads);
 	router.get("/:id", checkThreadMemory, threadApiController.handleGetThread);
 	router.post(
+		"/pin/:id",
+		checkThreadMemory,
+		threadApiController.handleUpdateThreadPin,
+	);
+	router.post(
 		"/delete/:id",
 		checkThreadMemory,
 		threadApiController.handleDeleteThread,
