@@ -4,6 +4,7 @@ import type {
 	ThreadMetadata,
 	ThreadObject,
 	ThreadType,
+	Workflow,
 } from "@/types/memory";
 
 /**
@@ -16,6 +17,7 @@ export interface IMemory {
 	getThreadMemory(): IThreadMemory;
 	getIntentMemory(): IIntentMemory;
 	getAgentMemory(): IAgentMemory;
+	getWorkflowMemory(): IWorkflowMemory;
 }
 
 /**
@@ -39,6 +41,11 @@ export interface IThreadMemory {
 	): Promise<void>;
 	deleteThread(userId: string, threadId: string): Promise<void>;
 	listThreads(userId: string): Promise<ThreadMetadata[]>;
+	updateThreadPin(
+		userId: string,
+		threadId: string,
+		isPinned: boolean,
+	): Promise<void>;
 }
 
 /**
@@ -58,5 +65,26 @@ export interface IIntentMemory {
  */
 export interface IAgentMemory {
 	getAgentPrompt(): Promise<string>;
-	updateAgentPrompt(prompt: string): Promise<void>;
+	updateAgentPrompt?(prompt: string): Promise<void>;
+	getAggregatePrompt?(): Promise<string>;
+	getGenerateTitlePrompt?(): Promise<string>;
+	getSingleTriggerPrompt?(): Promise<string>;
+	getMultiTriggerPrompt?(): Promise<string>;
+	getToolSelectPrompt?(): Promise<string>;
+	getPIIFilterPrompt?(): Promise<string>;
+	getPIIDetectPrompt?(): Promise<string>;
+}
+
+/**
+ * Workflow memory interface - handles workflow operations
+ */
+export interface IWorkflowMemory {
+	getWorkflow(workflowId: string): Promise<Workflow | undefined>;
+	createWorkflow(workflow: Workflow): Promise<Workflow>;
+	updateWorkflow(
+		workflowId: string,
+		workflow: Partial<Workflow>,
+	): Promise<void>;
+	deleteWorkflow(workflowId: string, userId: string): Promise<void>;
+	listWorkflows(userId?: string): Promise<Workflow[]>;
 }

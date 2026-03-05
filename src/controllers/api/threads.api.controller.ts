@@ -45,6 +45,27 @@ export class ThreadApiController {
 		}
 	};
 
+	public handleUpdateThreadPin = async (
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	) => {
+		try {
+			const { id: threadId } = req.params as {
+				id: string;
+			};
+			const { isPinned } = req.body as {
+				isPinned: boolean;
+			};
+			const userId = res.locals.userId || "";
+			const threadMemory = this.memoryModule.getThreadMemory();
+			await threadMemory?.updateThreadPin(userId, threadId, isPinned);
+			res.status(StatusCodes.OK).send();
+		} catch (error) {
+			next(error);
+		}
+	};
+
 	public handleGetUserThreads = async (
 		_req: Request,
 		res: Response,

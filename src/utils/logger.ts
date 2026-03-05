@@ -67,3 +67,30 @@ export const loggers = {
 	server: getLogger("A2AServer"),
 	fol: getLogger("FOL"),
 } as const;
+
+// Intercept console.log/warn/error and write to LOG_FILE_PATH
+export const interceptConsole = () => {
+	const logFilePath = process.env.LOG_FILE_PATH;
+	if (!logFilePath) return;
+
+	const consoleLogger = createLogger("console");
+
+	const originalLog = console.log;
+	const originalWarn = console.warn;
+	const originalError = console.error;
+
+	console.log = (...args: unknown[]) => {
+		originalLog(...args);
+		consoleLogger.info(args.map(String).join(" "));
+	};
+
+	console.warn = (...args: unknown[]) => {
+		originalWarn(...args);
+		consoleLogger.warn(args.map(String).join(" "));
+	};
+
+	console.error = (...args: unknown[]) => {
+		originalError(...args);
+		consoleLogger.error(args.map(String).join(" "));
+	};
+};

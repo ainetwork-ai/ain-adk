@@ -12,13 +12,13 @@ import {
 	type ThreadMetadata,
 	type ThreadObject,
 	type ThreadType,
-	type TriggeredIntent,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
 import type { IntentFulfillService } from "./intents/fulfill.service";
 import type { IntentTriggerService } from "./intents/trigger.service";
-import { generateTitle } from "./utils/query.common";
+import { PIIFilterMode, type PIIService } from "./pii.service";
+import generateTitlePrompt from "./prompts/generate-title";
 
 /**
  * Service for processing user queries through the agent's AI pipeline.
@@ -32,17 +32,20 @@ export class QueryService {
 	private memoryModule: MemoryModule;
 	private intentTriggerService: IntentTriggerService;
 	private intentFulfillService: IntentFulfillService;
+	private piiService?: PIIService;
 
 	constructor(
 		modelModule: ModelModule,
 		memoryModule: MemoryModule,
 		intentTriggerService: IntentTriggerService,
 		intentFulfillService: IntentFulfillService,
+		piiService?: PIIService,
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
 		this.intentTriggerService = intentTriggerService;
 		this.intentFulfillService = intentFulfillService;
+		this.piiService = piiService;
 	}
 
 	public async addToThreadMessages(
@@ -52,6 +55,32 @@ export class QueryService {
 	) {
 		const threadMemory = this.memoryModule.getThreadMemory();
 		await threadMemory?.addMessagesToThread(userId, threadId, messages);
+	}
+
+	public async generateTitle(
+		query: string,
+		options?: ModelFetchOptions,
+	): Promise<string> {
+		const DEFAULT_TITLE = "New Chat";
+		try {
+			const modelInstance = this.modelModule.getModel();
+			const modelOptions = this.modelModule.getModelOptions();
+			const messages = modelInstance.generateMessages({
+				query,
+				systemPrompt: await generateTitlePrompt(this.memoryModule),
+			});
+			const response = await modelInstance.fetch(
+				messages,
+				options ?? modelOptions,
+			);
+			return response.content || DEFAULT_TITLE;
+		} catch (error) {
+			loggers.intent.error("Error generating title", {
+				error,
+				query,
+			});
+			return DEFAULT_TITLE;
+		}
 	}
 
 	/**
@@ -77,11 +106,31 @@ export class QueryService {
 			threadId?: string;
 			options?: ModelFetchOptions;
 		},
-		query: string,
+		queryData: {
+			query: string;
+			displayQuery?: string;
+		},
 		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
 		const { type, userId, options } = threadMetadata;
+		const { displayQuery } = queryData;
+		let { query } = queryData;
 		const threadMemory = this.memoryModule.getThreadMemory();
+
+		// PII filtering on input
+		const piiMode = this.piiService?.getMode() ?? PIIFilterMode.DISABLED;
+		if (piiMode === PIIFilterMode.REJECT && this.piiService) {
+			const hasPII = await this.piiService.containsPII(query);
+			if (hasPII) {
+				yield {
+					event: "text_chunk",
+					data: { delta: "개인정보 내역은 처리할 수 없습니다." },
+				};
+				return;
+			}
+		} else if (piiMode === PIIFilterMode.MASK && this.piiService) {
+			query = await this.piiService.filterText(query);
+		}
 
 		// 1. Load or create thread
 		let threadId = threadMetadata.threadId;
@@ -95,7 +144,7 @@ export class QueryService {
 
 		threadId ??= randomUUID();
 		if (!thread) {
-			const title = await generateTitle(this.modelModule, query, options);
+			const title = await this.generateTitle(query, options);
 			const metadata: ThreadMetadata = (await threadMemory?.createThread(
 				type,
 				userId,
@@ -108,9 +157,15 @@ export class QueryService {
 		}
 
 		// 2. intent triggering
-		const triggeredIntent: Array<TriggeredIntent> =
-			await this.intentTriggerService.intentTriggering(query, thread);
-		loggers.intent.debug("Triggered intents", { triggeredIntent });
+		const triggerResult = await this.intentTriggerService.intentTriggering(
+			query,
+			thread,
+		);
+		const { intents: triggeredIntents, needsAggregation } = triggerResult;
+		loggers.intent.debug("Triggered intents", {
+			triggeredIntents,
+			needsAggregation,
+		});
 
 		// only add for storage, not for inference
 		await this.addToThreadMessages(userId, threadId, [
@@ -118,22 +173,26 @@ export class QueryService {
 				messageId: randomUUID(),
 				role: MessageRole.USER,
 				timestamp: Date.now(),
-				content: { type: "text", parts: [query] },
+				// use displayQuery for better UX in enterprise application
+				content: { type: "text", parts: [displayQuery || query] },
 				metadata: {
-					intents: triggeredIntent
+					intents: triggeredIntents
 						.filter((intent) => !!intent.intent)
 						.map((intent) => ({
 							id: intent.intent?.id,
 							subquery: intent.subquery,
 						})),
+					query: !displayQuery ? undefined : query,
 				},
 			},
 		]);
 
-		// 3. intent fulfillment
+		// 3. intent fulfillment (with rewrite step)
 		const stream = this.intentFulfillService.intentFulfill(
-			triggeredIntent,
+			triggeredIntents,
 			thread,
+			query,
+			needsAggregation,
 		);
 
 		for await (const event of stream) {

@@ -4,6 +4,7 @@ import { createAgentApiRouter } from "./api/agent.routes.js";
 import { createIntentApiRouter } from "./api/intent.routes.js";
 import { createModelApiRouter } from "./api/model.routes.js";
 import { createThreadApiRouter } from "./api/threads.routes.js";
+import { createWorkflowApiRouter } from "./api/workflow.routes.js";
 
 export const createApiRouter = (): Router => {
 	const router = Router();
@@ -15,6 +16,7 @@ export const createApiRouter = (): Router => {
 	if (memoryModule) {
 		router.use("/threads", createThreadApiRouter());
 		router.use("/intent", createIntentApiRouter());
+		router.use("/workflow", createWorkflowApiRouter());
 	}
 
 	return router;

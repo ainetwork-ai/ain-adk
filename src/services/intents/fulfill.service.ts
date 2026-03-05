@@ -9,6 +9,7 @@ import type {
 import type { OnIntentFallback } from "@/types/agent";
 import { CONNECTOR_PROTOCOL_TYPE, type ConnectorTool } from "@/types/connector";
 import {
+	type FulfillmentResult,
 	type Intent,
 	type MessageObject,
 	MessageRole,
@@ -17,7 +18,10 @@ import {
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
-import { createFulfillPrompt } from "../utils/fulfill.common";
+import { PIIFilterMode, type PIIService } from "../pii.service";
+import fulfillPrompt from "../prompts/fulfill";
+import toolSelectPrompt from "../prompts/tool-select";
+import { AggregateService } from "./aggregate.service";
 
 export class IntentFulfillService {
 	private modelModule: ModelModule;
@@ -25,6 +29,8 @@ export class IntentFulfillService {
 	private a2aModule?: A2AModule;
 	private mcpModule?: MCPModule;
 	private onIntentFallback?: OnIntentFallback;
+	private aggregateService: AggregateService;
+	private piiService?: PIIService;
 
 	constructor(
 		modelModule: ModelModule,
@@ -32,12 +38,15 @@ export class IntentFulfillService {
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		onIntentFallback?: OnIntentFallback,
+		piiService?: PIIService,
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
 		this.a2aModule = a2aModule;
 		this.mcpModule = mcpModule;
 		this.onIntentFallback = onIntentFallback;
+		this.aggregateService = new AggregateService(modelModule, memoryModule);
+		this.piiService = piiService;
 	}
 
 	private async addToThreadMessages(
@@ -86,15 +95,14 @@ export class IntentFulfillService {
 		thread: ThreadObject,
 		intent?: Intent,
 	): AsyncGenerator<StreamEvent> {
-		const agentMemory = this.memoryModule.getAgentMemory();
-		const fulfillPrompt = await createFulfillPrompt(agentMemory, intent);
+		const prompt = await fulfillPrompt(this.memoryModule, intent);
 
 		const modelInstance = this.modelModule.getModel();
 		const modelOptions = this.modelModule.getModelOptions();
 		const messages = modelInstance.generateMessages({
 			query,
 			thread,
-			systemPrompt: fulfillPrompt.trim(),
+			systemPrompt: prompt.trim(),
 		});
 
 		loggers.intent.debug("Intent fulfillment start", {
@@ -103,8 +111,10 @@ export class IntentFulfillService {
 		});
 
 		const tools: ConnectorTool[] = [];
-		this.mcpModule && tools.push(...this.mcpModule.getTools());
-		this.a2aModule && tools.push(...(await this.a2aModule.getTools()));
+		const toolPrompt = await toolSelectPrompt(this.memoryModule);
+		this.mcpModule && tools.push(...this.mcpModule.getTools(toolPrompt));
+		this.a2aModule &&
+			tools.push(...(await this.a2aModule.getTools(toolPrompt)));
 
 		const processList: string[] = [];
 
@@ -232,90 +242,238 @@ export class IntentFulfillService {
 	}
 
 	/**
-	 * Detects the intent from context.
+	 * Returns the appropriate stream for a triggered intent.
+	 * Uses fallback handler if no intent matched and fallback is configured.
+	 */
+	private getIntentStream(
+		triggeredIntent: TriggeredIntent,
+		thread: ThreadObject,
+	): AsyncGenerator<StreamEvent> | undefined {
+		const { subquery = "", intent } = triggeredIntent;
+
+		if (!intent && this.onIntentFallback) {
+			loggers.intent.info("No intent matched, calling fallback handler");
+			const fallbackStream = this.onIntentFallback({
+				triggeredIntent,
+				thread,
+			});
+			if (fallbackStream !== undefined) {
+				return fallbackStream;
+			}
+		}
+
+		return this.intentFulfilling(subquery, thread, intent);
+	}
+
+	/**
+	 * Processes all triggered intents and generates a unified response.
 	 *
-	 * @param intents - The user's input query
+	 * Workflow:
+	 * 1. Process each intent sequentially, collecting results
+	 * 2. Yield thinking_process events for progress visibility
+	 * 3. Use AggregateService to unify results if needsAggregation is true
+	 * 4. Stream the final (possibly aggregated) response
+	 *
+	 * @param intents - Array of triggered intents to process
 	 * @param thread - The thread history
-	 * @returns The detected intent
+	 * @param originalQuery - The user's original query (for aggregate context)
+	 * @param needsAggregation - Whether the results need to be aggregated
+	 * @returns AsyncGenerator yielding StreamEvent objects
 	 */
 	public async *intentFulfill(
 		intents: Array<TriggeredIntent>,
 		thread: ThreadObject,
+		originalQuery: string,
+		needsAggregation: boolean,
 	): AsyncGenerator<StreamEvent> {
 		const streamStartTime = Date.now();
 		loggers.intentStream.info("Stream session started", {
 			threadId: thread.threadId,
 			intentCount: intents.length,
+			needsAggregation,
 			startTime: new Date(streamStartTime).toISOString(),
 		});
 
 		let finalResponseText = "";
+		let collectionName: string | undefined;
 
-		for (let i = 0; i < intents.length; i++) {
-			const triggeredIntent = intents[i];
-			const { subquery = "", intent, actionPlan } = triggeredIntent;
-			loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
-			loggers.intent.info(`Action plan: ${actionPlan}`);
-
-			// only use for inference, not stored in memory
-			finalResponseText !== "" &&
-				thread.messages.push({
-					messageId: randomUUID(),
-					role: MessageRole.MODEL,
-					timestamp: Date.now(),
-					content: { type: "text", parts: [finalResponseText] },
-					metadata: { isThinking: true },
-				});
-
-			const thinkData = {
-				title: `[${getManifest().name}] ${subquery}`,
-				description: actionPlan || "",
-			};
-			yield {
-				event: "thinking_process",
-				data: thinkData,
-			};
-
-			// If no intent matched and fallback handler is provided, use it
-			if (!intent && this.onIntentFallback) {
-				loggers.intent.info("No intent matched, calling fallback handler");
-				const fallbackStream = this.onIntentFallback({
-					triggeredIntent,
-					thread,
-				});
-				if (fallbackStream !== undefined) {
-					finalResponseText = "";
-					for await (const event of fallbackStream) {
-						if (event.event === "text_chunk" && event.data.delta) {
-							finalResponseText += event.data.delta;
-						}
-						if (event.event === "text_chunk" && i !== intents.length - 1) {
-							continue; // skip intermediate text_chunk events
-						}
-						yield event;
-					}
-					continue;
-				}
+		if (intents.length <= 1) {
+			// Single intent: stream response directly
+			const triggeredIntent = intents[0];
+			if (!triggeredIntent) {
+				return;
 			}
 
-			const stream = this.intentFulfilling(subquery, thread, intent);
+			const { subquery = "", intent, actionPlan } = triggeredIntent;
+			loggers.intent.info(
+				`Process single intent: ${subquery}, ${intent?.name}`,
+			);
+			loggers.intent.info(`Action plan: ${actionPlan}`);
 
-			finalResponseText = "";
+			// Yield thinking_process for progress visibility
+			yield {
+				event: "thinking_process",
+				data: {
+					title: `[${getManifest().name}] ${subquery}`,
+					description: actionPlan || "",
+				},
+			};
+
+			// Get the stream for this intent
+			const stream = this.getIntentStream(triggeredIntent, thread);
+			if (!stream) {
+				return;
+			}
+
+			// Stream response directly
 			for await (const event of stream) {
 				if (event.event === "text_chunk" && event.data.delta) {
 					finalResponseText += event.data.delta;
+				} else if (event.event === "collection_name") {
+					collectionName = event.data.name;
+				}
+				yield event;
+			}
+		} else if (!needsAggregation) {
+			// Multiple intents but no aggregation needed: collect intermediate results, stream only last
+			for (let i = 0; i < intents.length; i++) {
+				const triggeredIntent = intents[i];
+				const { subquery = "", intent, actionPlan } = triggeredIntent;
+				loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
+				loggers.intent.info(`Action plan: ${actionPlan}`);
+
+				const isLastIntent = i === intents.length - 1;
+
+				// Yield thinking_process for progress visibility
+				yield {
+					event: "thinking_process",
+					data: {
+						title: `[${getManifest().name}] ${subquery}`,
+						description: actionPlan || "",
+					},
+				};
+
+				// Get the stream for this intent
+				const stream = this.getIntentStream(triggeredIntent, thread);
+				if (!stream) {
+					continue;
 				}
 
-				if (event.event === "text_chunk" && i !== intents.length - 1) {
-					continue; // skip intermediate text_chunk events
+				if (isLastIntent) {
+					// Stream last intent response directly
+					for await (const event of stream) {
+						if (event.event === "text_chunk" && event.data.delta) {
+							finalResponseText += event.data.delta;
+						} else if (event.event === "collection_name") {
+							collectionName = event.data.name;
+						}
+						yield event;
+					}
+				} else {
+					// Collect intermediate results without streaming text_chunk
+					let responseText = "";
+					for await (const event of stream) {
+						if (event.event === "text_chunk" && event.data.delta) {
+							responseText += event.data.delta;
+						} else if (event.event === "collection_name") {
+							collectionName = event.data.name;
+						} else if (event.event === "thinking_process") {
+							// Tool execution thinking_process events are yielded immediately
+							yield event;
+						}
+					}
+					// Add intermediate result to thread context for next intent
+					thread.messages.push({
+						messageId: randomUUID(),
+						role: MessageRole.MODEL,
+						timestamp: Date.now(),
+						content: { type: "text", parts: [responseText] },
+						metadata: { isThinking: true },
+					});
+				}
+			}
+		} else {
+			// Multi-intent mode with aggregation: collect all results then aggregate
+			const fulfillmentResults: FulfillmentResult[] = [];
+
+			for (let i = 0; i < intents.length; i++) {
+				const triggeredIntent = intents[i];
+				const { subquery = "", intent, actionPlan } = triggeredIntent;
+				loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
+				loggers.intent.info(`Action plan: ${actionPlan}`);
+
+				// Add previous result to thread context for inference (not stored in memory)
+				if (fulfillmentResults.length > 0) {
+					const lastResult = fulfillmentResults[fulfillmentResults.length - 1];
+					thread.messages.push({
+						messageId: randomUUID(),
+						role: MessageRole.MODEL,
+						timestamp: Date.now(),
+						content: { type: "text", parts: [lastResult.response] },
+						metadata: { isThinking: true },
+					});
+				}
+
+				// Yield thinking_process for progress visibility
+				yield {
+					event: "thinking_process",
+					data: {
+						title: `[${getManifest().name}] ${subquery}`,
+						description: actionPlan || "",
+					},
+				};
+
+				// Get the stream for this intent
+				const stream = this.getIntentStream(triggeredIntent, thread);
+				if (!stream) {
+					continue;
+				}
+
+				// Collect response text (don't yield text_chunk yet)
+				let responseText = "";
+				for await (const event of stream) {
+					if (event.event === "text_chunk" && event.data.delta) {
+						responseText += event.data.delta;
+					} else if (event.event === "collection_name") {
+						collectionName = event.data.name;
+					} else if (event.event === "thinking_process") {
+						// Tool execution thinking_process events are yielded immediately
+						yield event;
+					}
+				}
+
+				fulfillmentResults.push({
+					subquery,
+					intent,
+					actionPlan,
+					response: responseText,
+				});
+			}
+
+			// Aggregate step: generate unified response
+			const aggregateStream = this.aggregateService.aggregate(
+				originalQuery,
+				fulfillmentResults,
+			);
+
+			for await (const event of aggregateStream) {
+				if (event.event === "text_chunk" && event.data.delta) {
+					finalResponseText += event.data.delta;
 				}
 				yield event;
 			}
 		}
 
+		// PII filtering on output before saving to memory (mask mode only)
+		if (this.piiService?.getMode() === PIIFilterMode.MASK) {
+			finalResponseText = await this.piiService.filterText(finalResponseText);
+		}
+
+		// Save final response to memory
 		await this.addToThreadMessages(thread, {
 			role: MessageRole.MODEL,
 			content: finalResponseText,
+			metadata: collectionName ? { collectionName } : undefined,
 		});
 
 		const streamEndTime = Date.now();

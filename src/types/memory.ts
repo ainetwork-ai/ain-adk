@@ -60,6 +60,7 @@ export type ThreadMetadata = {
 	title: string;
 	userId: string;
 	threadId: string;
+	isPinned?: boolean;
 };
 
 /**
@@ -84,6 +85,7 @@ export type ThreadObject = {
 	threadId: string;
 	type: ThreadType;
 	title: string;
+	isPinned?: boolean;
 	messages: Array<MessageObject>;
 };
 
@@ -102,3 +104,48 @@ export type TriggeredIntent = {
 	intent?: Intent;
 	actionPlan?: string;
 };
+
+/**
+ * Result of multi-intent triggering.
+ * Contains the list of triggered intents and metadata about aggregation.
+ */
+export type IntentTriggerResult = {
+	/** List of triggered intents */
+	intents: Array<TriggeredIntent>;
+	/** Whether the results need to be aggregated into a unified response */
+	needsAggregation: boolean;
+};
+
+/**
+ * Result of fulfilling a single intent.
+ * Used to collect all results before the rewrite step.
+ */
+export type FulfillmentResult = {
+	/** Original subquery that was processed */
+	subquery: string;
+	/** Matched intent (may be undefined if no match) */
+	intent?: Intent;
+	/** Action plan description */
+	actionPlan?: string;
+	/** Response text generated for this intent */
+	response: string;
+};
+
+export type WorkflowVariableType = "select" | "date_range" | "text" | "number";
+
+export interface WorkflowVariable {
+	id: string; // e.g. "workplace_id"
+	label: string; // e.g. "분석할 업장을 선택해주세요"
+	type: WorkflowVariableType;
+	options?: Array<string>; // for "select" type
+}
+
+export interface Workflow {
+	workflowId: string;
+	userId?: string;
+	title: string;
+	description: string;
+	active: boolean;
+	content: string;
+	variables?: Record<string, WorkflowVariable>;
+}

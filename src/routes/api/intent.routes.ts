@@ -33,8 +33,8 @@ export const createIntentApiRouter = (): Router => {
 	// APIs (prefix: /api/intent)
 	router.get("/", checkThreadMemory, intentApiController.handleGetAllIntents);
 	router.post("/save", checkThreadMemory, intentApiController.handleSaveIntent);
-	router.delete(
-		"/:id",
+	router.post(
+		"/delete/:id",
 		checkThreadMemory,
 		intentApiController.handleDeleteIntent,
 	);

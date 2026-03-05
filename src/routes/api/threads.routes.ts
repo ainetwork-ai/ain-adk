@@ -33,8 +33,13 @@ export const createThreadApiRouter = (): Router => {
 	// APIs (prefix: /api/threads)
 	router.get("/", checkThreadMemory, threadApiController.handleGetUserThreads);
 	router.get("/:id", checkThreadMemory, threadApiController.handleGetThread);
-	router.delete(
-		"/:id",
+	router.post(
+		"/pin/:id",
+		checkThreadMemory,
+		threadApiController.handleUpdateThreadPin,
+	);
+	router.post(
+		"/delete/:id",
 		checkThreadMemory,
 		threadApiController.handleDeleteThread,
 	);
