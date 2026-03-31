@@ -1,6 +1,7 @@
 import type {
 	Intent,
 	MessageObject,
+	ScheduledJob,
 	ThreadMetadata,
 	ThreadObject,
 	ThreadType,
@@ -18,6 +19,7 @@ export interface IMemory {
 	getIntentMemory(): IIntentMemory;
 	getAgentMemory(): IAgentMemory;
 	getWorkflowMemory(): IWorkflowMemory;
+	getScheduledJobMemory(): IScheduledJobMemory;
 }
 
 /**
@@ -87,4 +89,17 @@ export interface IWorkflowMemory {
 	): Promise<void>;
 	deleteWorkflow(workflowId: string, userId: string): Promise<void>;
 	listWorkflows(userId?: string): Promise<Workflow[]>;
+}
+
+/**
+ * Scheduled job memory interface - handles scheduled job operations
+ */
+export interface IScheduledJobMemory {
+	getScheduledJob(jobId: string): Promise<ScheduledJob | undefined>;
+	createScheduledJob(job: ScheduledJob): Promise<ScheduledJob>;
+	updateScheduledJob(jobId: string, job: Partial<ScheduledJob>): Promise<void>;
+	deleteScheduledJob(jobId: string, userId: string): Promise<void>;
+	listScheduledJobs(userId?: string): Promise<ScheduledJob[]>;
+	/** List all active jobs across all users (used by scheduler) */
+	listActiveScheduledJobs(): Promise<ScheduledJob[]>;
 }

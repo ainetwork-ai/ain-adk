@@ -2,6 +2,7 @@ import type {
 	IAgentMemory,
 	IIntentMemory,
 	IMemory,
+	IScheduledJobMemory,
 	IThreadMemory,
 	IWorkflowMemory,
 } from "./base.memory.js";
@@ -37,5 +38,9 @@ export class MemoryModule {
 
 	public getWorkflowMemory(): IWorkflowMemory {
 		return this.memory.getWorkflowMemory();
+	}
+
+	public getScheduledJobMemory(): IScheduledJobMemory {
+		return this.memory.getScheduledJobMemory();
 	}
 }

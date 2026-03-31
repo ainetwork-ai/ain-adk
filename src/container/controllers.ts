@@ -6,6 +6,7 @@ import {
 import { AgentApiController } from "@/controllers/api/agent.api.controller";
 import { IntentApiController } from "@/controllers/api/intent.api.controller";
 import { ModelApiController } from "@/controllers/api/model.api.controller";
+import { ScheduledJobApiController } from "@/controllers/api/scheduled-job.api.controller";
 import { ThreadApiController } from "@/controllers/api/threads.api.controller";
 import { WorkflowApiController } from "@/controllers/api/workflow.api.controller";
 import { IntentController } from "@/controllers/intent.controller";
@@ -26,6 +27,7 @@ export class ControllerContainer {
 	private _threadApiController?: ThreadApiController;
 	private _intentApiController?: IntentApiController;
 	private _workflowApiController?: WorkflowApiController;
+	private _scheduledJobApiController?: ScheduledJobApiController;
 
 	constructor(services: ServiceContainer) {
 		this.services = services;
@@ -87,6 +89,16 @@ export class ControllerContainer {
 		return this._workflowApiController;
 	}
 
+	getScheduledJobApiController(): ScheduledJobApiController {
+		if (!this._scheduledJobApiController) {
+			this._scheduledJobApiController = new ScheduledJobApiController(
+				this.services.getScheduledJobService(),
+				this.services.getSchedulerService(),
+			);
+		}
+		return this._scheduledJobApiController;
+	}
+
 	reset(): void {
 		this._queryController = undefined;
 		this._intentController = undefined;
@@ -95,5 +107,6 @@ export class ControllerContainer {
 		this._threadApiController = undefined;
 		this._intentApiController = undefined;
 		this._workflowApiController = undefined;
+		this._scheduledJobApiController = undefined;
 	}
 }

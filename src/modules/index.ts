@@ -5,6 +5,7 @@ export type {
 	IAgentMemory,
 	IIntentMemory,
 	IMemory,
+	IScheduledJobMemory,
 	IThreadMemory,
 	IWorkflowMemory,
 } from "./memory/base.memory.js";

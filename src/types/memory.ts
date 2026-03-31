@@ -149,3 +149,37 @@ export interface Workflow {
 	content: string;
 	variables?: Record<string, WorkflowVariable>;
 }
+
+/**
+ * Represents a scheduled job that automatically executes a query or workflow
+ * at specified times based on a cron schedule.
+ *
+ * Supports template variables (e.g., `{{today}}`, `{{yesterday}}`) in query
+ * and workflowVariables that are resolved at execution time.
+ */
+export interface ScheduledJob {
+	jobId: string;
+	userId: string;
+	title: string;
+	description?: string;
+	active: boolean;
+
+	/** Direct query with optional template variables (e.g., "{{yesterday}} 매출 분석") */
+	query?: string;
+	/** Reference to a workflow to execute */
+	workflowId?: string;
+	/** Variable values for the workflow (can contain template variables) */
+	workflowVariables?: Record<string, string>;
+
+	/** Cron expression (e.g., "0 9 * * *" for daily at 9am) */
+	schedule: string;
+	/** IANA timezone (e.g., "Asia/Seoul"). Defaults to system timezone. */
+	timezone?: string;
+
+	/** Unix timestamp of the last execution */
+	lastRunAt?: number;
+	/** Unix timestamp of the next scheduled execution */
+	nextRunAt?: number;
+	/** Thread ID of the last execution result */
+	lastThreadId?: string;
+}

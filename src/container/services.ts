@@ -10,6 +10,8 @@ import { IntentFulfillService } from "@/services/intents/fulfill.service";
 import { IntentTriggerService } from "@/services/intents/trigger.service";
 import { PIIService } from "@/services/pii.service";
 import { QueryService } from "@/services/query.service";
+import { ScheduledJobService } from "@/services/scheduled-job.service";
+import { SchedulerService } from "@/services/scheduler.service";
 import { ThreadService } from "@/services/thread.service";
 
 /**
@@ -23,6 +25,8 @@ export class ServiceContainer {
 	private _queryService?: QueryService;
 	private _a2aService?: A2AService;
 	private _piiService?: PIIService;
+	private _scheduledJobService?: ScheduledJobService;
+	private _schedulerService?: SchedulerService;
 
 	getThreadService(): ThreadService {
 		if (!this._threadService) {
@@ -82,6 +86,25 @@ export class ServiceContainer {
 		return this._a2aService;
 	}
 
+	getScheduledJobService(): ScheduledJobService {
+		if (!this._scheduledJobService) {
+			this._scheduledJobService = new ScheduledJobService(
+				getMemoryModule(),
+				this.getQueryService(),
+			);
+		}
+		return this._scheduledJobService;
+	}
+
+	getSchedulerService(): SchedulerService {
+		if (!this._schedulerService) {
+			this._schedulerService = new SchedulerService(
+				this.getScheduledJobService(),
+			);
+		}
+		return this._schedulerService;
+	}
+
 	reset(): void {
 		this._threadService = undefined;
 		this._intentTriggerService = undefined;
@@ -89,5 +112,7 @@ export class ServiceContainer {
 		this._queryService = undefined;
 		this._a2aService = undefined;
 		this._piiService = undefined;
+		this._scheduledJobService = undefined;
+		this._schedulerService = undefined;
 	}
 }

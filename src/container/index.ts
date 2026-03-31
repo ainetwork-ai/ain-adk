@@ -67,6 +67,15 @@ class Container {
 	getWorkflowApiController() {
 		return this._controllers.getWorkflowApiController();
 	}
+	getScheduledJobApiController() {
+		return this._controllers.getScheduledJobApiController();
+	}
+	getScheduledJobService() {
+		return this._services.getScheduledJobService();
+	}
+	getSchedulerService() {
+		return this._services.getSchedulerService();
+	}
 
 	/**
 	 * Reset all instances (useful for testing)
