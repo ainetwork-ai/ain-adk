@@ -55,12 +55,21 @@ export enum ThreadType {
 	CHAT = "CHAT",
 }
 
+export type ThreadFilter = {
+	/** Filter by scheduled job ID */
+	jobId?: string;
+	/** Filter by thread type */
+	type?: ThreadType;
+};
+
 export type ThreadMetadata = {
 	type: ThreadType;
 	title: string;
 	userId: string;
 	threadId: string;
 	isPinned?: boolean;
+	/** ID of the scheduled job that created this thread */
+	jobId?: string;
 };
 
 /**
@@ -86,6 +95,8 @@ export type ThreadObject = {
 	type: ThreadType;
 	title: string;
 	isPinned?: boolean;
+	/** ID of the scheduled job that created this thread */
+	jobId?: string;
 	messages: Array<MessageObject>;
 };
 

@@ -68,7 +68,7 @@ export class ScheduledJobService {
 	 *
 	 * @returns The thread ID where the result was saved
 	 */
-	async executeJob(jobId: string): Promise<{ threadId: string }> {
+	async executeJob(jobId: string): Promise<{ threadId?: string }> {
 		const job = await this.getJob(jobId);
 		if (!job) {
 			throw new Error(`Scheduled job not found: ${jobId}`);
@@ -119,40 +119,36 @@ export class ScheduledJobService {
 			resolvedQuery: query,
 		});
 
-		// Execute through the standard query pipeline (non-streaming collection)
-		const threadId = randomUUID();
+		// Execute through the standard query pipeline
+		// No threadId — let handleQuery create a new thread automatically
 		const stream = this.queryService.handleQuery(
 			{
 				type: ThreadType.CHAT,
 				userId: job.userId,
-				threadId,
+				jobId,
 			},
 			{ query, displayQuery },
 		);
 
-		// Consume the stream to completion
-		let content = "";
-		let resultThreadId: string = threadId;
+		// Consume the stream to completion in background
+		let threadId: string | undefined;
 		for await (const event of stream) {
 			if (event.event === "thread_id") {
-				resultThreadId = event.data.threadId;
-			} else if (event.event === "text_chunk" && event.data.delta) {
-				content += event.data.delta;
+				threadId = event.data.threadId;
 			}
 		}
 
 		// Update job tracking info
 		await this.updateJob(jobId, {
 			lastRunAt: Date.now(),
-			lastThreadId: resultThreadId,
+			lastThreadId: threadId,
 		});
 
 		loggers.agent.info(`Scheduled job completed: ${job.title}`, {
 			jobId,
-			threadId: resultThreadId,
-			responseLength: content.length,
+			threadId,
 		});
 
-		return { threadId: resultThreadId };
+		return { threadId };
 	}
 }

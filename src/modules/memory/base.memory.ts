@@ -2,6 +2,7 @@ import type {
 	Intent,
 	MessageObject,
 	ScheduledJob,
+	ThreadFilter,
 	ThreadMetadata,
 	ThreadObject,
 	ThreadType,
@@ -35,6 +36,7 @@ export interface IThreadMemory {
 		userId: string,
 		threadId: string,
 		title: string,
+		jobId?: string,
 	): Promise<ThreadObject>;
 	addMessagesToThread(
 		userId: string,
@@ -42,7 +44,7 @@ export interface IThreadMemory {
 		messages: MessageObject[],
 	): Promise<void>;
 	deleteThread(userId: string, threadId: string): Promise<void>;
-	listThreads(userId: string): Promise<ThreadMetadata[]>;
+	listThreads(userId: string, filter?: ThreadFilter): Promise<ThreadMetadata[]>;
 	updateThreadPin(
 		userId: string,
 		threadId: string,
