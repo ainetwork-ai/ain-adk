@@ -70,6 +70,8 @@ export type ThreadMetadata = {
 	isPinned?: boolean;
 	/** ID of the user workflow that created this thread */
 	workflowId?: string;
+	createdAt?: string;
+	updatedAt?: string;
 };
 
 /**

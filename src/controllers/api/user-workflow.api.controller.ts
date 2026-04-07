@@ -119,6 +119,7 @@ export class UserWorkflowApiController {
 
 	/**
 	 * Manually trigger a workflow execution.
+	 * Returns as soon as the threadId is assigned — the execution continues in the background.
 	 * Accepts executionVariables for resolveAt="execution" variables (e.g., date range).
 	 * Template variables ({{today}}, etc.) are also resolved at execution time.
 	 */
