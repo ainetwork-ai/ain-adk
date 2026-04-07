@@ -28,7 +28,7 @@ export class SchedulerService {
 		);
 
 		for (const workflow of activeWorkflows) {
-			this.scheduleWorkflow(workflow);
+			await this.scheduleWorkflow(workflow);
 		}
 	}
 
@@ -49,13 +49,13 @@ export class SchedulerService {
 	/**
 	 * Registers a single workflow with the cron scheduler.
 	 */
-	scheduleWorkflow(workflow: UserWorkflow): void {
+	async scheduleWorkflow(workflow: UserWorkflow): Promise<void> {
 		if (!workflow.schedule) {
 			return;
 		}
 
 		if (this.tasks.has(workflow.workflowId)) {
-			this.unscheduleWorkflow(workflow.workflowId);
+			await this.unscheduleWorkflow(workflow.workflowId);
 		}
 
 		if (!cron.validate(workflow.schedule)) {
@@ -112,10 +112,10 @@ export class SchedulerService {
 	/**
 	 * Reschedules a workflow (removes old schedule, adds new one if active and has schedule).
 	 */
-	rescheduleWorkflow(workflow: UserWorkflow): void {
-		this.unscheduleWorkflow(workflow.workflowId);
+	async rescheduleWorkflow(workflow: UserWorkflow): Promise<void> {
+		await this.unscheduleWorkflow(workflow.workflowId);
 		if (workflow.active && workflow.schedule) {
-			this.scheduleWorkflow(workflow);
+			await this.scheduleWorkflow(workflow);
 		}
 	}
 }

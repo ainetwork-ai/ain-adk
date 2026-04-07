@@ -185,7 +185,7 @@ export interface WorkflowTemplate {
  * A user-owned workflow instance, optionally created from a WorkflowTemplate.
  *
  * Supports:
- * - Manual execution via /api/user-workflow/:id/run
+ * - Internal execution via scheduler/service
  * - Scheduled execution via cron expression
  * - Template variables (e.g., {{today}}, {{yesterday}}) resolved at execution time
  * - User-defined variable values resolved at execution time

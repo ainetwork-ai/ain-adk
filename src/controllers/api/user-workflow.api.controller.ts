@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { SchedulerService } from "@/services/scheduler.service.js";
 import type { UserWorkflowService } from "@/services/user-workflow.service.js";
+import { AinHttpError } from "@/types/agent.js";
 import type { UserWorkflow } from "@/types/memory.js";
 
 export class UserWorkflowApiController {
@@ -14,6 +15,17 @@ export class UserWorkflowApiController {
 	) {
 		this.userWorkflowService = userWorkflowService;
 		this.schedulerService = schedulerService;
+	}
+
+	private async getAuthorizedWorkflow(
+		userId: string,
+		workflowId: string,
+	): Promise<UserWorkflow> {
+		const workflow = await this.userWorkflowService.getWorkflow(workflowId);
+		if (!workflow || workflow.userId !== userId) {
+			throw new AinHttpError(StatusCodes.NOT_FOUND, "Workflow not found");
+		}
+		return workflow;
 	}
 
 	public handleGetAllWorkflows = async (
@@ -36,12 +48,9 @@ export class UserWorkflowApiController {
 		next: NextFunction,
 	) => {
 		try {
+			const userId = res.locals.userId || "";
 			const { id } = req.params as { id: string };
-			const workflow = await this.userWorkflowService.getWorkflow(id);
-			if (!workflow) {
-				res.status(StatusCodes.NOT_FOUND).send();
-				return;
-			}
+			const workflow = await this.getAuthorizedWorkflow(userId, id);
 			res.json(workflow);
 		} catch (error) {
 			next(error);
@@ -63,7 +72,7 @@ export class UserWorkflowApiController {
 
 			// Register with the scheduler if active and has a schedule
 			if (created.active && created.schedule) {
-				this.schedulerService.scheduleWorkflow(created);
+				await this.schedulerService.scheduleWorkflow(created);
 			}
 
 			res.status(StatusCodes.CREATED).json(created);
@@ -80,6 +89,7 @@ export class UserWorkflowApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const { id } = req.params as { id: string };
+			await this.getAuthorizedWorkflow(userId, id);
 			const updates = req.body as Partial<UserWorkflow>;
 			await this.userWorkflowService.updateWorkflow(id, {
 				...updates,
@@ -87,10 +97,8 @@ export class UserWorkflowApiController {
 			});
 
 			// Reschedule with updated data
-			const updatedWorkflow = await this.userWorkflowService.getWorkflow(id);
-			if (updatedWorkflow) {
-				this.schedulerService.rescheduleWorkflow(updatedWorkflow);
-			}
+			const updatedWorkflow = await this.getAuthorizedWorkflow(userId, id);
+			await this.schedulerService.rescheduleWorkflow(updatedWorkflow);
 
 			res.status(StatusCodes.OK).send();
 		} catch (error) {
@@ -106,38 +114,11 @@ export class UserWorkflowApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const { id } = req.params as { id: string };
-
-			// Remove from scheduler first
-			this.schedulerService.unscheduleWorkflow(id);
+			await this.getAuthorizedWorkflow(userId, id);
 
 			await this.userWorkflowService.deleteWorkflow(id, userId);
+			await this.schedulerService.unscheduleWorkflow(id);
 			res.status(StatusCodes.OK).send();
-		} catch (error) {
-			next(error);
-		}
-	};
-
-	/**
-	 * Manually trigger a workflow execution.
-	 * Returns as soon as the threadId is assigned — the execution continues in the background.
-	 * Accepts executionVariables for resolveAt="execution" variables (e.g., date range).
-	 * Template variables ({{today}}, etc.) are also resolved at execution time.
-	 */
-	public handleRunWorkflow = async (
-		req: Request,
-		res: Response,
-		next: NextFunction,
-	) => {
-		try {
-			const { id } = req.params as { id: string };
-			const { executionVariables } = req.body as {
-				executionVariables?: Record<string, string>;
-			};
-			const result = await this.userWorkflowService.executeWorkflow(
-				id,
-				executionVariables,
-			);
-			res.status(StatusCodes.OK).json(result);
 		} catch (error) {
 			next(error);
 		}

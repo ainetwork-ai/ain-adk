@@ -44,11 +44,6 @@ export const createUserWorkflowApiRouter = (): Router => {
 		checkUserWorkflowMemory,
 		controller.handleDeleteWorkflow,
 	);
-	router.post(
-		"/:id/run",
-		checkUserWorkflowMemory,
-		controller.handleRunWorkflow,
-	);
 
 	return router;
 };
