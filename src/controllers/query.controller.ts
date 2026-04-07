@@ -19,6 +19,7 @@ export class QueryController {
 		const {
 			type,
 			threadId,
+			workflowId,
 			message: query,
 			displayMessage: displayQuery,
 		} = req.body;
@@ -26,7 +27,7 @@ export class QueryController {
 
 		try {
 			const stream = this.queryService.handleQuery(
-				{ type, userId, threadId },
+				{ type, userId, threadId, workflowId },
 				{ query, displayQuery },
 			);
 
@@ -55,6 +56,7 @@ export class QueryController {
 		const {
 			type,
 			threadId,
+			workflowId,
 			message: query,
 			displayMessage: displayQuery,
 		} = req.body;
@@ -85,7 +87,7 @@ export class QueryController {
 
 		let currentThreadId = threadId;
 		const stream = this.queryService.handleQuery(
-			{ type, userId, threadId },
+			{ type, userId, threadId, workflowId },
 			{ query, displayQuery },
 		);
 

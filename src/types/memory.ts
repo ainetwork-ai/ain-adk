@@ -142,13 +142,26 @@ export type FulfillmentResult = {
 	response: string;
 };
 
-export type WorkflowVariableType = "select" | "date_range" | "text" | "number";
+export type WorkflowVariableType =
+	| "select"
+	| "date_range"
+	| "date_parts"
+	| "text"
+	| "number";
+
+export type WorkflowVariableResolveAt = "creation" | "execution";
 
 export interface WorkflowVariable {
 	id: string; // e.g. "workplace_id"
 	label: string; // e.g. "분석할 업장을 선택해주세요"
 	type: WorkflowVariableType;
 	options?: Array<string>; // for "select" type
+	/** When to resolve this variable:
+	 * - "creation": resolved when copying template → my workflow (e.g., store selection)
+	 * - "execution": resolved each time the workflow runs (e.g., date range)
+	 * Defaults to "creation" if not specified.
+	 */
+	resolveAt?: WorkflowVariableResolveAt;
 }
 
 /**

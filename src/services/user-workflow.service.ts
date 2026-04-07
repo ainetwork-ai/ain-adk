@@ -3,7 +3,10 @@ import type { MemoryModule } from "@/modules/index.js";
 import type { UserWorkflow } from "@/types/memory.js";
 import { ThreadType } from "@/types/memory.js";
 import { loggers } from "@/utils/logger.js";
-import { resolveTemplateString } from "@/utils/template-variables.js";
+import {
+	resolveTemplateRecord,
+	resolveTemplateString,
+} from "@/utils/template-variables.js";
 import type { QueryService } from "./query.service.js";
 
 /**
@@ -12,8 +15,9 @@ import type { QueryService } from "./query.service.js";
  * Handles CRUD operations, manual execution, and provides data for the scheduler.
  *
  * Variable resolution strategy:
- * - On create: variableValues are resolved into content and title immediately
- * - On execute: only template variables ({{today}}, {{yesterday}}, etc.) are resolved
+ * - On create: resolveAt="creation" variables are resolved into content/title immediately
+ * - On execute: resolveAt="execution" variables are resolved from user input,
+ *   then template variables ({{today}}, {{yesterday}}, etc.) are resolved
  */
 export class UserWorkflowService {
 	private memoryModule: MemoryModule;
@@ -29,11 +33,15 @@ export class UserWorkflowService {
 
 		let { content, title } = workflow;
 
-		// Resolve variableValues into content and title at creation time
-		if (workflow.variableValues) {
+		// Resolve only "creation" variables into content and title
+		if (workflow.variableValues && workflow.variables) {
 			for (const [key, value] of Object.entries(workflow.variableValues)) {
-				content = content.replaceAll(`{{${key}}}`, value);
-				title = title.replaceAll(`{{${key}}}`, value);
+				const variable = workflow.variables[key];
+				const resolveAt = variable?.resolveAt ?? "creation";
+				if (resolveAt === "creation") {
+					content = content.replaceAll(`{{${key}}}`, value);
+					title = title.replaceAll(`{{${key}}}`, value);
+				}
 			}
 		}
 
@@ -76,16 +84,21 @@ export class UserWorkflowService {
 	}
 
 	/**
-	 * Executes a user workflow by resolving template variables and running it
+	 * Executes a user workflow by resolving variables and running it
 	 * through the standard query pipeline.
 	 *
-	 * User-defined variableValues are already resolved into content/title at creation time.
-	 * At execution time, only template variables ({{today}}, {{yesterday}}, etc.) are resolved.
+	 * Resolution order:
+	 * 1. resolveAt="execution" variables are replaced from executionVariables param
+	 * 2. Template variables ({{today}}, {{yesterday}}, etc.) are resolved
 	 *
 	 * @param workflowId - The workflow to execute
+	 * @param executionVariables - Values for resolveAt="execution" variables (e.g., date range from UI)
 	 * @returns The thread ID where the result was saved
 	 */
-	async executeWorkflow(workflowId: string): Promise<{ threadId?: string }> {
+	async executeWorkflow(
+		workflowId: string,
+		executionVariables?: Record<string, string>,
+	): Promise<{ threadId?: string }> {
 		const workflow = await this.getWorkflow(workflowId);
 		if (!workflow) {
 			throw new Error(`User workflow not found: ${workflowId}`);
@@ -93,9 +106,21 @@ export class UserWorkflowService {
 
 		const { timezone } = workflow;
 
-		// Resolve template variables ({{today}}, {{yesterday}}, etc.) at execution time
-		const query = resolveTemplateString(workflow.content, timezone);
-		const displayQuery = resolveTemplateString(workflow.title, timezone);
+		let query = workflow.content;
+		let displayQuery = workflow.title;
+
+		// 1. Resolve "execution" variables from provided values
+		if (executionVariables) {
+			const resolvedVars = resolveTemplateRecord(executionVariables, timezone);
+			for (const [key, value] of Object.entries(resolvedVars)) {
+				query = query.replaceAll(`{{${key}}}`, value);
+				displayQuery = displayQuery.replaceAll(`{{${key}}}`, value);
+			}
+		}
+
+		// 2. Resolve remaining template variables ({{today}}, {{yesterday}}, etc.)
+		query = resolveTemplateString(query, timezone);
+		displayQuery = resolveTemplateString(displayQuery, timezone);
 
 		loggers.agent.info(`Executing user workflow: ${workflow.title}`, {
 			workflowId,

@@ -119,7 +119,8 @@ export class UserWorkflowApiController {
 
 	/**
 	 * Manually trigger a workflow execution.
-	 * Template variables ({{today}}, etc.) in content are resolved at execution time.
+	 * Accepts executionVariables for resolveAt="execution" variables (e.g., date range).
+	 * Template variables ({{today}}, etc.) are also resolved at execution time.
 	 */
 	public handleRunWorkflow = async (
 		req: Request,
@@ -128,7 +129,13 @@ export class UserWorkflowApiController {
 	) => {
 		try {
 			const { id } = req.params as { id: string };
-			const result = await this.userWorkflowService.executeWorkflow(id);
+			const { executionVariables } = req.body as {
+				executionVariables?: Record<string, string>;
+			};
+			const result = await this.userWorkflowService.executeWorkflow(
+				id,
+				executionVariables,
+			);
 			res.status(StatusCodes.OK).json(result);
 		} catch (error) {
 			next(error);
