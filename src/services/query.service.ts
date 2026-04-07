@@ -104,7 +104,7 @@ export class QueryService {
 			type: ThreadType;
 			userId: string;
 			threadId?: string;
-			jobId?: string;
+			workflowId?: string;
 			options?: ModelFetchOptions;
 		},
 		queryData: {
@@ -113,7 +113,7 @@ export class QueryService {
 		},
 		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
-		const { type, userId, jobId, options } = threadMetadata;
+		const { type, userId, workflowId, options } = threadMetadata;
 		const { displayQuery } = queryData;
 		let { query } = queryData;
 		const threadMemory = this.memoryModule.getThreadMemory();
@@ -151,13 +151,13 @@ export class QueryService {
 				userId,
 				threadId,
 				title,
-				jobId,
-			)) || { type, userId, threadId, title, jobId };
+				workflowId,
+			)) || { type, userId, threadId, title, workflowId };
 			thread = { ...metadata, messages: [] };
 			loggers.intent.info(`Create new thread: ${threadId}`);
 			yield {
 				event: "thread_id",
-				data: { type, userId, threadId, title, jobId },
+				data: { type, userId, threadId, title, workflowId },
 			};
 		}
 

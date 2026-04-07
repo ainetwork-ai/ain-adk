@@ -1,33 +1,34 @@
 import cron, { type ScheduledTask } from "node-cron";
-import type { ScheduledJob } from "@/types/memory.js";
+import type { UserWorkflow } from "@/types/memory.js";
 import { loggers } from "@/utils/logger.js";
-import type { ScheduledJobService } from "./scheduled-job.service.js";
+import type { UserWorkflowService } from "./user-workflow.service.js";
 
 /**
- * Cron-based scheduler that automatically executes scheduled jobs.
+ * Cron-based scheduler that automatically executes user workflows.
  *
- * Loads all active jobs from memory on start, registers cron tasks,
+ * Loads all active scheduled workflows from memory on start, registers cron tasks,
  * and manages the lifecycle of scheduled executions.
  */
 export class SchedulerService {
-	private scheduledJobService: ScheduledJobService;
+	private userWorkflowService: UserWorkflowService;
 	private tasks: Map<string, ScheduledTask> = new Map();
 
-	constructor(scheduledJobService: ScheduledJobService) {
-		this.scheduledJobService = scheduledJobService;
+	constructor(userWorkflowService: UserWorkflowService) {
+		this.userWorkflowService = userWorkflowService;
 	}
 
 	/**
-	 * Starts the scheduler by loading all active jobs and registering cron tasks.
+	 * Starts the scheduler by loading all active scheduled workflows and registering cron tasks.
 	 */
 	async start(): Promise<void> {
-		const activeJobs = await this.scheduledJobService.listActiveJobs();
+		const activeWorkflows =
+			await this.userWorkflowService.listActiveScheduledWorkflows();
 		loggers.agent.info(
-			`Scheduler starting with ${activeJobs.length} active job(s)`,
+			`Scheduler starting with ${activeWorkflows.length} active workflow(s)`,
 		);
 
-		for (const job of activeJobs) {
-			this.scheduleJob(job);
+		for (const workflow of activeWorkflows) {
+			this.scheduleWorkflow(workflow);
 		}
 	}
 
@@ -38,74 +39,83 @@ export class SchedulerService {
 		loggers.agent.info(
 			`Scheduler stopping, clearing ${this.tasks.size} task(s)`,
 		);
-		for (const [jobId, task] of this.tasks) {
+		for (const [workflowId, task] of this.tasks) {
 			await task.stop();
-			loggers.agent.debug(`Stopped scheduled task: ${jobId}`);
+			loggers.agent.debug(`Stopped scheduled task: ${workflowId}`);
 		}
 		this.tasks.clear();
 	}
 
 	/**
-	 * Registers a single job with the cron scheduler.
+	 * Registers a single workflow with the cron scheduler.
 	 */
-	scheduleJob(job: ScheduledJob): void {
-		if (this.tasks.has(job.jobId)) {
-			this.unscheduleJob(job.jobId);
+	scheduleWorkflow(workflow: UserWorkflow): void {
+		if (!workflow.schedule) {
+			return;
 		}
 
-		if (!cron.validate(job.schedule)) {
+		if (this.tasks.has(workflow.workflowId)) {
+			this.unscheduleWorkflow(workflow.workflowId);
+		}
+
+		if (!cron.validate(workflow.schedule)) {
 			loggers.agent.error(
-				`Invalid cron expression for job ${job.jobId}: ${job.schedule}`,
+				`Invalid cron expression for workflow ${workflow.workflowId}: ${workflow.schedule}`,
 			);
 			return;
 		}
 
 		const task = cron.schedule(
-			job.schedule,
+			workflow.schedule,
 			async (_context) => {
-				loggers.agent.info(`Cron triggered job: ${job.title} (${job.jobId})`);
+				loggers.agent.info(
+					`Cron triggered workflow: ${workflow.title} (${workflow.workflowId})`,
+				);
 				try {
-					const result = await this.scheduledJobService.executeJob(job.jobId);
+					const result = await this.userWorkflowService.executeWorkflow(
+						workflow.workflowId,
+					);
 					loggers.agent.info(
-						`Job ${job.jobId} completed, threadId: ${result.threadId}`,
+						`Workflow ${workflow.workflowId} completed, threadId: ${result.threadId}`,
 					);
 				} catch (error) {
-					loggers.agent.error(`Job ${job.jobId} execution failed`, {
-						error,
-					});
+					loggers.agent.error(
+						`Workflow ${workflow.workflowId} execution failed`,
+						{ error },
+					);
 				}
 			},
 			{
-				timezone: job.timezone,
-				name: job.jobId,
+				timezone: workflow.timezone,
+				name: workflow.workflowId,
 			},
 		);
 
-		this.tasks.set(job.jobId, task);
+		this.tasks.set(workflow.workflowId, task);
 		loggers.agent.info(
-			`Scheduled job: ${job.title} (${job.jobId}) with cron "${job.schedule}"${job.timezone ? ` [${job.timezone}]` : ""}`,
+			`Scheduled workflow: ${workflow.title} (${workflow.workflowId}) with cron "${workflow.schedule}"${workflow.timezone ? ` [${workflow.timezone}]` : ""}`,
 		);
 	}
 
 	/**
-	 * Removes a job from the cron scheduler.
+	 * Removes a workflow from the cron scheduler.
 	 */
-	async unscheduleJob(jobId: string): Promise<void> {
-		const task = this.tasks.get(jobId);
+	async unscheduleWorkflow(workflowId: string): Promise<void> {
+		const task = this.tasks.get(workflowId);
 		if (task) {
 			await task.stop();
-			this.tasks.delete(jobId);
-			loggers.agent.debug(`Unscheduled job: ${jobId}`);
+			this.tasks.delete(workflowId);
+			loggers.agent.debug(`Unscheduled workflow: ${workflowId}`);
 		}
 	}
 
 	/**
-	 * Reschedules a job (removes old schedule, adds new one).
+	 * Reschedules a workflow (removes old schedule, adds new one if active and has schedule).
 	 */
-	rescheduleJob(job: ScheduledJob): void {
-		this.unscheduleJob(job.jobId);
-		if (job.active) {
-			this.scheduleJob(job);
+	rescheduleWorkflow(workflow: UserWorkflow): void {
+		this.unscheduleWorkflow(workflow.workflowId);
+		if (workflow.active && workflow.schedule) {
+			this.scheduleWorkflow(workflow);
 		}
 	}
 }

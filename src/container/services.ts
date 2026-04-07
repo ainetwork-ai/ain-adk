@@ -10,9 +10,9 @@ import { IntentFulfillService } from "@/services/intents/fulfill.service";
 import { IntentTriggerService } from "@/services/intents/trigger.service";
 import { PIIService } from "@/services/pii.service";
 import { QueryService } from "@/services/query.service";
-import { ScheduledJobService } from "@/services/scheduled-job.service";
 import { SchedulerService } from "@/services/scheduler.service";
 import { ThreadService } from "@/services/thread.service";
+import { UserWorkflowService } from "@/services/user-workflow.service";
 
 /**
  * Service factory for dependency injection.
@@ -25,7 +25,7 @@ export class ServiceContainer {
 	private _queryService?: QueryService;
 	private _a2aService?: A2AService;
 	private _piiService?: PIIService;
-	private _scheduledJobService?: ScheduledJobService;
+	private _userWorkflowService?: UserWorkflowService;
 	private _schedulerService?: SchedulerService;
 
 	getThreadService(): ThreadService {
@@ -86,20 +86,20 @@ export class ServiceContainer {
 		return this._a2aService;
 	}
 
-	getScheduledJobService(): ScheduledJobService {
-		if (!this._scheduledJobService) {
-			this._scheduledJobService = new ScheduledJobService(
+	getUserWorkflowService(): UserWorkflowService {
+		if (!this._userWorkflowService) {
+			this._userWorkflowService = new UserWorkflowService(
 				getMemoryModule(),
 				this.getQueryService(),
 			);
 		}
-		return this._scheduledJobService;
+		return this._userWorkflowService;
 	}
 
 	getSchedulerService(): SchedulerService {
 		if (!this._schedulerService) {
 			this._schedulerService = new SchedulerService(
-				this.getScheduledJobService(),
+				this.getUserWorkflowService(),
 			);
 		}
 		return this._schedulerService;
@@ -112,7 +112,7 @@ export class ServiceContainer {
 		this._queryService = undefined;
 		this._a2aService = undefined;
 		this._piiService = undefined;
-		this._scheduledJobService = undefined;
+		this._userWorkflowService = undefined;
 		this._schedulerService = undefined;
 	}
 }

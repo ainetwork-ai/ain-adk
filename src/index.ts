@@ -231,15 +231,15 @@ export class AINAgent {
 			await this.memoryModule.initialize();
 			await this.mcpModule?.connectToServers();
 
-			// Start the scheduler if scheduled job memory is available
+			// Start the scheduler if user workflow memory is available
 			try {
-				const scheduledJobMemory = this.memoryModule.getScheduledJobMemory();
-				if (scheduledJobMemory) {
+				const userWorkflowMemory = this.memoryModule.getUserWorkflowMemory();
+				if (userWorkflowMemory) {
 					const schedulerService = container.getSchedulerService();
 					await schedulerService.start();
 				}
 			} catch (_error) {
-				// Scheduled job memory not implemented — skip scheduler
+				// User workflow memory not implemented — skip scheduler
 			}
 
 			console.log(`AINAgent is running on port ${port}`);

@@ -1,12 +1,12 @@
 import type {
 	Intent,
 	MessageObject,
-	ScheduledJob,
 	ThreadFilter,
 	ThreadMetadata,
 	ThreadObject,
 	ThreadType,
-	Workflow,
+	UserWorkflow,
+	WorkflowTemplate,
 } from "@/types/memory";
 
 /**
@@ -19,8 +19,8 @@ export interface IMemory {
 	getThreadMemory(): IThreadMemory;
 	getIntentMemory(): IIntentMemory;
 	getAgentMemory(): IAgentMemory;
-	getWorkflowMemory(): IWorkflowMemory;
-	getScheduledJobMemory(): IScheduledJobMemory;
+	getWorkflowTemplateMemory(): IWorkflowTemplateMemory;
+	getUserWorkflowMemory(): IUserWorkflowMemory;
 }
 
 /**
@@ -36,7 +36,7 @@ export interface IThreadMemory {
 		userId: string,
 		threadId: string,
 		title: string,
-		jobId?: string,
+		workflowId?: string,
 	): Promise<ThreadObject>;
 	addMessagesToThread(
 		userId: string,
@@ -80,28 +80,31 @@ export interface IAgentMemory {
 }
 
 /**
- * Workflow memory interface - handles workflow operations
+ * Workflow template memory interface - handles template operations
  */
-export interface IWorkflowMemory {
-	getWorkflow(workflowId: string): Promise<Workflow | undefined>;
-	createWorkflow(workflow: Workflow): Promise<Workflow>;
-	updateWorkflow(
-		workflowId: string,
-		workflow: Partial<Workflow>,
+export interface IWorkflowTemplateMemory {
+	getTemplate(templateId: string): Promise<WorkflowTemplate | undefined>;
+	createTemplate(template: WorkflowTemplate): Promise<WorkflowTemplate>;
+	updateTemplate(
+		templateId: string,
+		template: Partial<WorkflowTemplate>,
 	): Promise<void>;
-	deleteWorkflow(workflowId: string, userId: string): Promise<void>;
-	listWorkflows(userId?: string): Promise<Workflow[]>;
+	deleteTemplate(templateId: string): Promise<void>;
+	listTemplates(): Promise<WorkflowTemplate[]>;
 }
 
 /**
- * Scheduled job memory interface - handles scheduled job operations
+ * User workflow memory interface - handles user workflow and scheduling operations
  */
-export interface IScheduledJobMemory {
-	getScheduledJob(jobId: string): Promise<ScheduledJob | undefined>;
-	createScheduledJob(job: ScheduledJob): Promise<ScheduledJob>;
-	updateScheduledJob(jobId: string, job: Partial<ScheduledJob>): Promise<void>;
-	deleteScheduledJob(jobId: string, userId: string): Promise<void>;
-	listScheduledJobs(userId?: string): Promise<ScheduledJob[]>;
-	/** List all active jobs across all users (used by scheduler) */
-	listActiveScheduledJobs(): Promise<ScheduledJob[]>;
+export interface IUserWorkflowMemory {
+	getUserWorkflow(workflowId: string): Promise<UserWorkflow | undefined>;
+	createUserWorkflow(workflow: UserWorkflow): Promise<UserWorkflow>;
+	updateUserWorkflow(
+		workflowId: string,
+		workflow: Partial<UserWorkflow>,
+	): Promise<void>;
+	deleteUserWorkflow(workflowId: string, userId: string): Promise<void>;
+	listUserWorkflows(userId?: string): Promise<UserWorkflow[]>;
+	/** List all active scheduled workflows across all users (used by scheduler) */
+	listActiveScheduledWorkflows(): Promise<UserWorkflow[]>;
 }

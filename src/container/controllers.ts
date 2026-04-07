@@ -6,9 +6,9 @@ import {
 import { AgentApiController } from "@/controllers/api/agent.api.controller";
 import { IntentApiController } from "@/controllers/api/intent.api.controller";
 import { ModelApiController } from "@/controllers/api/model.api.controller";
-import { ScheduledJobApiController } from "@/controllers/api/scheduled-job.api.controller";
 import { ThreadApiController } from "@/controllers/api/threads.api.controller";
-import { WorkflowApiController } from "@/controllers/api/workflow.api.controller";
+import { UserWorkflowApiController } from "@/controllers/api/user-workflow.api.controller";
+import { WorkflowTemplateApiController } from "@/controllers/api/workflow-template.api.controller";
 import { IntentController } from "@/controllers/intent.controller";
 import { QueryController } from "@/controllers/query.controller";
 import type { ServiceContainer } from "./services";
@@ -26,8 +26,8 @@ export class ControllerContainer {
 	private _agentApiController?: AgentApiController;
 	private _threadApiController?: ThreadApiController;
 	private _intentApiController?: IntentApiController;
-	private _workflowApiController?: WorkflowApiController;
-	private _scheduledJobApiController?: ScheduledJobApiController;
+	private _workflowTemplateApiController?: WorkflowTemplateApiController;
+	private _userWorkflowApiController?: UserWorkflowApiController;
 
 	constructor(services: ServiceContainer) {
 		this.services = services;
@@ -80,23 +80,23 @@ export class ControllerContainer {
 		return this._intentApiController;
 	}
 
-	getWorkflowApiController(): WorkflowApiController {
-		if (!this._workflowApiController) {
-			this._workflowApiController = new WorkflowApiController(
+	getWorkflowTemplateApiController(): WorkflowTemplateApiController {
+		if (!this._workflowTemplateApiController) {
+			this._workflowTemplateApiController = new WorkflowTemplateApiController(
 				getMemoryModule(),
 			);
 		}
-		return this._workflowApiController;
+		return this._workflowTemplateApiController;
 	}
 
-	getScheduledJobApiController(): ScheduledJobApiController {
-		if (!this._scheduledJobApiController) {
-			this._scheduledJobApiController = new ScheduledJobApiController(
-				this.services.getScheduledJobService(),
+	getUserWorkflowApiController(): UserWorkflowApiController {
+		if (!this._userWorkflowApiController) {
+			this._userWorkflowApiController = new UserWorkflowApiController(
+				this.services.getUserWorkflowService(),
 				this.services.getSchedulerService(),
 			);
 		}
-		return this._scheduledJobApiController;
+		return this._userWorkflowApiController;
 	}
 
 	reset(): void {
@@ -106,7 +106,7 @@ export class ControllerContainer {
 		this._agentApiController = undefined;
 		this._threadApiController = undefined;
 		this._intentApiController = undefined;
-		this._workflowApiController = undefined;
-		this._scheduledJobApiController = undefined;
+		this._workflowTemplateApiController = undefined;
+		this._userWorkflowApiController = undefined;
 	}
 }

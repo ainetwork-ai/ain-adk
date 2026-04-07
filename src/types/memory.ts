@@ -56,8 +56,8 @@ export enum ThreadType {
 }
 
 export type ThreadFilter = {
-	/** Filter by scheduled job ID */
-	jobId?: string;
+	/** Filter by user workflow ID */
+	workflowId?: string;
 	/** Filter by thread type */
 	type?: ThreadType;
 };
@@ -68,8 +68,8 @@ export type ThreadMetadata = {
 	userId: string;
 	threadId: string;
 	isPinned?: boolean;
-	/** ID of the scheduled job that created this thread */
-	jobId?: string;
+	/** ID of the user workflow that created this thread */
+	workflowId?: string;
 };
 
 /**
@@ -95,8 +95,8 @@ export type ThreadObject = {
 	type: ThreadType;
 	title: string;
 	isPinned?: boolean;
-	/** ID of the scheduled job that created this thread */
-	jobId?: string;
+	/** ID of the user workflow that created this thread */
+	workflowId?: string;
 	messages: Array<MessageObject>;
 };
 
@@ -151,39 +151,48 @@ export interface WorkflowVariable {
 	options?: Array<string>; // for "select" type
 }
 
-export interface Workflow {
-	workflowId: string;
-	userId?: string;
+/**
+ * A workflow template — an immutable blueprint for creating user workflows.
+ * System-provided or admin-defined.
+ */
+export interface WorkflowTemplate {
+	templateId: string;
 	title: string;
 	description: string;
 	active: boolean;
+	/** The prompt/instruction template with {{variable}} placeholders */
 	content: string;
+	/** Variable schema definitions (type, label, options) for UI rendering */
 	variables?: Record<string, WorkflowVariable>;
 }
 
 /**
- * Represents a scheduled job that automatically executes a query or workflow
- * at specified times based on a cron schedule.
+ * A user-owned workflow instance, optionally created from a WorkflowTemplate.
  *
- * Supports template variables (e.g., `{{today}}`, `{{yesterday}}`) in query
- * and workflowVariables that are resolved at execution time.
+ * Supports:
+ * - Manual execution via /api/user-workflow/:id/run
+ * - Scheduled execution via cron expression
+ * - Template variables (e.g., {{today}}, {{yesterday}}) resolved at execution time
+ * - User-defined variable values resolved at execution time
  */
-export interface ScheduledJob {
-	jobId: string;
+export interface UserWorkflow {
+	workflowId: string;
 	userId: string;
 	title: string;
 	description?: string;
 	active: boolean;
 
-	/** Direct query with optional template variables (e.g., "{{yesterday}} 매출 분석") */
-	query?: string;
-	/** Reference to a workflow to execute */
-	workflowId?: string;
-	/** Variable values for the workflow (can contain template variables) */
-	workflowVariables?: Record<string, string>;
+	/** Reference to the original WorkflowTemplate (optional) */
+	templateId?: string;
+	/** The prompt/instruction content with {{variable}} placeholders */
+	content: string;
+	/** Variable schema definitions (copied from template, used for UI rendering) */
+	variables?: Record<string, WorkflowVariable>;
+	/** User-provided variable values (can contain template variables like {{today}}) */
+	variableValues?: Record<string, string>;
 
-	/** Cron expression (e.g., "0 9 * * *" for daily at 9am) */
-	schedule: string;
+	/** Cron expression for scheduled execution (e.g., "0 9 * * *"). If not set, manual-only. */
+	schedule?: string;
 	/** IANA timezone (e.g., "Asia/Seoul"). Defaults to system timezone. */
 	timezone?: string;
 

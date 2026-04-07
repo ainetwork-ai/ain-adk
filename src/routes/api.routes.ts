@@ -3,9 +3,9 @@ import { getMemoryModule } from "@/config/modules";
 import { createAgentApiRouter } from "./api/agent.routes.js";
 import { createIntentApiRouter } from "./api/intent.routes.js";
 import { createModelApiRouter } from "./api/model.routes.js";
-import { createScheduledJobApiRouter } from "./api/scheduled-job.routes.js";
 import { createThreadApiRouter } from "./api/threads.routes.js";
-import { createWorkflowApiRouter } from "./api/workflow.routes.js";
+import { createUserWorkflowApiRouter } from "./api/user-workflow.routes.js";
+import { createWorkflowTemplateApiRouter } from "./api/workflow-template.routes.js";
 
 export const createApiRouter = (): Router => {
 	const router = Router();
@@ -17,8 +17,8 @@ export const createApiRouter = (): Router => {
 	if (memoryModule) {
 		router.use("/threads", createThreadApiRouter());
 		router.use("/intent", createIntentApiRouter());
-		router.use("/workflow", createWorkflowApiRouter());
-		router.use("/scheduled-job", createScheduledJobApiRouter());
+		router.use("/workflow-template", createWorkflowTemplateApiRouter());
+		router.use("/user-workflow", createUserWorkflowApiRouter());
 	}
 
 	return router;

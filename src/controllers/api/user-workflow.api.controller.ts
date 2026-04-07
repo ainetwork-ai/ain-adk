@@ -1,69 +1,69 @@
 import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
-import type { ScheduledJobService } from "@/services/scheduled-job.service.js";
 import type { SchedulerService } from "@/services/scheduler.service.js";
-import type { ScheduledJob } from "@/types/memory.js";
+import type { UserWorkflowService } from "@/services/user-workflow.service.js";
+import type { UserWorkflow } from "@/types/memory.js";
 
-export class ScheduledJobApiController {
-	private scheduledJobService: ScheduledJobService;
+export class UserWorkflowApiController {
+	private userWorkflowService: UserWorkflowService;
 	private schedulerService: SchedulerService;
 
 	constructor(
-		scheduledJobService: ScheduledJobService,
+		userWorkflowService: UserWorkflowService,
 		schedulerService: SchedulerService,
 	) {
-		this.scheduledJobService = scheduledJobService;
+		this.userWorkflowService = userWorkflowService;
 		this.schedulerService = schedulerService;
 	}
 
-	public handleGetAllJobs = async (
-		req: Request,
+	public handleGetAllWorkflows = async (
+		_req: Request,
 		res: Response,
 		next: NextFunction,
 	) => {
 		try {
 			const userId = res.locals.userId || "";
-			const jobs = await this.scheduledJobService.listJobs(userId);
-			res.json(jobs);
+			const workflows = await this.userWorkflowService.listWorkflows(userId);
+			res.json(workflows);
 		} catch (error) {
 			next(error);
 		}
 	};
 
-	public handleGetJob = async (
+	public handleGetWorkflow = async (
 		req: Request,
 		res: Response,
 		next: NextFunction,
 	) => {
 		try {
 			const { id } = req.params as { id: string };
-			const job = await this.scheduledJobService.getJob(id);
-			if (!job) {
+			const workflow = await this.userWorkflowService.getWorkflow(id);
+			if (!workflow) {
 				res.status(StatusCodes.NOT_FOUND).send();
 				return;
 			}
-			res.json(job);
+			res.json(workflow);
 		} catch (error) {
 			next(error);
 		}
 	};
 
-	public handleCreateJob = async (
+	public handleCreateWorkflow = async (
 		req: Request,
 		res: Response,
 		next: NextFunction,
 	) => {
 		try {
 			const userId = res.locals.userId || "";
-			const jobData = req.body as ScheduledJob;
-			const created = await this.scheduledJobService.createJob({
-				...jobData,
+			const workflowData = req.body as UserWorkflow;
+			const created = await this.userWorkflowService.createWorkflow({
+				...workflowData,
 				userId,
 			});
 
-			// Register with the scheduler if active
-			if (created.active) {
-				this.schedulerService.scheduleJob(created);
+			// Register with the scheduler if active and has a schedule
+			if (created.active && created.schedule) {
+				this.schedulerService.scheduleWorkflow(created);
 			}
 
 			res.status(StatusCodes.CREATED).json(created);
@@ -72,7 +72,7 @@ export class ScheduledJobApiController {
 		}
 	};
 
-	public handleUpdateJob = async (
+	public handleUpdateWorkflow = async (
 		req: Request,
 		res: Response,
 		next: NextFunction,
@@ -80,16 +80,16 @@ export class ScheduledJobApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const { id } = req.params as { id: string };
-			const updates = req.body as Partial<ScheduledJob>;
-			await this.scheduledJobService.updateJob(id, {
+			const updates = req.body as Partial<UserWorkflow>;
+			await this.userWorkflowService.updateWorkflow(id, {
 				...updates,
 				userId,
 			});
 
 			// Reschedule with updated data
-			const updatedJob = await this.scheduledJobService.getJob(id);
-			if (updatedJob) {
-				this.schedulerService.rescheduleJob(updatedJob);
+			const updatedWorkflow = await this.userWorkflowService.getWorkflow(id);
+			if (updatedWorkflow) {
+				this.schedulerService.rescheduleWorkflow(updatedWorkflow);
 			}
 
 			res.status(StatusCodes.OK).send();
@@ -98,7 +98,7 @@ export class ScheduledJobApiController {
 		}
 	};
 
-	public handleDeleteJob = async (
+	public handleDeleteWorkflow = async (
 		req: Request,
 		res: Response,
 		next: NextFunction,
@@ -108,9 +108,9 @@ export class ScheduledJobApiController {
 			const { id } = req.params as { id: string };
 
 			// Remove from scheduler first
-			this.schedulerService.unscheduleJob(id);
+			this.schedulerService.unscheduleWorkflow(id);
 
-			await this.scheduledJobService.deleteJob(id, userId);
+			await this.userWorkflowService.deleteWorkflow(id, userId);
 			res.status(StatusCodes.OK).send();
 		} catch (error) {
 			next(error);
@@ -118,17 +118,17 @@ export class ScheduledJobApiController {
 	};
 
 	/**
-	 * Manually trigger a scheduled job execution.
-	 * Also usable by external schedulers (e.g., Cloud Scheduler, K8s CronJob).
+	 * Manually trigger a workflow execution.
+	 * Template variables ({{today}}, etc.) in content are resolved at execution time.
 	 */
-	public handleRunJob = async (
+	public handleRunWorkflow = async (
 		req: Request,
 		res: Response,
 		next: NextFunction,
 	) => {
 		try {
 			const { id } = req.params as { id: string };
-			const result = await this.scheduledJobService.executeJob(id);
+			const result = await this.userWorkflowService.executeWorkflow(id);
 			res.status(StatusCodes.OK).json(result);
 		} catch (error) {
 			next(error);
