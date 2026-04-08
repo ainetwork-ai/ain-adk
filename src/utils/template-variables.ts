@@ -7,6 +7,8 @@
  * Built-in variables:
  * - {{today}}, {{yesterday}}, {{tomorrow}}
  * - {{today+N}}, {{today-N}} (day offset)
+ * - {{year}}, {{month}}, {{day}}
+ * - {{year+N}}, {{year-N}}, {{month+N}}, {{month-N}}, {{day+N}}, {{day-N}}
  * - {{startOfWeek}}, {{endOfWeek}}
  * - {{startOfMonth}}, {{endOfMonth}}
  * - {{now}} (datetime)
@@ -137,6 +139,18 @@ function addDays(date: Date, days: number): Date {
 	return result;
 }
 
+function addMonths(date: Date, months: number): Date {
+	const result = new Date(date);
+	result.setUTCMonth(result.getUTCMonth() + months);
+	return result;
+}
+
+function addYears(date: Date, years: number): Date {
+	const result = new Date(date);
+	result.setUTCFullYear(result.getUTCFullYear() + years);
+	return result;
+}
+
 function getStartOfWeek(date: Date): Date {
 	const result = new Date(date);
 	const day = result.getUTCDay();
@@ -178,6 +192,24 @@ function resolveVariable(expression: string, timezone?: string): string {
 		return formatDate(date, format ?? DEFAULT_DATE_FORMAT);
 	}
 
+	const componentOffsetMatch = variable.match(/^(year|month|day)([+-])(\d+)$/);
+	if (componentOffsetMatch) {
+		const target = componentOffsetMatch[1];
+		const sign = componentOffsetMatch[2] === "+" ? 1 : -1;
+		const amount = Number.parseInt(componentOffsetMatch[3], 10);
+
+		switch (target) {
+			case "year":
+				return addYears(now, sign * amount)
+					.getUTCFullYear()
+					.toString();
+			case "month":
+				return padTwo(addMonths(now, sign * amount).getUTCMonth() + 1);
+			case "day":
+				return padTwo(addDays(now, sign * amount).getUTCDate());
+		}
+	}
+
 	switch (variable) {
 		case "today":
 			return formatDate(now, format ?? DEFAULT_DATE_FORMAT);
@@ -185,6 +217,12 @@ function resolveVariable(expression: string, timezone?: string): string {
 			return formatDate(addDays(now, -1), format ?? DEFAULT_DATE_FORMAT);
 		case "tomorrow":
 			return formatDate(addDays(now, 1), format ?? DEFAULT_DATE_FORMAT);
+		case "year":
+			return now.getUTCFullYear().toString();
+		case "month":
+			return padTwo(now.getUTCMonth() + 1);
+		case "day":
+			return padTwo(now.getUTCDate());
 		case "startOfWeek":
 			return formatDate(getStartOfWeek(now), format ?? DEFAULT_DATE_FORMAT);
 		case "endOfWeek":
