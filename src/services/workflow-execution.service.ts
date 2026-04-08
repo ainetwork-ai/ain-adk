@@ -44,6 +44,7 @@ export class WorkflowExecutionService {
 				type: ThreadType.WORKFLOW,
 				userId: workflow.userId,
 				workflowId,
+				title: workflow.title,
 			},
 			{ query, displayQuery },
 		);

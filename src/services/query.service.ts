@@ -11,7 +11,7 @@ import {
 	MessageRole,
 	type ThreadMetadata,
 	type ThreadObject,
-	type ThreadType,
+	ThreadType,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
@@ -105,6 +105,7 @@ export class QueryService {
 			userId: string;
 			threadId?: string;
 			workflowId?: string;
+			title?: string;
 			options?: ModelFetchOptions;
 		},
 		queryData: {
@@ -113,7 +114,13 @@ export class QueryService {
 		},
 		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
-		const { type, userId, workflowId, options } = threadMetadata;
+		const {
+			type,
+			userId,
+			workflowId,
+			title: inputTitle,
+			options,
+		} = threadMetadata;
 		const { displayQuery } = queryData;
 		let { query } = queryData;
 		const threadMemory = this.memoryModule.getThreadMemory();
@@ -145,7 +152,10 @@ export class QueryService {
 
 		threadId ??= randomUUID();
 		if (!thread) {
-			const title = await this.generateTitle(query, options);
+			const title =
+				type === ThreadType.WORKFLOW && inputTitle
+					? inputTitle
+					: await this.generateTitle(query, options);
 			const metadata: ThreadMetadata = (await threadMemory?.createThread(
 				type,
 				userId,
