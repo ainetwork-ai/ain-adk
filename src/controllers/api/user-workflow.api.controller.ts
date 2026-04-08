@@ -1,20 +1,20 @@
 import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
-import type { SchedulerService } from "@/services/scheduler.service.js";
 import type { UserWorkflowService } from "@/services/user-workflow.service.js";
+import type { UserWorkflowCoordinatorService } from "@/services/user-workflow-coordinator.service.js";
 import { AinHttpError } from "@/types/agent.js";
 import type { UserWorkflow } from "@/types/memory.js";
 
 export class UserWorkflowApiController {
 	private userWorkflowService: UserWorkflowService;
-	private schedulerService: SchedulerService;
+	private userWorkflowCoordinatorService: UserWorkflowCoordinatorService;
 
 	constructor(
 		userWorkflowService: UserWorkflowService,
-		schedulerService: SchedulerService,
+		userWorkflowCoordinatorService: UserWorkflowCoordinatorService,
 	) {
 		this.userWorkflowService = userWorkflowService;
-		this.schedulerService = schedulerService;
+		this.userWorkflowCoordinatorService = userWorkflowCoordinatorService;
 	}
 
 	private async getAuthorizedWorkflow(
@@ -65,15 +65,10 @@ export class UserWorkflowApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const workflowData = req.body as UserWorkflow;
-			const created = await this.userWorkflowService.createWorkflow({
+			const created = await this.userWorkflowCoordinatorService.createWorkflow({
 				...workflowData,
 				userId,
 			});
-
-			// Register with the scheduler if active and has a schedule
-			if (created.active && created.schedule) {
-				await this.schedulerService.scheduleWorkflow(created);
-			}
 
 			res.status(StatusCodes.CREATED).json(created);
 		} catch (error) {
@@ -91,14 +86,10 @@ export class UserWorkflowApiController {
 			const { id } = req.params as { id: string };
 			await this.getAuthorizedWorkflow(userId, id);
 			const updates = req.body as Partial<UserWorkflow>;
-			await this.userWorkflowService.updateWorkflow(id, {
+			await this.userWorkflowCoordinatorService.updateWorkflow(id, {
 				...updates,
 				userId,
 			});
-
-			// Reschedule with updated data
-			const updatedWorkflow = await this.getAuthorizedWorkflow(userId, id);
-			await this.schedulerService.rescheduleWorkflow(updatedWorkflow);
 
 			res.status(StatusCodes.OK).send();
 		} catch (error) {
@@ -116,8 +107,7 @@ export class UserWorkflowApiController {
 			const { id } = req.params as { id: string };
 			await this.getAuthorizedWorkflow(userId, id);
 
-			await this.userWorkflowService.deleteWorkflow(id, userId);
-			await this.schedulerService.unscheduleWorkflow(id);
+			await this.userWorkflowCoordinatorService.deleteWorkflow(id, userId);
 			res.status(StatusCodes.OK).send();
 		} catch (error) {
 			next(error);

@@ -93,7 +93,7 @@ export class ControllerContainer {
 		if (!this._userWorkflowApiController) {
 			this._userWorkflowApiController = new UserWorkflowApiController(
 				this.services.getUserWorkflowService(),
-				this.services.getSchedulerService(),
+				this.services.getUserWorkflowCoordinatorService(),
 			);
 		}
 		return this._userWorkflowApiController;

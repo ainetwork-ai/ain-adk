@@ -2,6 +2,7 @@ import cron, { type ScheduledTask } from "node-cron";
 import type { UserWorkflow } from "@/types/memory.js";
 import { loggers } from "@/utils/logger.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
+import type { WorkflowExecutionService } from "./workflow-execution.service.js";
 
 /**
  * Cron-based scheduler that automatically executes user workflows.
@@ -11,10 +12,15 @@ import type { UserWorkflowService } from "./user-workflow.service.js";
  */
 export class SchedulerService {
 	private userWorkflowService: UserWorkflowService;
+	private workflowExecutionService: WorkflowExecutionService;
 	private tasks: Map<string, ScheduledTask> = new Map();
 
-	constructor(userWorkflowService: UserWorkflowService) {
+	constructor(
+		userWorkflowService: UserWorkflowService,
+		workflowExecutionService: WorkflowExecutionService,
+	) {
 		this.userWorkflowService = userWorkflowService;
+		this.workflowExecutionService = workflowExecutionService;
 	}
 
 	/**
@@ -72,7 +78,7 @@ export class SchedulerService {
 					`Cron triggered workflow: ${workflow.title} (${workflow.workflowId})`,
 				);
 				try {
-					const result = await this.userWorkflowService.executeWorkflow(
+					const result = await this.workflowExecutionService.executeWorkflow(
 						workflow.workflowId,
 					);
 					loggers.agent.info(

@@ -17,18 +17,61 @@
 const TEMPLATE_PATTERN = /\{\{(.+?)\}\}/g;
 const DEFAULT_DATE_FORMAT = "YYYY-MM-DD";
 const DEFAULT_DATETIME_FORMAT = "YYYY-MM-DD HH:mm:ss";
+const TIMEZONE_FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat>();
+
+type DateParts = {
+	year: number;
+	month: number;
+	day: number;
+	hours: number;
+	minutes: number;
+	seconds: number;
+};
 
 function padTwo(n: number): string {
 	return n.toString().padStart(2, "0");
 }
 
+function getFormatter(timezone: string): Intl.DateTimeFormat {
+	const cached = TIMEZONE_FORMATTER_CACHE.get(timezone);
+	if (cached) {
+		return cached;
+	}
+
+	const formatter = new Intl.DateTimeFormat("en-CA", {
+		timeZone: timezone,
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+		second: "2-digit",
+		hour12: false,
+	});
+	TIMEZONE_FORMATTER_CACHE.set(timezone, formatter);
+	return formatter;
+}
+
+function createUtcDateFromParts(parts: DateParts): Date {
+	return new Date(
+		Date.UTC(
+			parts.year,
+			parts.month - 1,
+			parts.day,
+			parts.hours,
+			parts.minutes,
+			parts.seconds,
+		),
+	);
+}
+
 function formatDate(date: Date, format: string): string {
-	const year = date.getFullYear().toString();
-	const month = padTwo(date.getMonth() + 1);
-	const day = padTwo(date.getDate());
-	const hours = padTwo(date.getHours());
-	const minutes = padTwo(date.getMinutes());
-	const seconds = padTwo(date.getSeconds());
+	const year = date.getUTCFullYear().toString();
+	const month = padTwo(date.getUTCMonth() + 1);
+	const day = padTwo(date.getUTCDate());
+	const hours = padTwo(date.getUTCHours());
+	const minutes = padTwo(date.getUTCMinutes());
+	const seconds = padTwo(date.getUTCSeconds());
 
 	return format
 		.replace("YYYY", year)
@@ -40,24 +83,66 @@ function formatDate(date: Date, format: string): string {
 }
 
 function getDateInTimezone(timezone?: string): Date {
-	if (!timezone) return new Date();
-	const now = new Date();
-	const localeString = now.toLocaleString("en-US", { timeZone: timezone });
-	return new Date(localeString);
+	if (!timezone) {
+		const now = new Date();
+		return createUtcDateFromParts({
+			year: now.getFullYear(),
+			month: now.getMonth() + 1,
+			day: now.getDate(),
+			hours: now.getHours(),
+			minutes: now.getMinutes(),
+			seconds: now.getSeconds(),
+		});
+	}
+
+	const formatter = getFormatter(timezone);
+	const parts = formatter.formatToParts(new Date());
+	const values: Partial<DateParts> = {};
+	for (const part of parts) {
+		switch (part.type) {
+			case "year":
+				values.year = Number.parseInt(part.value, 10);
+				break;
+			case "month":
+				values.month = Number.parseInt(part.value, 10);
+				break;
+			case "day":
+				values.day = Number.parseInt(part.value, 10);
+				break;
+			case "hour":
+				values.hours = Number.parseInt(part.value, 10);
+				break;
+			case "minute":
+				values.minutes = Number.parseInt(part.value, 10);
+				break;
+			case "second":
+				values.seconds = Number.parseInt(part.value, 10);
+				break;
+		}
+	}
+
+	return createUtcDateFromParts({
+		year: values.year ?? 0,
+		month: values.month ?? 1,
+		day: values.day ?? 1,
+		hours: values.hours ?? 0,
+		minutes: values.minutes ?? 0,
+		seconds: values.seconds ?? 0,
+	});
 }
 
 function addDays(date: Date, days: number): Date {
 	const result = new Date(date);
-	result.setDate(result.getDate() + days);
+	result.setUTCDate(result.getUTCDate() + days);
 	return result;
 }
 
 function getStartOfWeek(date: Date): Date {
 	const result = new Date(date);
-	const day = result.getDay();
+	const day = result.getUTCDay();
 	// Monday as start of week
 	const diff = day === 0 ? -6 : 1 - day;
-	result.setDate(result.getDate() + diff);
+	result.setUTCDate(result.getUTCDate() + diff);
 	return result;
 }
 
@@ -67,11 +152,11 @@ function getEndOfWeek(date: Date): Date {
 }
 
 function getStartOfMonth(date: Date): Date {
-	return new Date(date.getFullYear(), date.getMonth(), 1);
+	return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
 }
 
 function getEndOfMonth(date: Date): Date {
-	return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+	return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
 }
 
 function resolveVariable(expression: string, timezone?: string): string {
