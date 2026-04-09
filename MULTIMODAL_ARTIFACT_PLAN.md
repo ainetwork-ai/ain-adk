@@ -12,6 +12,30 @@ Primary goals:
 - Clean up core types so future modalities can be added without more structural rewrites
 - Keep storage responsibilities separated between conversation memory and artifact binaries
 
+## Progress Snapshot
+
+Last updated: `2026-04-10`
+
+Completed groundwork so far:
+
+- added `ArtifactObject`, `ArtifactRef`, and related artifact type scaffolding
+- added `IArtifactStore` abstraction and `ArtifactModule`
+- wired optional `artifactModule` into the SDK module registry and `AINAgent`
+- exported artifact module types from the public module surface
+- updated README to mention the optional artifact layer
+- added initial tests for artifact module wiring
+- updated Jest and TypeScript config so test files and Jest globals are recognized correctly
+
+Not completed yet:
+
+- multipart `MessageObject` migration
+- query/request/response contract refactor
+- artifact upload/download runtime APIs
+- stream event redesign
+- A2A artifact reference support
+- workflow boundary refactor
+- migration adapters for old message records
+
 ---
 
 ## Current State Summary
@@ -707,6 +731,10 @@ This phase is intentionally small but important. It reduces rework in every late
 - introduce schema versioning and legacy-read adapters
 - add normalization helpers for old text-only message records
 
+Completed groundwork in this phase:
+
+- `ArtifactObject` / `ArtifactRef` / related artifact types scaffolded
+
 ## Phase 2. Artifact Storage Abstraction
 
 - define `IArtifactStore`
@@ -716,12 +744,23 @@ This phase is intentionally small but important. It reduces rework in every late
 - define artifact status lifecycle
 - decide download strategy: proxy route vs signed URL
 
+Completed groundwork in this phase:
+
+- `IArtifactStore` scaffolded
+- `ArtifactModule` scaffolded
+
 ## Phase 3. SDK Module Wiring
 
 - add optional `ArtifactModule` to the public constructor surface
 - update module registry and getters
 - update DI container services and controllers
 - define failure behavior when artifact functionality is requested but no artifact module is configured
+
+Completed groundwork in this phase:
+
+- optional `artifactModule` added to `AINAgent`
+- module registry/getter wiring added
+- public module exports updated
 
 ## Phase 4. Shared Serialization and Normalization Utilities
 
@@ -816,6 +855,12 @@ Why this comes after service refactors:
 - request validation tests
 - README and route contract synchronization checks
 - update README and examples
+
+Completed groundwork in this phase:
+
+- README updated with optional artifact layer/module references
+- initial tests added for artifact module and SDK wiring
+- Jest and TypeScript test configuration updated for this repository
 
 Important note:
 
