@@ -10,7 +10,12 @@ import { IntentFulfillService } from "@/services/intents/fulfill.service";
 import { IntentTriggerService } from "@/services/intents/trigger.service";
 import { PIIService } from "@/services/pii.service";
 import { QueryService } from "@/services/query.service";
+import { SchedulerService } from "@/services/scheduler.service";
 import { ThreadService } from "@/services/thread.service";
+import { UserWorkflowService } from "@/services/user-workflow.service";
+import { UserWorkflowCoordinatorService } from "@/services/user-workflow-coordinator.service";
+import { WorkflowExecutionService } from "@/services/workflow-execution.service";
+import { WorkflowVariableResolver } from "@/services/workflow-variable-resolver.service";
 
 /**
  * Service factory for dependency injection.
@@ -23,6 +28,11 @@ export class ServiceContainer {
 	private _queryService?: QueryService;
 	private _a2aService?: A2AService;
 	private _piiService?: PIIService;
+	private _userWorkflowService?: UserWorkflowService;
+	private _userWorkflowCoordinatorService?: UserWorkflowCoordinatorService;
+	private _workflowExecutionService?: WorkflowExecutionService;
+	private _workflowVariableResolver?: WorkflowVariableResolver;
+	private _schedulerService?: SchedulerService;
 
 	getThreadService(): ThreadService {
 		if (!this._threadService) {
@@ -82,6 +92,54 @@ export class ServiceContainer {
 		return this._a2aService;
 	}
 
+	getUserWorkflowService(): UserWorkflowService {
+		if (!this._userWorkflowService) {
+			this._userWorkflowService = new UserWorkflowService(
+				getMemoryModule(),
+				this.getWorkflowVariableResolver(),
+			);
+		}
+		return this._userWorkflowService;
+	}
+
+	getUserWorkflowCoordinatorService(): UserWorkflowCoordinatorService {
+		if (!this._userWorkflowCoordinatorService) {
+			this._userWorkflowCoordinatorService = new UserWorkflowCoordinatorService(
+				this.getUserWorkflowService(),
+				this.getSchedulerService(),
+			);
+		}
+		return this._userWorkflowCoordinatorService;
+	}
+
+	getWorkflowExecutionService(): WorkflowExecutionService {
+		if (!this._workflowExecutionService) {
+			this._workflowExecutionService = new WorkflowExecutionService(
+				this.getUserWorkflowService(),
+				this.getQueryService(),
+				this.getWorkflowVariableResolver(),
+			);
+		}
+		return this._workflowExecutionService;
+	}
+
+	getWorkflowVariableResolver(): WorkflowVariableResolver {
+		if (!this._workflowVariableResolver) {
+			this._workflowVariableResolver = new WorkflowVariableResolver();
+		}
+		return this._workflowVariableResolver;
+	}
+
+	getSchedulerService(): SchedulerService {
+		if (!this._schedulerService) {
+			this._schedulerService = new SchedulerService(
+				this.getUserWorkflowService(),
+				this.getWorkflowExecutionService(),
+			);
+		}
+		return this._schedulerService;
+	}
+
 	reset(): void {
 		this._threadService = undefined;
 		this._intentTriggerService = undefined;
@@ -89,5 +147,10 @@ export class ServiceContainer {
 		this._queryService = undefined;
 		this._a2aService = undefined;
 		this._piiService = undefined;
+		this._userWorkflowService = undefined;
+		this._userWorkflowCoordinatorService = undefined;
+		this._workflowExecutionService = undefined;
+		this._workflowVariableResolver = undefined;
+		this._schedulerService = undefined;
 	}
 }

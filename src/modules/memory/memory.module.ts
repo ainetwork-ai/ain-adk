@@ -3,7 +3,8 @@ import type {
 	IIntentMemory,
 	IMemory,
 	IThreadMemory,
-	IWorkflowMemory,
+	IUserWorkflowMemory,
+	IWorkflowTemplateMemory,
 } from "./base.memory.js";
 
 export class MemoryModule {
@@ -35,7 +36,11 @@ export class MemoryModule {
 		return this.memory.getIntentMemory();
 	}
 
-	public getWorkflowMemory(): IWorkflowMemory {
-		return this.memory.getWorkflowMemory();
+	public getWorkflowTemplateMemory(): IWorkflowTemplateMemory {
+		return this.memory.getWorkflowTemplateMemory();
+	}
+
+	public getUserWorkflowMemory(): IUserWorkflowMemory {
+		return this.memory.getUserWorkflowMemory();
 	}
 }

@@ -77,6 +77,7 @@
 		"dotenv": "^16.5.0",
 		"express": "^5.1.0",
 		"http-status-codes": "^2.3.0",
+		"node-cron": "^4.2.1",
 		"uuid": "^11.1.0",
 		"winston": "^3.17.0",
 		"winston-daily-rotate-file": "^5.0.0"

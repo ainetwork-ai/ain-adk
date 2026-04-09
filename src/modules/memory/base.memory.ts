@@ -1,10 +1,12 @@
 import type {
 	Intent,
 	MessageObject,
+	ThreadFilter,
 	ThreadMetadata,
 	ThreadObject,
 	ThreadType,
-	Workflow,
+	UserWorkflow,
+	WorkflowTemplate,
 } from "@/types/memory";
 
 /**
@@ -17,7 +19,8 @@ export interface IMemory {
 	getThreadMemory(): IThreadMemory;
 	getIntentMemory(): IIntentMemory;
 	getAgentMemory(): IAgentMemory;
-	getWorkflowMemory(): IWorkflowMemory;
+	getWorkflowTemplateMemory(): IWorkflowTemplateMemory;
+	getUserWorkflowMemory(): IUserWorkflowMemory;
 }
 
 /**
@@ -33,6 +36,7 @@ export interface IThreadMemory {
 		userId: string,
 		threadId: string,
 		title: string,
+		workflowId?: string,
 	): Promise<ThreadObject>;
 	addMessagesToThread(
 		userId: string,
@@ -40,7 +44,7 @@ export interface IThreadMemory {
 		messages: MessageObject[],
 	): Promise<void>;
 	deleteThread(userId: string, threadId: string): Promise<void>;
-	listThreads(userId: string): Promise<ThreadMetadata[]>;
+	listThreads(userId: string, filter?: ThreadFilter): Promise<ThreadMetadata[]>;
 	updateThreadPin(
 		userId: string,
 		threadId: string,
@@ -76,15 +80,31 @@ export interface IAgentMemory {
 }
 
 /**
- * Workflow memory interface - handles workflow operations
+ * Workflow template memory interface - handles template operations
  */
-export interface IWorkflowMemory {
-	getWorkflow(workflowId: string): Promise<Workflow | undefined>;
-	createWorkflow(workflow: Workflow): Promise<Workflow>;
-	updateWorkflow(
-		workflowId: string,
-		workflow: Partial<Workflow>,
+export interface IWorkflowTemplateMemory {
+	getTemplate(templateId: string): Promise<WorkflowTemplate | undefined>;
+	createTemplate(template: WorkflowTemplate): Promise<WorkflowTemplate>;
+	updateTemplate(
+		templateId: string,
+		template: Partial<WorkflowTemplate>,
 	): Promise<void>;
-	deleteWorkflow(workflowId: string, userId: string): Promise<void>;
-	listWorkflows(userId?: string): Promise<Workflow[]>;
+	deleteTemplate(templateId: string): Promise<void>;
+	listTemplates(): Promise<WorkflowTemplate[]>;
+}
+
+/**
+ * User workflow memory interface - handles user workflow and scheduling operations
+ */
+export interface IUserWorkflowMemory {
+	getUserWorkflow(workflowId: string): Promise<UserWorkflow | undefined>;
+	createUserWorkflow(workflow: UserWorkflow): Promise<UserWorkflow>;
+	updateUserWorkflow(
+		workflowId: string,
+		workflow: Partial<UserWorkflow>,
+	): Promise<void>;
+	deleteUserWorkflow(workflowId: string, userId: string): Promise<void>;
+	listUserWorkflows(userId?: string): Promise<UserWorkflow[]>;
+	/** List all active scheduled workflows across all users (used by scheduler) */
+	listActiveScheduledWorkflows(): Promise<UserWorkflow[]>;
 }

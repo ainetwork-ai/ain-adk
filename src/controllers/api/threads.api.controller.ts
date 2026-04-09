@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { MemoryModule } from "@/modules/index.js";
+import type { ThreadFilter } from "@/types/memory.js";
 
 export class ThreadApiController {
 	private memoryModule: MemoryModule;
@@ -67,14 +68,15 @@ export class ThreadApiController {
 	};
 
 	public handleGetUserThreads = async (
-		_req: Request,
+		req: Request,
 		res: Response,
 		next: NextFunction,
 	) => {
 		try {
 			const userId = res.locals.userId || "";
+			const filter = req.query as ThreadFilter;
 			const threadMemory = this.memoryModule.getThreadMemory();
-			const threads = await threadMemory?.listThreads(userId);
+			const threads = await threadMemory?.listThreads(userId, filter);
 			res.json(threads);
 		} catch (error) {
 			next(error);

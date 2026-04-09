@@ -45,6 +45,12 @@ class Container {
 	getA2AService() {
 		return this._services.getA2AService();
 	}
+	getUserWorkflowService() {
+		return this._services.getUserWorkflowService();
+	}
+	getSchedulerService() {
+		return this._services.getSchedulerService();
+	}
 
 	getQueryController() {
 		return this._controllers.getQueryController();
@@ -64,8 +70,11 @@ class Container {
 	getIntentApiController() {
 		return this._controllers.getIntentApiController();
 	}
-	getWorkflowApiController() {
-		return this._controllers.getWorkflowApiController();
+	getWorkflowTemplateApiController() {
+		return this._controllers.getWorkflowTemplateApiController();
+	}
+	getUserWorkflowApiController() {
+		return this._controllers.getUserWorkflowApiController();
 	}
 
 	/**

@@ -55,12 +55,23 @@ export enum ThreadType {
 	CHAT = "CHAT",
 }
 
+export type ThreadFilter = {
+	/** Filter by user workflow ID */
+	workflowId?: string;
+	/** Filter by thread type */
+	type?: ThreadType;
+};
+
 export type ThreadMetadata = {
 	type: ThreadType;
 	title: string;
 	userId: string;
 	threadId: string;
 	isPinned?: boolean;
+	/** ID of the user workflow that created this thread */
+	workflowId?: string;
+	createdAt?: string;
+	updatedAt?: string;
 };
 
 /**
@@ -86,6 +97,8 @@ export type ThreadObject = {
 	type: ThreadType;
 	title: string;
 	isPinned?: boolean;
+	/** ID of the user workflow that created this thread */
+	workflowId?: string;
 	messages: Array<MessageObject>;
 };
 
@@ -131,21 +144,77 @@ export type FulfillmentResult = {
 	response: string;
 };
 
-export type WorkflowVariableType = "select" | "date_range" | "text" | "number";
+export type WorkflowVariableType =
+	| "select"
+	| "date_range"
+	| "date_parts"
+	| "text"
+	| "number";
+
+export type WorkflowVariableResolveAt = "creation" | "execution";
 
 export interface WorkflowVariable {
 	id: string; // e.g. "workplace_id"
 	label: string; // e.g. "분석할 업장을 선택해주세요"
 	type: WorkflowVariableType;
 	options?: Array<string>; // for "select" type
+	/** When to resolve this variable:
+	 * - "creation": resolved when copying template → my workflow (e.g., store selection)
+	 * - "execution": resolved each time the workflow runs (e.g., date range)
+	 * Defaults to "creation" if not specified.
+	 */
+	resolveAt?: WorkflowVariableResolveAt;
 }
 
-export interface Workflow {
-	workflowId: string;
-	userId?: string;
+/**
+ * A workflow template — an immutable blueprint for creating user workflows.
+ * System-provided or admin-defined.
+ */
+export interface WorkflowTemplate {
+	templateId: string;
 	title: string;
 	description: string;
 	active: boolean;
+	/** The prompt/instruction template with {{variable}} placeholders */
 	content: string;
+	/** Variable schema definitions (type, label, options) for UI rendering */
 	variables?: Record<string, WorkflowVariable>;
+}
+
+/**
+ * A user-owned workflow instance, optionally created from a WorkflowTemplate.
+ *
+ * Supports:
+ * - Internal execution via scheduler/service
+ * - Scheduled execution via cron expression
+ * - Template variables (e.g., {{today}}, {{yesterday}}) resolved at execution time
+ * - User-defined variable values resolved at execution time
+ */
+export interface UserWorkflow {
+	workflowId: string;
+	userId: string;
+	title: string;
+	description?: string;
+	active: boolean;
+
+	/** Reference to the original WorkflowTemplate (optional) */
+	templateId?: string;
+	/** The prompt/instruction content with {{variable}} placeholders */
+	content: string;
+	/** Variable schema definitions (copied from template, used for UI rendering) */
+	variables?: Record<string, WorkflowVariable>;
+	/** User-provided variable values (can contain template variables like {{today}}) */
+	variableValues?: Record<string, string>;
+
+	/** Cron expression for scheduled execution (e.g., "0 9 * * *"). If not set, manual-only. */
+	schedule?: string;
+	/** IANA timezone (e.g., "Asia/Seoul"). Defaults to system timezone. */
+	timezone?: string;
+
+	/** Unix timestamp of the last execution */
+	lastRunAt?: number;
+	/** Unix timestamp of the next scheduled execution */
+	nextRunAt?: number;
+	/** Thread ID of the last execution result */
+	lastThreadId?: string;
 }

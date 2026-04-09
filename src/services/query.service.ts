@@ -11,7 +11,7 @@ import {
 	MessageRole,
 	type ThreadMetadata,
 	type ThreadObject,
-	type ThreadType,
+	ThreadType,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
@@ -104,6 +104,8 @@ export class QueryService {
 			type: ThreadType;
 			userId: string;
 			threadId?: string;
+			workflowId?: string;
+			title?: string;
 			options?: ModelFetchOptions;
 		},
 		queryData: {
@@ -112,7 +114,13 @@ export class QueryService {
 		},
 		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
-		const { type, userId, options } = threadMetadata;
+		const {
+			type,
+			userId,
+			workflowId,
+			title: inputTitle,
+			options,
+		} = threadMetadata;
 		const { displayQuery } = queryData;
 		let { query } = queryData;
 		const threadMemory = this.memoryModule.getThreadMemory();
@@ -144,16 +152,23 @@ export class QueryService {
 
 		threadId ??= randomUUID();
 		if (!thread) {
-			const title = await this.generateTitle(query, options);
+			const title =
+				type === ThreadType.WORKFLOW && inputTitle
+					? inputTitle
+					: await this.generateTitle(query, options);
 			const metadata: ThreadMetadata = (await threadMemory?.createThread(
 				type,
 				userId,
 				threadId,
 				title,
-			)) || { type, userId, threadId, title };
+				workflowId,
+			)) || { type, userId, threadId, title, workflowId };
 			thread = { ...metadata, messages: [] };
 			loggers.intent.info(`Create new thread: ${threadId}`);
-			yield { event: "thread_id", data: { type, userId, threadId, title } };
+			yield {
+				event: "thread_id",
+				data: { type, userId, threadId, title, workflowId },
+			};
 		}
 
 		// 2. intent triggering

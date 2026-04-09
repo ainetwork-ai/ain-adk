@@ -27,6 +27,7 @@ export type {
 	OnIntentFallback,
 } from "./types/agent";
 
+import { container } from "./container";
 import isValidUrl from "./utils/isValidUrl";
 
 /**
@@ -229,6 +230,18 @@ export class AINAgent {
 		const server = this.app.listen(port, async () => {
 			await this.memoryModule.initialize();
 			await this.mcpModule?.connectToServers();
+
+			// Start the scheduler if user workflow memory is available
+			try {
+				const userWorkflowMemory = this.memoryModule.getUserWorkflowMemory();
+				if (userWorkflowMemory) {
+					const schedulerService = container.getSchedulerService();
+					await schedulerService.start();
+				}
+			} catch (_error) {
+				// User workflow memory not implemented — skip scheduler
+			}
+
 			console.log(`AINAgent is running on port ${port}`);
 		});
 
@@ -242,6 +255,15 @@ export class AINAgent {
 			});
 
 			try {
+				// Stop the scheduler
+				try {
+					const schedulerService = container.getSchedulerService();
+					console.log("Stopping scheduler...");
+					await schedulerService.stop();
+				} catch (_error) {
+					// Scheduler not initialized — skip
+				}
+
 				// Cleanup modules
 				if (this.mcpModule) {
 					console.log("Disconnecting from MCP servers...");

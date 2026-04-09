@@ -2,3 +2,8 @@ export { A2AService } from "./a2a.service.js";
 export { IntentFulfillService } from "./intents/fulfill.service.js";
 export { IntentTriggerService } from "./intents/trigger.service.js";
 export { QueryService } from "./query.service.js";
+export { SchedulerService } from "./scheduler.service.js";
+export { UserWorkflowService } from "./user-workflow.service.js";
+export { UserWorkflowCoordinatorService } from "./user-workflow-coordinator.service.js";
+export { WorkflowExecutionService } from "./workflow-execution.service.js";
+export { WorkflowVariableResolver } from "./workflow-variable-resolver.service.js";
