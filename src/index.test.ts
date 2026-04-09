@@ -1,9 +1,8 @@
-import { AINAgent } from "./index";
 import { getArtifactModule } from "./config/modules";
+import { AINAgent } from "./index";
 import { ArtifactModule } from "./modules/artifacts/artifact.module";
 import type { IArtifactStore } from "./modules/artifacts/base.artifact";
 import { AuthModule } from "./modules/auth/auth.module";
-import { MemoryModule } from "./modules/memory/memory.module";
 import type {
 	IAgentMemory,
 	IIntentMemory,
@@ -12,11 +11,18 @@ import type {
 	IUserWorkflowMemory,
 	IWorkflowTemplateMemory,
 } from "./modules/memory/base.memory";
+import { MemoryModule } from "./modules/memory/memory.module";
 import { BaseModel } from "./modules/models/base.model";
 import { ModelModule } from "./modules/models/model.module";
-import type { ConnectorTool, FetchResponse } from "./types/connector";
 import type { AuthResponse } from "./types/auth";
-import type { Intent, ThreadMetadata, ThreadObject, UserWorkflow, WorkflowTemplate } from "./types/memory";
+import type { ConnectorTool, FetchResponse } from "./types/connector";
+import type {
+	Intent,
+	ThreadMetadata,
+	ThreadObject,
+	UserWorkflow,
+	WorkflowTemplate,
+} from "./types/memory";
 import type { LLMStream } from "./types/stream";
 
 class TestAuthModule extends AuthModule {
@@ -81,7 +87,9 @@ const workflowTemplateMemory: IWorkflowTemplateMemory = {
 	createTemplate: jest.fn(),
 	updateTemplate: jest.fn(),
 	deleteTemplate: jest.fn(),
-	listTemplates: jest.fn<Promise<WorkflowTemplate[]>, []>().mockResolvedValue([]),
+	listTemplates: jest
+		.fn<Promise<WorkflowTemplate[]>, []>()
+		.mockResolvedValue([]),
 };
 
 const userWorkflowMemory: IUserWorkflowMemory = {
@@ -89,8 +97,12 @@ const userWorkflowMemory: IUserWorkflowMemory = {
 	createUserWorkflow: jest.fn(),
 	updateUserWorkflow: jest.fn(),
 	deleteUserWorkflow: jest.fn(),
-	listUserWorkflows: jest.fn<Promise<UserWorkflow[]>, []>().mockResolvedValue([]),
-	listActiveScheduledWorkflows: jest.fn<Promise<UserWorkflow[]>, []>().mockResolvedValue([]),
+	listUserWorkflows: jest
+		.fn<Promise<UserWorkflow[]>, []>()
+		.mockResolvedValue([]),
+	listActiveScheduledWorkflows: jest
+		.fn<Promise<UserWorkflow[]>, []>()
+		.mockResolvedValue([]),
 };
 
 class TestMemory implements IMemory {

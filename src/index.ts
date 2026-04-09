@@ -11,8 +11,8 @@ import { setOptions } from "./config/options";
 import { AuthMiddleware } from "./middlewares/auth.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import type {
-	ArtifactModule,
 	A2AModule,
+	ArtifactModule,
 	AuthModule,
 	MCPModule,
 	MemoryModule,

@@ -1,6 +1,6 @@
 import type {
-	ArtifactModule,
 	A2AModule,
+	ArtifactModule,
 	AuthModule,
 	MCPModule,
 	MemoryModule,
