@@ -13,7 +13,6 @@
 		"resolveJsonModule": true,
 		"isolatedModules": true,
 		"skipLibCheck": true,
-		"baseUrl": ".",
 		"allowSyntheticDefaultImports": true,
 		"paths": {
 			"@/*": ["./src/*"]
