@@ -665,7 +665,38 @@ Documentation recommendation:
 
 ## Execution Plan
 
-## Phase 1. Core Type Redesign
+### Sequencing Principles
+
+The highest-risk parts of this migration are:
+
+- changing core message and stream contracts
+- changing the public SDK module surface
+- changing model-provider interfaces
+
+To reduce churn, implementation order should follow this rule:
+
+1. freeze canonical data contracts first
+2. add infrastructure and wiring second
+3. migrate service internals next
+4. update provider-facing and protocol-facing integrations after service internals stabilize
+
+Additional recommendation:
+
+- tests and docs should not wait until the very end
+- each phase that changes a public contract should update examples and add focused coverage immediately
+
+## Phase 0. Contract Freeze and ADR-Level Decisions
+
+- finalize canonical `MessageObject`, `ContentPart`, `ArtifactObject`, and `ArtifactRef` shapes
+- finalize stream event vocabulary
+- finalize artifact lifecycle states and preview lifecycle states
+- finalize error code vocabulary
+- finalize the first-milestone workflow stance as text-only
+- finalize whether query output returns both `message` and a compatibility `content`
+
+This phase is intentionally small but important. It reduces rework in every later phase.
+
+## Phase 1. Core Type Redesign and Compatibility Adapters
 
 - redesign `MessageObject`
 - redesign `ThreadObject` message storage contract
@@ -674,6 +705,7 @@ Documentation recommendation:
 - redesign `FulfillmentResult`
 - redesign `StreamEvent`
 - introduce schema versioning and legacy-read adapters
+- add normalization helpers for old text-only message records
 
 ## Phase 2. Artifact Storage Abstraction
 
@@ -684,76 +716,93 @@ Documentation recommendation:
 - define artifact status lifecycle
 - decide download strategy: proxy route vs signed URL
 
-## Phase 2.5. SDK Module Wiring
+## Phase 3. SDK Module Wiring
 
 - add optional `ArtifactModule` to the public constructor surface
 - update module registry and getters
 - update DI container services and controllers
 - define failure behavior when artifact functionality is requested but no artifact module is configured
 
-## Phase 3. Query Contract Refactor
-
-- add multipart input contract
-- add structured output contract
-- keep temporary legacy `message: string` adapter
-- refactor controller and service boundaries to use structured messages
-- add request validation for multipart and artifact-bearing inputs
-
-## Phase 4. Internal Message Flow Migration
-
-- update `QueryService` to accept structured input
-- persist user messages as multipart messages
-- persist model messages as multipart messages
-- stop assuming final output is only a string
-
-## Phase 5. Shared Serialization Utilities
+## Phase 4. Shared Serialization and Normalization Utilities
 
 - add message and thread serializers for intent/model use
 - add file fallback summary behavior
 - normalize how old and new message records are transformed for inference
 - define workflow-safe serializer boundaries so workflows can stay text-only for now
+- keep serializers independent from provider-specific model logic
 
-## Phase 6. Intent and Fulfillment Refactor
+This phase should happen before broad service refactors so all later logic shares one canonical conversion path.
+
+## Phase 5. Request Validation and Error Contract
+
+- add request validation for multipart and artifact-bearing inputs
+- add upload validation for size and mime type
+- implement structured error code responses while preserving a compatibility `message`
+
+## Phase 6. Query Contract Refactor and Internal Message Flow Migration
+
+- add multipart input contract
+- add structured output contract
+- keep temporary legacy `message: string` adapter
+- refactor controller and service boundaries to use structured messages
+- update `QueryService` to accept structured input
+- persist user messages as multipart messages
+- persist model messages as multipart messages
+- stop assuming final output is only a string
+
+## Phase 7. Stream Event Redesign
+
+- introduce the new stream event shapes
+- maintain compatibility where needed for text streaming clients
+- add support for artifact readiness signaling
+
+This phase should land before downstream consumers such as A2A are updated.
+
+## Phase 8. Intent and Fulfillment Refactor
 
 - update trigger services to use serializer
 - update fulfill flow to produce message parts
 - update aggregate flow to aggregate structured outputs or summarized representations
 
-## Phase 7. Model Abstraction Migration
+## Phase 9. Model Abstraction Migration
 
 - change `BaseModel` interfaces
 - update provider implementations
 - define degradation strategy for unsupported modalities
 
-## Phase 8. Artifact API and Upload/Download Flow
+Why this comes after service refactors:
+
+- by this point the canonical message model and serialization rules are already stable
+- provider implementers can target a settled shape instead of a moving intermediate design
+
+## Phase 10. Artifact API and Upload/Download Flow
 
 - add artifact upload endpoint
 - add artifact metadata endpoint
 - add artifact download endpoint
 - wire uploaded artifact references into query flow
 - add auth and ownership checks for artifact access
-- add upload validation for size and mime type
 
-## Phase 9. A2A Expansion
+## Phase 11. A2A Expansion
 
 - update A2A message parsing and sending
 - update agent card capabilities and modes
 - standardize artifact reference handling for A2A interoperability
 - address existing A2A TODO and FIXME items while touching the protocol surface
 
-## Phase 10. Workflow Boundary Review
+## Phase 12. Workflow Boundary Review
 
 - keep workflow APIs text-only in the first milestone
 - review workflow service signatures for future structured input support
 - document the future path from string workflows to multipart workflows without implementing it yet
 
-## Phase 11. Migration and Compatibility Layer
+## Phase 13. Migration and Compatibility Layer
 
 - provide adapters for old text-only API usage
 - support old message reading where necessary
 - publish upgrade notes for provider and memory implementers
 
-## Phase 12. Tests and Documentation
+## Phase 14. Tests and Documentation Sweep
 
 - text-only compatibility tests
 - multipart message tests
@@ -767,6 +816,10 @@ Documentation recommendation:
 - request validation tests
 - README and route contract synchronization checks
 - update README and examples
+
+Important note:
+
+- despite this dedicated final sweep, tests and documentation updates should also happen incrementally in earlier phases whenever a public contract changes
 
 ---
 
@@ -803,17 +856,21 @@ This should be treated as a core architecture update, not a small feature patch.
 
 Recommended implementation order:
 
-1. core types
-2. artifact storage abstraction
-3. SDK module wiring
-4. request validation layer
-5. structured query/message flow
-6. model abstraction changes
-7. stream event redesign
-8. artifact APIs
-9. A2A support
-10. workflow boundary cleanup
-11. migration cleanup
+1. contract freeze
+2. core types and compatibility adapters
+3. artifact storage abstraction
+4. SDK module wiring
+5. shared serialization utilities
+6. request validation and error contract
+7. structured query and internal message flow
+8. stream event redesign
+9. intent and fulfillment refactor
+10. model abstraction changes
+11. artifact APIs
+12. A2A support
+13. workflow boundary cleanup
+14. migration cleanup
+15. final test and documentation sweep
 
 If followed in this order, the codebase will end up with a much cleaner multimodal foundation and future artifact-related features will no longer require cross-cutting rewrites.
 
