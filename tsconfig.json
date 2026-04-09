@@ -3,6 +3,7 @@
 		"target": "es2022",
 		"module": "es2022",
 		"moduleResolution": "bundler",
+		"types": ["node", "jest"],
 		"declaration": true,
 		"declarationMap": true,
 		"sourceMap": true,
@@ -21,6 +22,6 @@
 	"ts-node": {
 		"esm": true
 	},
-	"include": ["src/**/*"],
+	"include": ["src/**/*", "tests/**/*"],
 	"exclude": ["node_modules", "examples", "dist"]
 }

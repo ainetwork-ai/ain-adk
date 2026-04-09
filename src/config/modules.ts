@@ -1,4 +1,5 @@
 import type {
+	ArtifactModule,
 	A2AModule,
 	AuthModule,
 	MCPModule,
@@ -10,6 +11,7 @@ export interface AgentModules {
 	modelModule: ModelModule;
 	memoryModule: MemoryModule;
 	authModule?: AuthModule;
+	artifactModule?: ArtifactModule;
 	a2aModule?: A2AModule;
 	mcpModule?: MCPModule;
 }
@@ -37,6 +39,10 @@ export function getMemoryModule(): MemoryModule {
 
 export function getAuthModule(): AuthModule | undefined {
 	return getModules().authModule;
+}
+
+export function getArtifactModule(): ArtifactModule | undefined {
+	return getModules().artifactModule;
 }
 
 export function getA2AModule(): A2AModule | undefined {

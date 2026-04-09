@@ -1,3 +1,5 @@
+export type { IArtifactStore } from "./artifacts/base.artifact.js";
+export { ArtifactModule } from "./artifacts/artifact.module.js";
 export { A2AModule } from "./a2a/a2a.module.js";
 export { AuthModule } from "./auth/auth.module.js";
 export { MCPModule } from "./mcp/mcp.module.js";

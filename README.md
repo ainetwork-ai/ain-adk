@@ -11,6 +11,7 @@ A TypeScript library for building AI agents with multi-protocol support includin
 - **Modular Architecture**: Flexible module system for models, memory, MCP, and A2A
 - **Multiple AI Models**: Support for OpenAI and Gemini with easy extensibility
 - **Thread Management**: Built-in memory module for conversation history
+- **Extensible Artifact Layer**: Optional artifact module for file storage/download workflows
 - **Intent System**: Single/multi-intent triggering with intelligent response aggregation
 - **Workflow Management**: Built-in workflow storage and execution with display query support
 - **Dual Build System**: Supports both ESM and CJS formats for maximum compatibility
@@ -59,6 +60,7 @@ interface AINAgentModules {
   authModule: AuthModule;      // Required - authentication handling
   modelModule: ModelModule;    // Required - AI model integrations
   memoryModule: MemoryModule;  // Required - thread/intent/workflow storage
+  artifactModule?: ArtifactModule; // Optional - artifact storage and download handling
   a2aModule?: A2AModule;       // Optional - agent-to-agent communication
   mcpModule?: MCPModule;       // Optional - MCP server connections
 }
@@ -125,6 +127,7 @@ Benefits:
 
 - **Unified Tool Interface**: Protocol-agnostic `ConnectorTool` and `IAgentConnector` interfaces
 - **Streaming Support**: Dual implementation for streaming and non-streaming queries
+- **Optional Artifact Integration**: Pluggable artifact storage abstraction for future file workflows
 - **Intent System**: Single/multi-intent triggering with intelligent response aggregation
 - **Workflow Management**: Built-in workflow storage and execution with display query support
 - **Service Layer**: Clean separation with controllers and services

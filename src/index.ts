@@ -11,6 +11,7 @@ import { setOptions } from "./config/options";
 import { AuthMiddleware } from "./middlewares/auth.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import type {
+	ArtifactModule,
 	A2AModule,
 	AuthModule,
 	MCPModule,
@@ -63,6 +64,7 @@ export class AINAgent {
 	public modelModule: ModelModule;
 	public memoryModule: MemoryModule;
 	public authModule?: AuthModule;
+	public artifactModule?: ArtifactModule;
 	public a2aModule?: A2AModule;
 	public mcpModule?: MCPModule;
 
@@ -75,9 +77,10 @@ export class AINAgent {
 	 * @param manifest - Agent manifest containing name, description, version, and optional URL
 	 * @param modules - Required and optional modules for the agent
 	 * @param modules.modelModule - Required module for AI model integrations
+	 * @param modules.artifactModule - Optional module for artifact storage and downloads
 	 * @param modules.a2aModule - Optional module for A2A protocol support
 	 * @param modules.mcpModule - Optional module for MCP server connections
-	 * @param modules.memoryModule - Optional module for memory management
+	 * @param modules.memoryModule - Required module for memory management
 	 * @param authScheme - Authentication middleware for securing endpoints
 	 * @param options - Optional configuration options
 	 * @param options.onIntentFallback - Fallback handler when intent matching fails
@@ -88,6 +91,7 @@ export class AINAgent {
 			authModule: AuthModule;
 			modelModule: ModelModule;
 			memoryModule: MemoryModule;
+			artifactModule?: ArtifactModule;
 			a2aModule?: A2AModule;
 			mcpModule?: MCPModule;
 		},
@@ -103,6 +107,7 @@ export class AINAgent {
 
 		// Set modules
 		this.modelModule = modules.modelModule;
+		this.artifactModule = modules.artifactModule;
 		this.a2aModule = modules.a2aModule;
 		this.mcpModule = modules.mcpModule;
 		this.memoryModule = modules.memoryModule;
@@ -112,6 +117,7 @@ export class AINAgent {
 		// Set global modules for easy access
 		setModules({
 			modelModule: modules.modelModule,
+			artifactModule: modules.artifactModule,
 			a2aModule: modules.a2aModule,
 			mcpModule: modules.mcpModule,
 			memoryModule: modules.memoryModule,
