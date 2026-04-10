@@ -1,5 +1,5 @@
-import { ArtifactModule } from "./artifact.module";
-import type { IArtifactStore } from "./base.artifact";
+import { ArtifactModule } from "@/modules/artifacts/artifact.module";
+import type { IArtifactStore } from "@/modules/artifacts/base.artifact";
 
 describe("ArtifactModule", () => {
 	it("returns the configured artifact store", () => {

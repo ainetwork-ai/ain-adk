@@ -42,9 +42,11 @@ export type AinAgentManifest = {
 
 export class AinHttpError extends Error {
 	public status?: StatusCodes;
+	public code?: string;
 
-	constructor(status: StatusCodes, message: string) {
+	constructor(status: StatusCodes, message: string, code?: string) {
 		super(message);
 		this.status = status;
+		this.code = code;
 	}
 }

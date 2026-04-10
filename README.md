@@ -198,10 +198,14 @@ modelLogger.error('Model API error');
 ### Standard Endpoints
 - `GET /` - Welcome message and health check
 - `POST /query` - Process queries (non-streaming)
-  - Request: `{ query: string, threadId?: string, type?: string, displayQuery?: string }`
+  - Request:
+    - Legacy: `{ message: string, threadId?: string, type?: string, displayMessage?: string }`
+    - Structured: `{ input: { parts: [...] }, threadId?: string, type?: string, displayMessage?: string }`
   - Response: `{ content: string, threadId: string }`
 - `POST /query/stream` - Process queries with streaming (SSE)
-  - Request: `{ query: string, threadId?: string, type?: string, displayQuery?: string }`
+  - Request:
+    - Legacy: `{ message: string, threadId?: string, type?: string, displayMessage?: string }`
+    - Structured: `{ input: { parts: [...] }, threadId?: string, type?: string, displayMessage?: string }`
   - Response: Server-Sent Events stream with event types:
     - `text_chunk`: Incremental text response
     - `tool_start`: Tool execution started
