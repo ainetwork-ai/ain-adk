@@ -1,11 +1,11 @@
 import type { MemoryModule, ModelModule } from "@/modules";
 import type {
 	IntentTriggerResult,
-	MessageObject,
 	ThreadObject,
 	TriggeredIntent,
 } from "@/types/memory";
 import { loggers } from "@/utils/logger";
+import { serializeThreadForIntent } from "@/utils/message";
 import multiTriggerPrompt from "../prompts/multi-trigger";
 
 /**
@@ -52,23 +52,7 @@ export class MultiIntentTriggerService {
 			.join("\n");
 
 		// Convert thread messages to a string
-		const threadMessages = !thread
-			? ""
-			: thread.messages
-					.sort((a, b) => a.timestamp - b.timestamp)
-					.map((message: MessageObject) => {
-						const role =
-							message.role === "USER"
-								? "User"
-								: message.role === "MODEL"
-									? "Assistant"
-									: "System";
-						const content = Array.isArray(message.content.parts)
-							? message.content.parts.join(" ")
-							: String(message.content.parts);
-						return `${role}: """${content}"""`;
-					})
-					.join("\n");
+		const threadMessages = serializeThreadForIntent(thread);
 
 		const systemPrompt = await multiTriggerPrompt(
 			this.memoryModule,

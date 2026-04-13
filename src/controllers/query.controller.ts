@@ -4,6 +4,7 @@ import { getArtifactModule } from "@/config/modules";
 import type { QueryService } from "@/services";
 import { MessageRole } from "@/types/memory";
 import { loggers } from "@/utils/logger";
+import { createTextMessage } from "@/utils/message";
 import { normalizeQueryRequest } from "@/utils/query-input";
 
 export class QueryController {
@@ -22,12 +23,12 @@ export class QueryController {
 		const userId = res.locals.userId;
 
 		try {
-			const { query, displayQuery } = normalizeQueryRequest(req.body, {
+			const { input, query, displayQuery } = normalizeQueryRequest(req.body, {
 				artifactModuleConfigured: !!getArtifactModule(),
 			});
 			const stream = this.queryService.handleQuery(
 				{ type, userId, threadId, workflowId, title },
-				{ query, displayQuery },
+				{ input, query, displayQuery },
 			);
 
 			let content = "";
@@ -54,7 +55,7 @@ export class QueryController {
 	) => {
 		const { type, threadId, workflowId, title } = req.body;
 		const userId = res.locals.userId;
-		const { query, displayQuery } = normalizeQueryRequest(req.body, {
+		const { input, query, displayQuery } = normalizeQueryRequest(req.body, {
 			artifactModuleConfigured: !!getArtifactModule(),
 		});
 
@@ -84,7 +85,7 @@ export class QueryController {
 		let currentThreadId = threadId;
 		const stream = this.queryService.handleQuery(
 			{ type, userId, threadId, workflowId, title },
-			{ query, displayQuery },
+			{ input, query, displayQuery },
 		);
 
 		try {
@@ -98,16 +99,16 @@ export class QueryController {
 				} else if (event.event === "thinking_process") {
 					// a2a 호출에 대해서는 데이터베이스에 추가하지 않기 위해 여기서 thread message에 기록
 					this.queryService.addToThreadMessages(userId, currentThreadId, [
-						{
+						createTextMessage({
 							messageId: randomUUID(),
 							role: MessageRole.MODEL,
 							timestamp: Date.now(),
-							content: { type: "text", parts: [event.data.title] },
+							text: event.data.title,
 							metadata: {
 								isThinking: true,
 								thinkData: event.data,
 							},
-						},
+						}),
 					]);
 				}
 

@@ -8,18 +8,91 @@ export enum MessageRole {
 	SYSTEM = "SYSTEM",
 	/** AI model responses */
 	MODEL = "MODEL",
+	/** Tool-generated messages or results */
+	TOOL = "TOOL",
 }
 
 /**
- * Content structure for message content.
- *
- * Supports multi-part content with different types (text, images, etc.).
+ * Legacy message content structure kept for backward-compatible reads.
  */
-export type MessageContentObject = {
+export type LegacyMessageContentObject = {
 	/** Content type (e.g., "text", "image", "tool_use") */
 	type: string;
 	/** Array of content parts, structure depends on content type */
 	parts: any[];
+};
+
+export type TextContentPart = {
+	kind: "text";
+	text: string;
+};
+
+export type ArtifactContentPart = {
+	kind: "artifact";
+	artifactId: string;
+	name?: string;
+	mimeType?: string;
+	size?: number;
+	downloadUrl?: string;
+	previewText?: string;
+};
+
+export type DataContentPart = {
+	kind: "data";
+	mimeType: string;
+	data: unknown;
+};
+
+export type ToolCallContentPart = {
+	kind: "tool-call";
+	toolCallId: string;
+	toolName: string;
+	args: unknown;
+};
+
+export type ToolResultContentPart = {
+	kind: "tool-result";
+	toolCallId: string;
+	toolName: string;
+	result: unknown;
+};
+
+export type ThoughtContentPart = {
+	kind: "thought";
+	title: string;
+	description?: string;
+};
+
+export type MessageContentPart =
+	| TextContentPart
+	| ArtifactContentPart
+	| DataContentPart
+	| ToolCallContentPart
+	| ToolResultContentPart
+	| ThoughtContentPart;
+
+type MessageBase = {
+	messageId: string;
+	/** Role of the message sender */
+	role: MessageRole;
+	/** Unix timestamp when the message was created */
+	timestamp: number;
+	/** Optional metadata for additional context */
+	metadata?: { [key: string]: unknown };
+};
+
+export type LegacyMessageObject = MessageBase & {
+	schemaVersion?: 1;
+	/** Message content with type and parts */
+	content: LegacyMessageContentObject;
+	parts?: never;
+};
+
+export type CanonicalMessageObject = MessageBase & {
+	schemaVersion: 2;
+	/** Multipart-first message content */
+	parts: Array<MessageContentPart>;
+	content?: never;
 };
 
 /**
@@ -28,27 +101,15 @@ export type MessageContentObject = {
  * @example
  * ```typescript
  * const message: MessageObject = {
+ *   schemaVersion: 2,
  *   role: MessageRole.USER,
- *   content: {
- *     type: "text",
- *     parts: ["Hello, how can you help me?"]
- *   },
+ *   parts: [{ kind: "text", text: "Hello, how can you help me?" }],
  *   timestamp: Date.now(),
  *   metadata: { source: "web-ui" }
  * };
  * ```
  */
-export type MessageObject = {
-	messageId: string;
-	/** Role of the message sender */
-	role: MessageRole;
-	/** Message content with type and parts */
-	content: MessageContentObject;
-	/** Unix timestamp when the message was created */
-	timestamp: number;
-	/** Optional metadata for additional context */
-	metadata?: { [key: string]: unknown };
-};
+export type MessageObject = LegacyMessageObject | CanonicalMessageObject;
 
 export enum ThreadType {
 	WORKFLOW = "WORKFLOW",
@@ -85,8 +146,8 @@ export type ThreadMetadata = {
  * const thread: ThreadObject = {
  * 	 title: "New conversation",
  *   messages: [
- *     { messageId: <UUID_1>, role: MessageRole.USER, content: {...}, timestamp: 1234567890 },
- *     { messageId: <UUID_2> ,role: MessageRole.MODEL, content: {...}, timestamp: 1234567891 }
+ *     { messageId: <UUID_1>, role: MessageRole.USER, parts: [...], timestamp: 1234567890, schemaVersion: 2 },
+ *     { messageId: <UUID_2> ,role: MessageRole.MODEL, parts: [...], timestamp: 1234567891, schemaVersion: 2 }
  *   ]
  * };
  * ```
