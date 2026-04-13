@@ -6,6 +6,11 @@ const tsJestTransformCfg = createDefaultPreset().transform;
 module.exports = {
 	testEnvironment: "node",
 	testMatch: ["**/*.test.ts"],
+	moduleNameMapper: {
+		"^@/(.*)\\.js$": "<rootDir>/src/$1",
+		"^@/(.*)$": "<rootDir>/src/$1",
+		"^(\\.{1,2}/.*)\\.js$": "$1",
+	},
 	transform: {
 		...tsJestTransformCfg,
 	},
