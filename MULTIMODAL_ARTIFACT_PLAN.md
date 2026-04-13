@@ -22,8 +22,14 @@ Completed groundwork so far:
 - added `IArtifactStore` abstraction and `ArtifactModule`
 - wired optional `artifactModule` into the SDK module registry and `AINAgent`
 - exported artifact module types from the public module surface
+- added structured query input types for multipart request normalization
+- added initial query input validation and normalization utilities
+- added legacy `message: string` to structured-input adapter logic at the query controller boundary
+- added structured error code support for request validation failures
 - updated README to mention the optional artifact layer
 - added initial tests for artifact module wiring
+- added tests for query input normalization and controller-level query input adaptation
+- moved repository tests into the top-level `tests/` directory so they are not emitted in build artifacts
 - updated Jest and TypeScript config so test files and Jest globals are recognized correctly
 
 Not completed yet:
@@ -778,6 +784,11 @@ This phase should happen before broad service refactors so all later logic share
 - add upload validation for size and mime type
 - implement structured error code responses while preserving a compatibility `message`
 
+Completed groundwork in this phase:
+
+- query input validation added for legacy and structured request shapes
+- structured error code support added to `AinHttpError` and error responses
+
 ## Phase 6. Query Contract Refactor and Internal Message Flow Migration
 
 - add multipart input contract
@@ -788,6 +799,12 @@ This phase should happen before broad service refactors so all later logic share
 - persist user messages as multipart messages
 - persist model messages as multipart messages
 - stop assuming final output is only a string
+
+Completed groundwork in this phase:
+
+- structured query input types added
+- legacy `message` requests are normalized into structured input at the controller boundary
+- structured `input.parts` requests are accepted and converted into the current text-based query flow
 
 ## Phase 7. Stream Event Redesign
 
@@ -860,6 +877,8 @@ Completed groundwork in this phase:
 
 - README updated with optional artifact layer/module references
 - initial tests added for artifact module and SDK wiring
+- query input normalization and controller adaptation tests added
+- tests moved out of `src/` into `tests/` so package builds no longer include test files
 - Jest and TypeScript test configuration updated for this repository
 
 Important note:

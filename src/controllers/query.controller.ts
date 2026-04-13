@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
+import { getArtifactModule } from "@/config/modules";
 import type { QueryService } from "@/services";
 import { MessageRole } from "@/types/memory";
 import { loggers } from "@/utils/logger";
+import { normalizeQueryRequest } from "@/utils/query-input";
 
 export class QueryController {
 	private queryService: QueryService;
@@ -16,17 +18,13 @@ export class QueryController {
 		res: Response,
 		next: NextFunction,
 	) => {
-		const {
-			type,
-			threadId,
-			workflowId,
-			title,
-			message: query,
-			displayMessage: displayQuery,
-		} = req.body;
+		const { type, threadId, workflowId, title } = req.body;
 		const userId = res.locals.userId;
 
 		try {
+			const { query, displayQuery } = normalizeQueryRequest(req.body, {
+				artifactModuleConfigured: !!getArtifactModule(),
+			});
 			const stream = this.queryService.handleQuery(
 				{ type, userId, threadId, workflowId, title },
 				{ query, displayQuery },
@@ -54,15 +52,11 @@ export class QueryController {
 		res: Response,
 		_next: NextFunction,
 	) => {
-		const {
-			type,
-			threadId,
-			workflowId,
-			title,
-			message: query,
-			displayMessage: displayQuery,
-		} = req.body;
+		const { type, threadId, workflowId, title } = req.body;
 		const userId = res.locals.userId;
+		const { query, displayQuery } = normalizeQueryRequest(req.body, {
+			artifactModuleConfigured: !!getArtifactModule(),
+		});
 
 		res.writeHead(200, {
 			"Content-Type": "text/event-stream",
