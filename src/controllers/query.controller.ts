@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { getArtifactModule } from "@/config/modules";
 import type { QueryService } from "@/services";
-import { MessageRole } from "@/types/memory";
+import { type CanonicalMessageObject, MessageRole } from "@/types/memory";
 import { loggers } from "@/utils/logger";
-import { createTextMessage } from "@/utils/message";
+import { createTextMessage, extractTextContent } from "@/utils/message";
 import { normalizeQueryRequest } from "@/utils/query-input";
 
 export class QueryController {
@@ -31,18 +31,27 @@ export class QueryController {
 				{ input, query, displayQuery },
 			);
 
-			let content = "";
 			let responseThreadId = threadId;
+			let message: CanonicalMessageObject | undefined;
 
-			for await (const event of stream) {
+			while (true) {
+				const result = await stream.next();
+				if (result.done) {
+					message = result.value;
+					break;
+				}
+
+				const event = result.value;
 				if (event.event === "thread_id") {
 					responseThreadId = event.data.threadId;
-				} else if (event.event === "text_chunk" && event.data.delta) {
-					content += event.data.delta;
 				}
 			}
 
-			res.status(200).json({ content, threadId: responseThreadId });
+			res.status(200).json({
+				content: message ? extractTextContent(message) : "",
+				message,
+				threadId: responseThreadId,
+			});
 		} catch (error) {
 			next(error);
 		}

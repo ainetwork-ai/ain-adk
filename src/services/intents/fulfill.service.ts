@@ -9,9 +9,9 @@ import type {
 import type { OnIntentFallback } from "@/types/agent";
 import { CONNECTOR_PROTOCOL_TYPE, type ConnectorTool } from "@/types/connector";
 import {
+	type CanonicalMessageObject,
 	type FulfillmentResult,
 	type Intent,
-	type MessageObject,
 	MessageRole,
 	type ThreadObject,
 	type TriggeredIntent,
@@ -50,31 +50,6 @@ export class IntentFulfillService {
 		this.piiService = piiService;
 	}
 
-	private async addToThreadMessages(
-		thread: ThreadObject,
-		params: {
-			role: MessageRole;
-			content: string;
-			metadata?: Record<string, unknown>;
-		},
-	) {
-		try {
-			const threadMemory = this.memoryModule.getThreadMemory();
-			const { userId, threadId } = thread;
-			const newMessage: MessageObject = createTextMessage({
-				messageId: randomUUID(),
-				role: params.role,
-				timestamp: Date.now(),
-				text: params.content,
-				metadata: params.metadata,
-			});
-			thread.messages.push(newMessage);
-			await threadMemory?.addMessagesToThread(userId, threadId, [newMessage]);
-		} catch (error) {
-			loggers.intentStream.error("Error adding message to thread", error);
-		}
-	}
-
 	/**
 	 * Fulfills the detected intent by generating a streaming response.
 	 *
@@ -95,7 +70,7 @@ export class IntentFulfillService {
 		query: string,
 		thread: ThreadObject,
 		intent?: Intent,
-	): AsyncGenerator<StreamEvent> {
+	): AsyncGenerator<StreamEvent, void, undefined> {
 		const prompt = await fulfillPrompt(this.memoryModule, intent);
 
 		const modelInstance = this.modelModule.getModel();
@@ -286,7 +261,11 @@ export class IntentFulfillService {
 		thread: ThreadObject,
 		originalQuery: string,
 		needsAggregation: boolean,
-	): AsyncGenerator<StreamEvent> {
+	): AsyncGenerator<
+		StreamEvent,
+		CanonicalMessageObject | undefined,
+		undefined
+	> {
 		const streamStartTime = Date.now();
 		loggers.intentStream.info("Stream session started", {
 			threadId: thread.threadId,
@@ -475,11 +454,23 @@ export class IntentFulfillService {
 		}
 
 		// Save final response to memory
-		await this.addToThreadMessages(thread, {
+		const finalMessage = createTextMessage({
+			messageId: randomUUID(),
 			role: MessageRole.MODEL,
-			content: finalResponseText,
+			timestamp: Date.now(),
+			text: finalResponseText,
 			metadata: collectionName ? { collectionName } : undefined,
 		});
+
+		try {
+			const threadMemory = this.memoryModule.getThreadMemory();
+			thread.messages.push(finalMessage);
+			await threadMemory?.addMessagesToThread(thread.userId, thread.threadId, [
+				finalMessage,
+			]);
+		} catch (error) {
+			loggers.intentStream.error("Error adding message to thread", error);
+		}
 
 		const streamEndTime = Date.now();
 		const streamDuration = streamEndTime - streamStartTime;
@@ -489,5 +480,7 @@ export class IntentFulfillService {
 			duration: `${streamDuration}ms`,
 			endTime: new Date(streamEndTime).toISOString(),
 		});
+
+		return finalMessage;
 	}
 }

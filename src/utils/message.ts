@@ -354,3 +354,11 @@ export function serializeThreadForIntent(
 		})
 		.join("\n");
 }
+
+export function extractTextContent(message: MessageObject): string {
+	return normalizeMessageParts(message)
+		.filter((part): part is TextContentPart => part.kind === "text")
+		.map((part) => part.text)
+		.filter((value) => value.trim() !== "")
+		.join("\n");
+}

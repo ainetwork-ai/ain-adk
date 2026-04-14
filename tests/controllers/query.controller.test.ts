@@ -12,6 +12,14 @@ describe("QueryController", () => {
 	});
 
 	it("normalizes structured query input before calling QueryService", async () => {
+		const finalMessage = {
+			messageId: "msg-1",
+			role: "MODEL" as const,
+			timestamp: 123,
+			schemaVersion: 2 as const,
+			parts: [{ kind: "text" as const, text: "ok" }],
+		};
+
 		const handleQuery = jest.fn(async function* () {
 			yield {
 				event: "thread_id" as const,
@@ -26,6 +34,7 @@ describe("QueryController", () => {
 				event: "text_chunk" as const,
 				data: { delta: "ok" },
 			};
+			return finalMessage;
 		});
 
 		const queryController = new QueryController({
@@ -85,6 +94,7 @@ describe("QueryController", () => {
 		expect(status).toHaveBeenCalledWith(200);
 		expect(json).toHaveBeenCalledWith({
 			content: "ok",
+			message: finalMessage,
 			threadId: "thread-1",
 		});
 		expect(next).not.toHaveBeenCalled();

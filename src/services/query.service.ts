@@ -7,6 +7,7 @@ import type {
 } from "@/modules/index.js";
 import { AinHttpError } from "@/types/agent.js";
 import {
+	type CanonicalMessageObject,
 	type MessageObject,
 	MessageRole,
 	type ThreadMetadata,
@@ -116,7 +117,11 @@ export class QueryService {
 			input?: QueryMessageInput;
 		},
 		isA2A?: boolean,
-	): AsyncGenerator<StreamEvent> {
+	): AsyncGenerator<
+		StreamEvent,
+		CanonicalMessageObject | undefined,
+		undefined
+	> {
 		const {
 			type,
 			userId,
@@ -137,7 +142,19 @@ export class QueryService {
 					event: "text_chunk",
 					data: { delta: "개인정보 내역은 처리할 수 없습니다." },
 				};
-				return;
+				return createMessageFromQueryInput({
+					messageId: randomUUID(),
+					role: MessageRole.MODEL,
+					timestamp: Date.now(),
+					input: {
+						parts: [
+							{
+								kind: "text",
+								text: "개인정보 내역은 처리할 수 없습니다.",
+							},
+						],
+					},
+				});
 			}
 		} else if (piiMode === PIIFilterMode.MASK && this.piiService) {
 			query = await this.piiService.filterText(query);
@@ -216,8 +233,12 @@ export class QueryService {
 			needsAggregation,
 		);
 
-		for await (const event of stream) {
-			yield event;
+		while (true) {
+			const result = await stream.next();
+			if (result.done) {
+				return result.value;
+			}
+			yield result.value;
 		}
 	}
 }
