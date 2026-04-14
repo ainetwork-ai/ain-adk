@@ -209,6 +209,9 @@ modelLogger.error('Model API error');
     - Legacy: `{ message: string, threadId?: string, type?: string, displayMessage?: string }`
     - Structured: `{ input: { parts: [...] }, threadId?: string, type?: string, displayMessage?: string }`
   - Response: Server-Sent Events stream with event types:
+    - `message_start`: Canonical response message has started
+    - `part_delta`: Incremental canonical message-part delta
+    - `message_complete`: Canonical response message is complete
     - `text_chunk`: Incremental text response
     - `tool_start`: Tool execution started
     - `tool_output`: Tool execution result
@@ -216,6 +219,7 @@ modelLogger.error('Model API error');
     - `intent_process`: Intent processing status
     - `thinking_process`: Thinking/reasoning steps
     - `error`: Error message
+    - `text_chunk` is currently kept as a compatibility event alongside the newer canonical message events
 
 ### Agent Management
 - `GET /api/threads` - List user threads (userId from auth)
