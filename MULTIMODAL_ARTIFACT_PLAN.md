@@ -36,11 +36,15 @@ Completed groundwork so far:
 - updated new thread message writes to use canonical multipart messages
 - updated intent-trigger history serialization to use shared canonical helpers
 - added tests for legacy-to-canonical message normalization and multipart serialization
+- updated non-stream `/query` responses to include a canonical `message` payload alongside compatibility `content`
+- updated query/fulfillment service boundaries to return the final canonical model message
+- added text-content extraction helpers so compatibility response text can be derived from canonical message parts
+- updated controller tests and README examples for the structured `/query` response shape
 
 Not completed yet:
 
 - full multipart `MessageObject` migration across all runtime paths
-- query/request/response contract refactor
+- full query/request/response contract refactor across streaming and provider-facing paths
 - artifact upload/download runtime APIs
 - stream event redesign
 - A2A artifact reference support
@@ -55,7 +59,8 @@ The current implementation is effectively text-only, even though some types are 
 
 ### Text-only assumptions in the current code
 
-- `/query` and `/query/stream` now accept legacy `message` and structured `input.parts`, but normalize both into a text-first runtime path
+- `/query` and `/query/stream` now accept legacy `message` and structured `input.parts`, but inference still normalizes both into a text-first runtime path
+- non-stream `/query` now returns a canonical `message` object plus compatibility `content`, but `/query/stream` still emits text-first events
 - `QueryService` still processes `query: string` for inference, even though it can now receive structured input for persistence
 - some runtime paths still assume `query: string`, but new message writes now converge on canonical `parts[]` messages
 - thread history is still flattened into strings for intent triggering, but now through a shared multipart-aware serializer
@@ -821,6 +826,9 @@ Completed groundwork in this phase:
 - structured query input types added
 - legacy `message` requests are normalized into structured input at the controller boundary
 - structured `input.parts` requests are accepted and converted into the current text-based query flow
+- non-stream `/query` responses now include a canonical `message` payload plus compatibility `content`
+- `QueryService` and `IntentFulfillService` now return the final canonical model message for non-stream callers
+- final text responses saved by the current fulfillment flow are now persisted and returned through a shared canonical text-message shape
 
 ## Phase 7. Stream Event Redesign
 

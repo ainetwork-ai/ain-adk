@@ -201,7 +201,9 @@ modelLogger.error('Model API error');
   - Request:
     - Legacy: `{ message: string, threadId?: string, type?: string, displayMessage?: string }`
     - Structured: `{ input: { parts: [...] }, threadId?: string, type?: string, displayMessage?: string }`
-  - Response: `{ content: string, threadId: string }`
+  - Response: `{ threadId: string, message?: { messageId, role, schemaVersion, parts, timestamp, metadata? }, content: string }`
+    - `message` is the canonical multipart response message
+    - `content` is kept as a text-only compatibility field derived from the text parts in `message`
 - `POST /query/stream` - Process queries with streaming (SSE)
   - Request:
     - Legacy: `{ message: string, threadId?: string, type?: string, displayMessage?: string }`
