@@ -13,8 +13,10 @@ import {
 	type ThreadObject,
 	ThreadType,
 } from "@/types/memory.js";
+import type { QueryMessageInput } from "@/types/message-input";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
+import { createMessageFromQueryInput } from "@/utils/message";
 import type { IntentFulfillService } from "./intents/fulfill.service";
 import type { IntentTriggerService } from "./intents/trigger.service";
 import { PIIFilterMode, type PIIService } from "./pii.service";
@@ -111,6 +113,7 @@ export class QueryService {
 		queryData: {
 			query: string;
 			displayQuery?: string;
+			input?: QueryMessageInput;
 		},
 		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
@@ -121,7 +124,7 @@ export class QueryService {
 			title: inputTitle,
 			options,
 		} = threadMetadata;
-		const { displayQuery } = queryData;
+		const { displayQuery, input } = queryData;
 		let { query } = queryData;
 		const threadMemory = this.memoryModule.getThreadMemory();
 
@@ -184,12 +187,15 @@ export class QueryService {
 
 		// only add for storage, not for inference
 		await this.addToThreadMessages(userId, threadId, [
-			{
+			createMessageFromQueryInput({
 				messageId: randomUUID(),
 				role: MessageRole.USER,
 				timestamp: Date.now(),
+				input: input ?? {
+					parts: [{ kind: "text", text: query }],
+				},
 				// use displayQuery for better UX in enterprise application
-				content: { type: "text", parts: [displayQuery || query] },
+				displayText: displayQuery,
 				metadata: {
 					intents: triggeredIntents
 						.filter((intent) => !!intent.intent)
@@ -199,7 +205,7 @@ export class QueryService {
 						})),
 					query: !displayQuery ? undefined : query,
 				},
-			},
+			}),
 		]);
 
 		// 3. intent fulfillment (with rewrite step)

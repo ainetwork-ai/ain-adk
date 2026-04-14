@@ -18,6 +18,7 @@ import {
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
+import { createTextMessage } from "@/utils/message";
 import { PIIFilterMode, type PIIService } from "../pii.service";
 import fulfillPrompt from "../prompts/fulfill";
 import toolSelectPrompt from "../prompts/tool-select";
@@ -60,13 +61,13 @@ export class IntentFulfillService {
 		try {
 			const threadMemory = this.memoryModule.getThreadMemory();
 			const { userId, threadId } = thread;
-			const newMessage: MessageObject = {
+			const newMessage: MessageObject = createTextMessage({
 				messageId: randomUUID(),
 				role: params.role,
 				timestamp: Date.now(),
-				content: { type: "text", parts: [params.content] },
+				text: params.content,
 				metadata: params.metadata,
-			};
+			});
 			thread.messages.push(newMessage);
 			await threadMemory?.addMessagesToThread(userId, threadId, [newMessage]);
 		} catch (error) {
@@ -383,13 +384,15 @@ export class IntentFulfillService {
 						}
 					}
 					// Add intermediate result to thread context for next intent
-					thread.messages.push({
-						messageId: randomUUID(),
-						role: MessageRole.MODEL,
-						timestamp: Date.now(),
-						content: { type: "text", parts: [responseText] },
-						metadata: { isThinking: true },
-					});
+					thread.messages.push(
+						createTextMessage({
+							messageId: randomUUID(),
+							role: MessageRole.MODEL,
+							timestamp: Date.now(),
+							text: responseText,
+							metadata: { isThinking: true },
+						}),
+					);
 				}
 			}
 		} else {
@@ -405,13 +408,15 @@ export class IntentFulfillService {
 				// Add previous result to thread context for inference (not stored in memory)
 				if (fulfillmentResults.length > 0) {
 					const lastResult = fulfillmentResults[fulfillmentResults.length - 1];
-					thread.messages.push({
-						messageId: randomUUID(),
-						role: MessageRole.MODEL,
-						timestamp: Date.now(),
-						content: { type: "text", parts: [lastResult.response] },
-						metadata: { isThinking: true },
-					});
+					thread.messages.push(
+						createTextMessage({
+							messageId: randomUUID(),
+							role: MessageRole.MODEL,
+							timestamp: Date.now(),
+							text: lastResult.response,
+							metadata: { isThinking: true },
+						}),
+					);
 				}
 
 				// Yield thinking_process for progress visibility

@@ -67,6 +67,16 @@ describe("QueryController", () => {
 				title: undefined,
 			},
 			{
+				input: {
+					parts: [
+						{ kind: "text", text: "Summarize this report" },
+						{
+							kind: "data",
+							mimeType: "application/json",
+							data: { quarter: "Q1", revenue: 1200 },
+						},
+					],
+				},
 				query:
 					'Summarize this report\napplication/json: {"quarter":"Q1","revenue":1200}',
 				displayQuery: undefined,

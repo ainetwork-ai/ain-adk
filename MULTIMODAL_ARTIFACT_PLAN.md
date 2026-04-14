@@ -14,7 +14,7 @@ Primary goals:
 
 ## Progress Snapshot
 
-Last updated: `2026-04-10`
+Last updated: `2026-04-14`
 
 Completed groundwork so far:
 
@@ -31,10 +31,15 @@ Completed groundwork so far:
 - added tests for query input normalization and controller-level query input adaptation
 - moved repository tests into the top-level `tests/` directory so they are not emitted in build artifacts
 - updated Jest and TypeScript config so test files and Jest globals are recognized correctly
+- introduced canonical multipart message part types alongside legacy message compatibility
+- added shared message normalization and intent-serialization utilities
+- updated new thread message writes to use canonical multipart messages
+- updated intent-trigger history serialization to use shared canonical helpers
+- added tests for legacy-to-canonical message normalization and multipart serialization
 
 Not completed yet:
 
-- multipart `MessageObject` migration
+- full multipart `MessageObject` migration across all runtime paths
 - query/request/response contract refactor
 - artifact upload/download runtime APIs
 - stream event redesign
@@ -50,10 +55,10 @@ The current implementation is effectively text-only, even though some types are 
 
 ### Text-only assumptions in the current code
 
-- `/query` and `/query/stream` accept `message` and `displayMessage` as strings
-- `QueryService` processes `query: string`
-- user and model messages are stored as `content: { type: "text", parts: [...] }`
-- thread history is flattened into strings for intent triggering
+- `/query` and `/query/stream` now accept legacy `message` and structured `input.parts`, but normalize both into a text-first runtime path
+- `QueryService` still processes `query: string` for inference, even though it can now receive structured input for persistence
+- some runtime paths still assume `query: string`, but new message writes now converge on canonical `parts[]` messages
+- thread history is still flattened into strings for intent triggering, but now through a shared multipart-aware serializer
 - stream output is centered on `text_chunk`
 - A2A paths read and write only text parts
 - server middleware only handles JSON and URL-encoded input, not multipart uploads
@@ -154,6 +159,17 @@ Migration note:
 
 - old records may be read through an adapter
 - new writes should converge on a single canonical schema as early as possible
+
+Completed groundwork in this phase:
+
+- added canonical multipart `MessageContentPart` types
+- preserved backward-compatible legacy message reads via a union `MessageObject`
+- added shared helpers for:
+  - canonical message creation
+  - legacy-to-canonical normalization
+  - thread/message serialization for intent prompts
+- updated current `QueryService`, `QueryController`, and fulfillment flows to write new text messages in canonical form
+- replaced direct `content.parts.join(" ")` logic in trigger services with shared serialization utilities
 
 ## 2. Artifact Model
 
