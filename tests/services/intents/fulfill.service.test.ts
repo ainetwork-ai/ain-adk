@@ -1,5 +1,6 @@
 import { setManifest } from "@/config/manifest";
 import { IntentFulfillService } from "@/services/intents/fulfill.service";
+import { CONNECTOR_PROTOCOL_TYPE } from "@/types/connector";
 import { MessageRole, ThreadType } from "@/types/memory";
 
 describe("IntentFulfillService", () => {
@@ -178,6 +179,284 @@ describe("IntentFulfillService", () => {
 			role: MessageRole.MODEL,
 			schemaVersion: 2,
 			parts: [{ kind: "text", text: "second reply" }],
+		});
+	});
+
+	it("emits canonical tool events for MCP tool execution while preserving provider append fallback", async () => {
+		let streamCallCount = 0;
+		const appendMessages = jest.fn();
+		const useTool = jest.fn(async () => "tool result text");
+
+		const service = new IntentFulfillService(
+			{
+				getModel: () => ({
+					generateMessages: () => [],
+					convertToolsToFunctions: () => [],
+					appendMessages,
+					fetchStreamWithContextMessage: async () => {
+						const isToolRequest = streamCallCount === 0;
+						streamCallCount += 1;
+
+						return {
+							async *[Symbol.asyncIterator]() {
+								if (isToolRequest) {
+									yield {
+										delta: {
+											tool_calls: [
+												{
+													index: 0,
+													id: "tool-call-1",
+													function: {
+														name: "search",
+														arguments:
+															'{"query":"hello","thinking_text":"checking sources"}',
+													},
+												},
+											],
+										},
+									};
+									return;
+								}
+
+								yield {
+									delta: {
+										content: "final answer",
+									},
+								};
+							},
+						};
+					},
+				}),
+				getModelOptions: () => undefined,
+			} as any,
+			{
+				getAgentMemory: () => ({
+					getAgentPrompt: async () => "",
+				}),
+				getThreadMemory: () => ({
+					addMessagesToThread: jest.fn(async () => {}),
+				}),
+			} as any,
+			undefined,
+			{
+				getTools: () => [
+					{
+						toolName: "search",
+						connectorName: "test-mcp",
+						protocol: CONNECTOR_PROTOCOL_TYPE.MCP,
+					},
+				],
+				useTool,
+			} as any,
+		);
+
+		const stream = service.intentFulfill(
+			[{ subquery: "find info" }],
+			{
+				userId: "user-1",
+				threadId: "thread-1",
+				type: ThreadType.CHAT,
+				title: "Thread",
+				messages: [],
+			},
+			"find info",
+			false,
+		);
+
+		const events = [];
+		let finalMessage;
+		while (true) {
+			const result = await stream.next();
+			if (result.done) {
+				finalMessage = result.value;
+				break;
+			}
+			events.push(result.value);
+		}
+
+		expect(events.map((event) => event.event)).toEqual([
+			"thinking_process",
+			"thinking_process",
+			"tool_start",
+			"tool_output",
+			"message_start",
+			"part_delta",
+			"text_chunk",
+			"message_complete",
+		]);
+		expect(events[1]).toMatchObject({
+			event: "thinking_process",
+			data: {
+				title: "[Test Agent] MCP 실행: search",
+				description: "checking sources",
+			},
+		});
+		expect(events[2]).toEqual({
+			event: "tool_start",
+			data: {
+				toolCallId: "tool-call-1",
+				protocol: CONNECTOR_PROTOCOL_TYPE.MCP,
+				toolName: "search",
+				toolArgs: {
+					query: "hello",
+					thinking_text: "checking sources",
+				},
+			},
+		});
+		expect(events[3]).toEqual({
+			event: "tool_output",
+			data: {
+				toolCallId: "tool-call-1",
+				protocol: CONNECTOR_PROTOCOL_TYPE.MCP,
+				toolName: "search",
+				result: "tool result text",
+			},
+		});
+		expect(useTool).toHaveBeenCalledWith(
+			expect.objectContaining({ toolName: "search" }),
+			{ query: "hello", thinking_text: "checking sources" },
+		);
+		expect(appendMessages).toHaveBeenCalledWith([], "tool result text");
+		expect(finalMessage).toMatchObject({
+			role: MessageRole.MODEL,
+			schemaVersion: 2,
+			parts: [{ kind: "text", text: "final answer" }],
+		});
+	});
+
+	it("emits canonical tool events for A2A tool execution", async () => {
+		let streamCallCount = 0;
+
+		const service = new IntentFulfillService(
+			{
+				getModel: () => ({
+					generateMessages: () => [],
+					convertToolsToFunctions: () => [],
+					appendMessages: jest.fn(),
+					fetchStreamWithContextMessage: async () => {
+						const isToolRequest = streamCallCount === 0;
+						streamCallCount += 1;
+
+						return {
+							async *[Symbol.asyncIterator]() {
+								if (isToolRequest) {
+									yield {
+										delta: {
+											tool_calls: [
+												{
+													index: 0,
+													id: "a2a-call-1",
+													function: {
+														name: "remote_agent",
+														arguments:
+															'{"thinking_text":"asking remote agent"}',
+													},
+												},
+											],
+										},
+									};
+									return;
+								}
+
+								yield {
+									delta: {
+										content: "answer after remote result",
+									},
+								};
+							},
+						};
+					},
+				}),
+				getModelOptions: () => undefined,
+			} as any,
+			{
+				getAgentMemory: () => ({
+					getAgentPrompt: async () => "",
+				}),
+				getThreadMemory: () => ({
+					addMessagesToThread: jest.fn(async () => {}),
+				}),
+			} as any,
+			{
+				getTools: async () => [
+					{
+						toolName: "remote_agent",
+						connectorName: "remote",
+						protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
+					},
+				],
+				useTool: () =>
+					(async function* () {
+						yield {
+							event: "thinking_process" as const,
+							data: {
+								title: "Remote agent",
+								description: "working",
+							},
+						};
+						return "remote result text";
+					})(),
+			} as any,
+		);
+
+		const stream = service.intentFulfill(
+			[{ subquery: "ask remote" }],
+			{
+				userId: "user-1",
+				threadId: "thread-1",
+				type: ThreadType.CHAT,
+				title: "Thread",
+				messages: [],
+			},
+			"ask remote",
+			false,
+		);
+
+		const events = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(events).toEqual(
+			expect.arrayContaining([
+				{
+					event: "tool_start",
+					data: {
+						toolCallId: "a2a-call-1",
+						protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
+						toolName: "remote_agent",
+						toolArgs: {
+							thinking_text: "asking remote agent",
+						},
+					},
+				},
+				{
+					event: "tool_output",
+					data: {
+						toolCallId: "a2a-call-1",
+						protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
+						toolName: "remote_agent",
+						result: "remote result text",
+					},
+				},
+				{
+					event: "thinking_process",
+					data: {
+						title: "Remote agent",
+						description: "working",
+					},
+				},
+			]),
+		);
+		expect(events.at(-1)).toMatchObject({
+			event: "message_complete",
+			data: {
+				message: {
+					role: MessageRole.MODEL,
+					schemaVersion: 2,
+					parts: [{ kind: "text", text: "answer after remote result" }],
+				},
+			},
 		});
 	});
 });

@@ -12,13 +12,20 @@ import {
 	type CanonicalMessageObject,
 	type FulfillmentResult,
 	type Intent,
+	type MessageContentPart,
 	MessageRole,
 	type ThreadObject,
 	type TriggeredIntent,
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
-import { createTextMessage, extractTextContent } from "@/utils/message";
+import {
+	createTextMessage,
+	createThoughtPart,
+	createToolCallPart,
+	createToolResultPart,
+	extractTextContent,
+} from "@/utils/message";
 import { PIIFilterMode, type PIIService } from "../pii.service";
 import fulfillPrompt from "../prompts/fulfill";
 import toolSelectPrompt from "../prompts/tool-select";
@@ -122,7 +129,7 @@ export class IntentFulfillService {
 		this.a2aModule &&
 			tools.push(...(await this.a2aModule.getTools(toolPrompt)));
 
-		const processList: string[] = [];
+		const toolTraceParts: MessageContentPart[] = [];
 
 		while (true) {
 			const functions = modelInstance.convertToolsToFunctions(tools);
@@ -187,13 +194,33 @@ export class IntentFulfillService {
 					}
 
 					const toolArgs = JSON.parse(toolCall.function.arguments);
-					const thinkData = {
+					const toolCallId = toolCall.id || randomUUID();
+					const thoughtPart = createThoughtPart({
 						title: `[${getManifest().name}] ${selectedTool.protocol} 실행: ${toolName}`,
 						description: `${toolArgs.thinking_text || ""}`,
-					};
+					});
+					const toolCallPart = createToolCallPart({
+						toolCallId,
+						toolName,
+						args: toolArgs,
+					});
+					toolTraceParts.push(thoughtPart, toolCallPart);
+
 					yield {
 						event: "thinking_process",
-						data: thinkData,
+						data: {
+							title: thoughtPart.title,
+							description: thoughtPart.description ?? "",
+						},
+					};
+					yield {
+						event: "tool_start",
+						data: {
+							toolCallId: toolCallPart.toolCallId,
+							protocol: selectedTool.protocol,
+							toolName: toolCallPart.toolName,
+							toolArgs: toolCallPart.args,
+						},
 					};
 
 					let toolResult = "";
@@ -232,7 +259,22 @@ export class IntentFulfillService {
 
 					loggers.intent.debug("Tool Result", { toolResult });
 
-					processList.push(toolResult);
+					const toolResultPart = createToolResultPart({
+						toolCallId: toolCallPart.toolCallId,
+						toolName: toolCallPart.toolName,
+						result: toolResult,
+					});
+					toolTraceParts.push(toolResultPart);
+					yield {
+						event: "tool_output",
+						data: {
+							toolCallId: toolResultPart.toolCallId,
+							protocol: selectedTool.protocol,
+							toolName: toolResultPart.toolName,
+							result: toolResultPart.result,
+						},
+					};
+
 					modelInstance.appendMessages(messages, toolResult);
 				}
 			} else {
@@ -242,7 +284,9 @@ export class IntentFulfillService {
 
 		loggers.intent.debug("Intent fulfillment completed", {
 			threadId: thread.threadId,
-			toolCallsExecuted: processList.length,
+			toolCallsExecuted: toolTraceParts.filter(
+				(part) => part.kind === "tool-result",
+			).length,
 			intentName: intent?.name,
 		});
 	}
