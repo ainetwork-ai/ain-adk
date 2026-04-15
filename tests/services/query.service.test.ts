@@ -67,9 +67,11 @@ describe("QueryService", () => {
 			},
 		});
 
-		const createdThreadId = first.value.event === "thread_id"
-			? first.value.data.threadId
-			: undefined;
+		if (first.done || first.value.event !== "thread_id") {
+			throw new Error("Expected initial thread_id event");
+		}
+
+		const createdThreadId = first.value.data.threadId;
 		expect(createdThreadId).toBeTruthy();
 		expect(createThread).toHaveBeenCalledWith(
 			ThreadType.CHAT,

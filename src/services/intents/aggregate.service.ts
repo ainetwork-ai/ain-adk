@@ -1,8 +1,26 @@
 import { getManifest } from "@/config/manifest";
 import type { MemoryModule, ModelModule } from "@/modules";
-import type { FulfillmentResult, ThreadType } from "@/types/memory";
+import {
+	type FulfillmentResult,
+	MessageRole,
+	type ThreadType,
+} from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
+import { createTextMessage, serializeMessageForIntent } from "@/utils/message";
 import aggregatePrompts from "../prompts/aggregate";
+
+function serializeFulfillmentResult(result: FulfillmentResult): string {
+	const responseMessage =
+		result.responseMessage ??
+		createTextMessage({
+			messageId: `legacy-${result.subquery}`,
+			role: MessageRole.MODEL,
+			timestamp: 0,
+			text: result.response,
+		});
+
+	return serializeMessageForIntent(responseMessage);
+}
 
 /**
  * Service for determining whether multiple fulfillment results need to be
@@ -31,7 +49,7 @@ export class AggregateService {
 	): AsyncGenerator<StreamEvent> {
 		// Single result doesn't need aggregation
 		if (results.length <= 1) {
-			const response = results[0]?.response ?? "";
+			const response = results[0] ? serializeFulfillmentResult(results[0]) : "";
 			if (response) {
 				yield {
 					event: "text_chunk",
@@ -105,8 +123,8 @@ export class AggregateService {
 	): string {
 		const resultsText = results
 			.map(
-				(r, i) =>
-					`[Task ${i + 1}] ${r.subquery}\n[Response ${i + 1}] ${r.response}`,
+				(result, i) =>
+					`[Task ${i + 1}] ${result.subquery}\n[Response ${i + 1}] ${serializeFulfillmentResult(result)}`,
 			)
 			.join("\n\n---\n\n");
 

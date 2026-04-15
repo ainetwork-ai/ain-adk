@@ -201,7 +201,12 @@ export type FulfillmentResult = {
 	intent?: Intent;
 	/** Action plan description */
 	actionPlan?: string;
-	/** Response text generated for this intent */
+	/** Canonical model message generated for this intent */
+	responseMessage?: CanonicalMessageObject;
+	/** Response text generated for this intent.
+	 *
+	 * @deprecated Use responseMessage with the shared message serializers instead.
+	 */
 	response: string;
 };
 
