@@ -121,10 +121,11 @@ export class IntentFulfillService {
 
 		while (true) {
 			const functions = modelInstance.convertToolsToFunctions(tools);
-			const options =
+			const toolChoice =
 				isFirstCall && intent?.toolChoice === "required" && functions.length > 0
-					? { ...modelOptions, toolChoice: "required" as const }
-					: modelOptions;
+					? ("required" as const)
+					: ("auto" as const);
+			const options = { ...modelOptions, toolChoice };
 			const responseStream = await modelInstance.fetchStreamWithContextMessage(
 				messages,
 				functions,
