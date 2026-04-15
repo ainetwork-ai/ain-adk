@@ -1,8 +1,30 @@
-import type { ThreadMetadata } from "@/types/memory.js";
+import type {
+	CanonicalMessageObject,
+	MessageRole,
+	TextContentPart,
+	ThreadMetadata,
+} from "@/types/memory.js";
 import type { CONNECTOR_PROTOCOL_TYPE } from "./connector";
 
 export type StreamEvent =
 	| { event: "text_chunk"; data: { delta: string } }
+	| {
+			event: "message_start";
+			data: { messageId: string; role: MessageRole };
+	  }
+	| {
+			event: "part_delta";
+			data: {
+				messageId: string;
+				partIndex: number;
+				part: Pick<TextContentPart, "kind">;
+				delta: string;
+			};
+	  }
+	| {
+			event: "message_complete";
+			data: { message: CanonicalMessageObject };
+	  }
 	| {
 			event: "tool_start";
 			data: {

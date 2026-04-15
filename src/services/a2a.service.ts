@@ -7,6 +7,7 @@ import type {
 } from "@a2a-js/sdk/server";
 import type { ThreadType } from "@/types/memory.js";
 import { loggers } from "@/utils/logger.js";
+import { extractTextContent } from "@/utils/message.js";
 import type { QueryService } from "./query.service.js";
 
 /**
@@ -112,6 +113,7 @@ export class A2AService implements AgentExecutor {
 
 		try {
 			let finalResponseText = "";
+			let sawCompatibilityTextChunk = false;
 			for await (const event of stream) {
 				if (this.canceledTasks.has(taskId)) {
 					loggers.server.info(`Task ${taskId} was canceled.`);
@@ -125,7 +127,13 @@ export class A2AService implements AgentExecutor {
 				}
 
 				if (event.event === "text_chunk") {
+					sawCompatibilityTextChunk = true;
 					finalResponseText += event.data.delta;
+				} else if (
+					event.event === "message_complete" &&
+					!sawCompatibilityTextChunk
+				) {
+					finalResponseText = extractTextContent(event.data.message);
 				} else if (event.event === "thinking_process") {
 					const thinkingProcessUpdate = this.createTaskStatusUpdateEvent(
 						taskId,

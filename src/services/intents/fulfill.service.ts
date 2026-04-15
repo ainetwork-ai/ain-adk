@@ -274,8 +274,38 @@ export class IntentFulfillService {
 			startTime: new Date(streamStartTime).toISOString(),
 		});
 
+		const finalMessageId = randomUUID();
 		let finalResponseText = "";
 		let collectionName: string | undefined;
+		let finalMessageStarted = false;
+
+		const emitFinalResponseEvent = function* (
+			event: StreamEvent,
+		): Generator<StreamEvent> {
+			if (event.event === "text_chunk" && event.data.delta) {
+				if (!finalMessageStarted) {
+					finalMessageStarted = true;
+					yield {
+						event: "message_start",
+						data: {
+							messageId: finalMessageId,
+							role: MessageRole.MODEL,
+						},
+					};
+				}
+				yield {
+					event: "part_delta",
+					data: {
+						messageId: finalMessageId,
+						partIndex: 0,
+						part: { kind: "text" },
+						delta: event.data.delta,
+					},
+				};
+			}
+
+			yield event;
+		};
 
 		if (intents.length <= 1) {
 			// Single intent: stream response directly
@@ -312,7 +342,7 @@ export class IntentFulfillService {
 				} else if (event.event === "collection_name") {
 					collectionName = event.data.name;
 				}
-				yield event;
+				yield* emitFinalResponseEvent(event);
 			}
 		} else if (!needsAggregation) {
 			// Multiple intents but no aggregation needed: collect intermediate results, stream only last
@@ -347,7 +377,7 @@ export class IntentFulfillService {
 						} else if (event.event === "collection_name") {
 							collectionName = event.data.name;
 						}
-						yield event;
+						yield* emitFinalResponseEvent(event);
 					}
 				} else {
 					// Collect intermediate results without streaming text_chunk
@@ -444,7 +474,7 @@ export class IntentFulfillService {
 				if (event.event === "text_chunk" && event.data.delta) {
 					finalResponseText += event.data.delta;
 				}
-				yield event;
+				yield* emitFinalResponseEvent(event);
 			}
 		}
 
@@ -455,7 +485,7 @@ export class IntentFulfillService {
 
 		// Save final response to memory
 		const finalMessage = createTextMessage({
-			messageId: randomUUID(),
+			messageId: finalMessageId,
 			role: MessageRole.MODEL,
 			timestamp: Date.now(),
 			text: finalResponseText,
@@ -480,6 +510,20 @@ export class IntentFulfillService {
 			duration: `${streamDuration}ms`,
 			endTime: new Date(streamEndTime).toISOString(),
 		});
+
+		if (!finalMessageStarted) {
+			yield {
+				event: "message_start",
+				data: {
+					messageId: finalMessageId,
+					role: MessageRole.MODEL,
+				},
+			};
+		}
+		yield {
+			event: "message_complete",
+			data: { message: finalMessage },
+		};
 
 		return finalMessage;
 	}

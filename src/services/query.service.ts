@@ -138,11 +138,7 @@ export class QueryService {
 		if (piiMode === PIIFilterMode.REJECT && this.piiService) {
 			const hasPII = await this.piiService.containsPII(query);
 			if (hasPII) {
-				yield {
-					event: "text_chunk",
-					data: { delta: "개인정보 내역은 처리할 수 없습니다." },
-				};
-				return createMessageFromQueryInput({
+				const rejectedMessage = createMessageFromQueryInput({
 					messageId: randomUUID(),
 					role: MessageRole.MODEL,
 					timestamp: Date.now(),
@@ -155,6 +151,33 @@ export class QueryService {
 						],
 					},
 				});
+				yield {
+					event: "message_start",
+					data: {
+						messageId: rejectedMessage.messageId,
+						role: rejectedMessage.role,
+					},
+				};
+				yield {
+					event: "part_delta",
+					data: {
+						messageId: rejectedMessage.messageId,
+						partIndex: 0,
+						part: { kind: "text" },
+						delta: "개인정보 내역은 처리할 수 없습니다.",
+					},
+				};
+				yield {
+					event: "text_chunk",
+					data: { delta: "개인정보 내역은 처리할 수 없습니다." },
+				};
+				yield {
+					event: "message_complete",
+					data: {
+						message: rejectedMessage,
+					},
+				};
+				return rejectedMessage;
 			}
 		} else if (piiMode === PIIFilterMode.MASK && this.piiService) {
 			query = await this.piiService.filterText(query);

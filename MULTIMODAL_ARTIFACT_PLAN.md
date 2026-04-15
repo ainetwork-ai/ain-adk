@@ -40,6 +40,10 @@ Completed groundwork so far:
 - updated query/fulfillment service boundaries to return the final canonical model message
 - added text-content extraction helpers so compatibility response text can be derived from canonical message parts
 - updated controller tests and README examples for the structured `/query` response shape
+- added canonical streaming message events: `message_start`, `part_delta`, and `message_complete`
+- kept `text_chunk` during the transition as a compatibility stream event for existing consumers
+- updated A2A consumption to fall back to canonical `message_complete` when compatibility text chunks are absent
+- added tests covering canonical stream event emission and A2A compatibility fallback
 
 Not completed yet:
 
@@ -60,7 +64,8 @@ The current implementation is effectively text-only, even though some types are 
 ### Text-only assumptions in the current code
 
 - `/query` and `/query/stream` now accept legacy `message` and structured `input.parts`, but inference still normalizes both into a text-first runtime path
-- non-stream `/query` now returns a canonical `message` object plus compatibility `content`, but `/query/stream` still emits text-first events
+- non-stream `/query` now returns a canonical `message` object plus compatibility `content`
+- `/query/stream` now emits canonical message lifecycle events, but still duplicates text through compatibility `text_chunk`
 - `QueryService` still processes `query: string` for inference, even though it can now receive structured input for persistence
 - some runtime paths still assume `query: string`, but new message writes now converge on canonical `parts[]` messages
 - thread history is still flattened into strings for intent triggering, but now through a shared multipart-aware serializer
@@ -837,6 +842,14 @@ Completed groundwork in this phase:
 - add support for artifact readiness signaling
 
 This phase should land before downstream consumers such as A2A are updated.
+
+Completed groundwork in this phase:
+
+- added `message_start`, `part_delta`, and `message_complete` stream events for canonical text-message progression
+- updated current fulfillment flows to emit canonical stream events alongside compatibility `text_chunk`
+- updated `QueryService` PII-rejection streaming path to emit canonical stream events
+- updated A2A consumption to support canonical `message_complete` as a fallback completion signal
+- added targeted tests for canonical stream event emission and A2A compatibility
 
 ## Phase 8. Intent and Fulfillment Refactor
 
