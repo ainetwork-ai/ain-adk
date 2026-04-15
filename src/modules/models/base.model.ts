@@ -5,6 +5,7 @@ import type { LLMStream } from "@/types/stream.js";
 export type ModelFetchOptions = {
 	reasoning?: "none" | "minimal" | "low" | "medium" | "high";
 	verbosity?: "low" | "medium" | "high";
+	toolChoice?: "auto" | "required";
 };
 
 /**

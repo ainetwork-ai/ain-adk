@@ -117,14 +117,20 @@ export class IntentFulfillService {
 			tools.push(...(await this.a2aModule.getTools(toolPrompt)));
 
 		const processList: string[] = [];
+		let isFirstCall = true;
 
 		while (true) {
 			const functions = modelInstance.convertToolsToFunctions(tools);
+			const options =
+				isFirstCall && intent?.toolChoice === "required" && functions.length > 0
+					? { ...modelOptions, toolChoice: "required" as const }
+					: modelOptions;
 			const responseStream = await modelInstance.fetchStreamWithContextMessage(
 				messages,
 				functions,
-				modelOptions,
+				options,
 			);
+			isFirstCall = false;
 
 			const assembledToolCalls: {
 				id: string;
