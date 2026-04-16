@@ -251,6 +251,28 @@ export function createThoughtPart(params: {
 	};
 }
 
+export function createToolMessage(params: {
+	toolCallPart: ToolCallContentPart;
+	toolResultPart: ToolResultContentPart;
+	thoughtPart?: ThoughtContentPart;
+	messageId?: string;
+	timestamp?: number;
+	metadata?: Record<string, unknown>;
+}): CanonicalMessageObject {
+	return {
+		messageId: params.messageId ?? randomUUID(),
+		role: MessageRole.TOOL,
+		timestamp: params.timestamp ?? Date.now(),
+		metadata: params.metadata,
+		schemaVersion: 2,
+		parts: [
+			...(params.thoughtPart ? [params.thoughtPart] : []),
+			params.toolCallPart,
+			params.toolResultPart,
+		],
+	};
+}
+
 function queryTextPartToContentPart(part: QueryTextInputPart): TextContentPart {
 	return { kind: "text", text: part.text };
 }

@@ -17,6 +17,8 @@ export type ModelGenerateMessagesParams = {
 	systemPrompt?: string;
 };
 
+export type ModelAppendMessageInput = CanonicalMessageObject;
+
 /**
  * Abstract base class for AI model implementations.
  *
@@ -42,9 +44,14 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	 * Appends a new message to the existing message array.
 	 *
 	 * @param messages - Existing message array to expand
-	 * @param message - New message content to append
+	 * @param message - Text fallback for providers that have not migrated to structured append input yet
+	 * @param input - Canonical multipart message for providers that opt into structured append handling
 	 */
-	abstract appendMessages(messages: MessageType[], message: string): void;
+	abstract appendMessages(
+		messages: MessageType[],
+		message: string,
+		input?: ModelAppendMessageInput,
+	): void;
 
 	/**
 	 * Converts protocol-agnostic tools to model-specific function format.

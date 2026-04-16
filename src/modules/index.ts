@@ -14,6 +14,7 @@ export type {
 export { MemoryModule } from "./memory/memory.module.js";
 export {
 	BaseModel,
+	type ModelAppendMessageInput,
 	type ModelFetchOptions,
 	type ModelGenerateMessagesParams,
 } from "./models/base.model.js";

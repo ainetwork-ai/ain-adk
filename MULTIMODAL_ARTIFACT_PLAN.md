@@ -56,6 +56,10 @@ Completed groundwork so far:
 - added model input message helpers for text and structured query input
 - updated internal model calls to pass both compatibility `query` text and canonical `input` messages
 - added tests covering structured model input propagation without changing provider-facing fallback behavior
+- added an optional structured append bridge to `BaseModel.appendMessages`
+- added a canonical `TOOL` message helper for tool-call/tool-result append payloads
+- updated fulfillment tool result append calls to pass both compatibility text and canonical `TOOL` messages
+- added MCP and A2A tests covering structured append payloads while preserving string fallback behavior
 
 Not completed yet:
 
@@ -898,8 +902,12 @@ Completed groundwork in this phase:
 - added shared helpers for creating canonical model input messages from text and structured query input
 - updated title generation, PII, intent trigger, fulfillment, and aggregation model calls to include canonical `input`
 - preserved the existing `query` fallback field so current provider implementations can keep using string-only input
-- preserved `BaseModel.appendMessages(messages, message: string)` for tool-result fallback pending a later provider migration
 - added focused tests for structured query propagation, fulfillment model input, aggregate model input, and model input helper construction
+- introduced optional structured append input on `BaseModel.appendMessages` while preserving the required string fallback
+- exported the structured append input type from the public module surface
+- added a shared helper for constructing canonical `TOOL` messages from thought, tool-call, and tool-result parts
+- updated MCP and A2A fulfillment tool append calls to pass canonical `TOOL` messages as opt-in provider input
+- added focused tests for MCP and A2A structured append payloads plus canonical tool message helper construction
 
 Why this comes after service refactors:
 

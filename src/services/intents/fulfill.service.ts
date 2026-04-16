@@ -24,6 +24,7 @@ import {
 	createTextMessage,
 	createThoughtPart,
 	createToolCallPart,
+	createToolMessage,
 	createToolResultPart,
 	extractTextContent,
 } from "@/utils/message";
@@ -285,7 +286,15 @@ export class IntentFulfillService {
 						},
 					};
 
-					modelInstance.appendMessages(messages, toolResult);
+					modelInstance.appendMessages(
+						messages,
+						toolResult,
+						createToolMessage({
+							thoughtPart,
+							toolCallPart,
+							toolResultPart,
+						}),
+					);
 				}
 			} else {
 				break;
