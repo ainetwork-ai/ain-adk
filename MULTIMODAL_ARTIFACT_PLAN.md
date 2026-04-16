@@ -48,6 +48,10 @@ Completed groundwork so far:
 - updated aggregation prompt construction to use shared canonical message serialization
 - updated multi-intent intermediate fulfillment context to reuse canonical model messages
 - added tests covering canonical fulfillment results, aggregation serialization, and stream compatibility
+- added canonical tool/thought message part creation helpers
+- updated fulfillment tool execution to emit `tool_start` and `tool_output` stream events
+- kept provider-facing tool result fallback through existing `appendMessages(..., toolResult)` behavior
+- added MCP and A2A tool execution tests covering canonical tool events and compatibility behavior
 
 Not completed yet:
 
@@ -870,6 +874,11 @@ Completed groundwork in this phase:
 - updated aggregation to serialize fulfillment `responseMessage` values through shared message serializers
 - preserved legacy aggregation fallback behavior for callers that still provide only `response`
 - added focused tests for canonical fulfillment stream completion, intermediate context, and aggregation serialization
+- added shared helpers for canonical `tool-call`, `tool-result`, and `thought` parts
+- updated MCP and A2A tool execution flows to emit canonical `tool_start` and `tool_output` stream events
+- preserved existing `thinking_process` events as compatibility/UX progress signals
+- preserved provider-facing string fallback by continuing to append tool results through `BaseModel.appendMessages`
+- added focused tests for MCP and A2A tool event emission plus tool part helper construction
 
 ## Phase 9. Model Abstraction Migration
 

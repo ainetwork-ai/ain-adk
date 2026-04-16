@@ -181,6 +181,43 @@ export function createTextMessage(params: {
 	};
 }
 
+export function createToolCallPart(params: {
+	toolCallId: string;
+	toolName: string;
+	args: unknown;
+}): ToolCallContentPart {
+	return {
+		kind: "tool-call",
+		toolCallId: params.toolCallId,
+		toolName: params.toolName,
+		args: params.args,
+	};
+}
+
+export function createToolResultPart(params: {
+	toolCallId: string;
+	toolName: string;
+	result: unknown;
+}): ToolResultContentPart {
+	return {
+		kind: "tool-result",
+		toolCallId: params.toolCallId,
+		toolName: params.toolName,
+		result: params.result,
+	};
+}
+
+export function createThoughtPart(params: {
+	title: string;
+	description?: string;
+}): ThoughtContentPart {
+	return {
+		kind: "thought",
+		title: params.title,
+		description: params.description,
+	};
+}
+
 function queryTextPartToContentPart(part: QueryTextInputPart): TextContentPart {
 	return { kind: "text", text: part.text };
 }

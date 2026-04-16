@@ -2,6 +2,9 @@ import { MessageRole, type MessageObject, ThreadType } from "@/types/memory";
 import {
 	createMessageFromQueryInput,
 	createTextMessage,
+	createThoughtPart,
+	createToolCallPart,
+	createToolResultPart,
 	normalizeMessageObject,
 	serializeMessageForIntent,
 	serializeThreadForIntent,
@@ -130,5 +133,42 @@ describe("message utilities", () => {
 		expect(serializeMessageForIntent(message)).toBe(
 			'Collecting data\nFetching the latest metrics.\napplication/json: {"total":3}',
 		);
+	});
+
+	it("creates canonical tool and thought parts", () => {
+		expect(
+			createToolCallPart({
+				toolCallId: "call-1",
+				toolName: "search",
+				args: { query: "hello" },
+			}),
+		).toEqual({
+			kind: "tool-call",
+			toolCallId: "call-1",
+			toolName: "search",
+			args: { query: "hello" },
+		});
+		expect(
+			createToolResultPart({
+				toolCallId: "call-1",
+				toolName: "search",
+				result: "found it",
+			}),
+		).toEqual({
+			kind: "tool-result",
+			toolCallId: "call-1",
+			toolName: "search",
+			result: "found it",
+		});
+		expect(
+			createThoughtPart({
+				title: "Running search",
+				description: "Checking available sources.",
+			}),
+		).toEqual({
+			kind: "thought",
+			title: "Running search",
+			description: "Checking available sources.",
+		});
 	});
 });
