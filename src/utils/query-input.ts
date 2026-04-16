@@ -4,11 +4,14 @@ import type {
 	NormalizedQueryRequest,
 	QueryArtifactInputPart,
 	QueryDataInputPart,
-	QueryInputPart,
 	QueryMessageInput,
 	QueryRequestInput,
 	QueryTextInputPart,
 } from "@/types/message-input";
+import {
+	createModelInputMessageFromQueryInput,
+	serializeMessageForModelFallback,
+} from "./message";
 
 type NormalizeQueryInputOptions = {
 	artifactModuleConfigured: boolean;
@@ -16,47 +19,6 @@ type NormalizeQueryInputOptions = {
 
 function isObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
-}
-
-function serializeArtifactPart(part: QueryArtifactInputPart): string {
-	if (part.previewText?.trim()) {
-		return part.previewText;
-	}
-
-	const artifactLabel = part.name || part.artifactId;
-	const metadata: string[] = [];
-	if (part.mimeType) {
-		metadata.push(part.mimeType);
-	}
-	if (typeof part.size === "number") {
-		metadata.push(`${part.size} bytes`);
-	}
-
-	return metadata.length > 0
-		? `[Artifact: ${artifactLabel} (${metadata.join(", ")})]`
-		: `[Artifact: ${artifactLabel}]`;
-}
-
-function serializeDataPart(part: QueryDataInputPart): string {
-	if (typeof part.data === "string") {
-		return part.data;
-	}
-
-	try {
-		return `${part.mimeType}: ${JSON.stringify(part.data)}`;
-	} catch {
-		return `[Data: ${part.mimeType}]`;
-	}
-}
-
-function serializePart(part: QueryInputPart): string {
-	if (part.kind === "text") {
-		return part.text;
-	}
-	if (part.kind === "artifact") {
-		return serializeArtifactPart(part);
-	}
-	return serializeDataPart(part);
 }
 
 function validateTextPart(part: Record<string, unknown>): QueryTextInputPart {
@@ -230,10 +192,11 @@ export function normalizeQueryRequest(
 	}
 
 	const input = validateStructuredInput(body.input, options);
-	const query = input.parts
-		.map(serializePart)
-		.filter((value) => value.trim() !== "")
-		.join("\n");
+	const query = serializeMessageForModelFallback(
+		createModelInputMessageFromQueryInput({
+			input,
+		}),
+	);
 
 	return {
 		input,
