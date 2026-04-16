@@ -12,6 +12,14 @@ describe("QueryService", () => {
 		}));
 		const addMessagesToThread = jest.fn(async () => {});
 		const getThread = jest.fn(async () => undefined);
+		const intentFulfill = jest.fn(async function* () {
+			return createTextMessage({
+				messageId: "model-msg-1",
+				role: MessageRole.MODEL,
+				timestamp: 456,
+				text: "hi there",
+			});
+		});
 
 		const queryService = new QueryService(
 			{
@@ -35,14 +43,7 @@ describe("QueryService", () => {
 				}),
 			} as any,
 			{
-				intentFulfill: async function* () {
-					return createTextMessage({
-						messageId: "model-msg-1",
-						role: MessageRole.MODEL,
-						timestamp: 456,
-						text: "hi there",
-					});
-				},
+				intentFulfill,
 			} as any,
 		);
 
@@ -103,6 +104,102 @@ describe("QueryService", () => {
 					parts: [{ kind: "text", text: "hello there" }],
 				}),
 			],
+		);
+		expect(intentFulfill).toHaveBeenCalledWith(
+			[{ subquery: "hello there" }],
+			expect.objectContaining({ threadId: createdThreadId }),
+			"hello there",
+			false,
+			expect.objectContaining({
+				role: MessageRole.USER,
+				schemaVersion: 2,
+				parts: [{ kind: "text", text: "hello there" }],
+			}),
+		);
+	});
+
+	it("passes structured query input to fulfillment as canonical model input", async () => {
+		const intentFulfill = jest.fn(async function* () {
+			return createTextMessage({
+				messageId: "model-msg-2",
+				role: MessageRole.MODEL,
+				timestamp: 789,
+				text: "done",
+			});
+		});
+
+		const queryService = new QueryService(
+			{
+				getModel: () => ({
+					generateMessages: () => [],
+					fetch: async () => ({ content: "New Chat" }),
+				}),
+				getModelOptions: () => undefined,
+			} as any,
+			{
+				getThreadMemory: () => ({
+					getThread: jest.fn(async () => ({
+						type: ThreadType.CHAT,
+						userId: "user-1",
+						threadId: "thread-1",
+						title: "Thread",
+						messages: [],
+					})),
+					addMessagesToThread: jest.fn(async () => {}),
+				}),
+			} as any,
+			{
+				intentTriggering: async () => ({
+					intents: [{ subquery: "summarize" }],
+					needsAggregation: false,
+				}),
+			} as any,
+			{
+				intentFulfill,
+			} as any,
+		);
+
+		const stream = queryService.handleQuery(
+			{
+				type: ThreadType.CHAT,
+				userId: "user-1",
+				threadId: "thread-1",
+			},
+			{
+				query: "Summarize this\nfile preview",
+				input: {
+					parts: [
+						{ kind: "text", text: "Summarize this" },
+						{
+							kind: "artifact",
+							artifactId: "art-1",
+							previewText: "file preview",
+						},
+					],
+				},
+			},
+		);
+
+		await expect(stream.next()).resolves.toMatchObject({
+			done: true,
+		});
+		expect(intentFulfill).toHaveBeenCalledWith(
+			[{ subquery: "summarize" }],
+			expect.objectContaining({ threadId: "thread-1" }),
+			"Summarize this\nfile preview",
+			false,
+			expect.objectContaining({
+				role: MessageRole.USER,
+				schemaVersion: 2,
+				parts: [
+					{ kind: "text", text: "Summarize this" },
+					expect.objectContaining({
+						kind: "artifact",
+						artifactId: "art-1",
+						previewText: "file preview",
+					}),
+				],
+			}),
 		);
 	});
 });

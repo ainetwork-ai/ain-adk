@@ -6,7 +6,11 @@ import {
 	type ThreadType,
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
-import { createTextMessage, serializeMessageForIntent } from "@/utils/message";
+import {
+	createModelInputMessage,
+	createTextMessage,
+	serializeMessageForIntent,
+} from "@/utils/message";
 import aggregatePrompts from "../prompts/aggregate";
 
 function serializeFulfillmentResult(result: FulfillmentResult): string {
@@ -94,6 +98,7 @@ export class AggregateService {
 
 		const messages = modelInstance.generateMessages({
 			query,
+			input: createModelInputMessage({ text: query }),
 			thread: emptyThread,
 			systemPrompt: await aggregatePrompts(this.memoryModule),
 		});

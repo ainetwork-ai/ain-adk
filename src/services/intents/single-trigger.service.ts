@@ -5,7 +5,10 @@ import type {
 	TriggeredIntent,
 } from "@/types/memory";
 import { loggers } from "@/utils/logger";
-import { serializeThreadForIntent } from "@/utils/message";
+import {
+	createModelInputMessage,
+	serializeThreadForIntent,
+} from "@/utils/message";
 import singleTriggerPrompt from "../prompts/single-trigger";
 
 /**
@@ -75,6 +78,7 @@ Based on the above conversation history, analyze the user question and identify 
 
 		const messages = modelInstance.generateMessages({
 			query: triggerMessage,
+			input: createModelInputMessage({ text: triggerMessage }),
 			systemPrompt,
 		});
 
@@ -87,7 +91,7 @@ Based on the above conversation history, analyze the user question and identify 
 		let parsed: { intentName?: string; actionPlan?: string };
 		try {
 			parsed = JSON.parse(response.content);
-		} catch (error: unknown) {
+		} catch (_error: unknown) {
 			return { intents: [{ subquery: query }], needsAggregation: false };
 		}
 

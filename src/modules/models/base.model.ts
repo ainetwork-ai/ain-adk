@@ -1,11 +1,20 @@
 import type { ConnectorTool, FetchResponse } from "@/types/connector.js";
-import type { ThreadObject } from "@/types/memory.js";
+import type { CanonicalMessageObject, ThreadObject } from "@/types/memory.js";
 import type { LLMStream } from "@/types/stream.js";
 
 export type ModelFetchOptions = {
 	reasoning?: "none" | "minimal" | "low" | "medium" | "high";
 	verbosity?: "low" | "medium" | "high";
 	toolChoice?: "auto" | "required";
+};
+
+export type ModelGenerateMessagesParams = {
+	/** Text fallback for providers that have not migrated to structured input yet */
+	query: string;
+	/** Canonical multipart input for providers that opt into structured handling */
+	input?: CanonicalMessageObject;
+	thread?: ThreadObject;
+	systemPrompt?: string;
 };
 
 /**
@@ -27,11 +36,7 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	 * @param systemPrompt - Optional system prompt to set context
 	 * @returns Array of messages formatted for the specific model API
 	 */
-	abstract generateMessages(params: {
-		query: string;
-		thread?: ThreadObject;
-		systemPrompt?: string;
-	}): MessageType[];
+	abstract generateMessages(params: ModelGenerateMessagesParams): MessageType[];
 
 	/**
 	 * Appends a new message to the existing message array.

@@ -20,6 +20,7 @@ import {
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
 import {
+	createModelInputMessage,
 	createTextMessage,
 	createThoughtPart,
 	createToolCallPart,
@@ -107,6 +108,7 @@ export class IntentFulfillService {
 		query: string,
 		thread: ThreadObject,
 		intent?: Intent,
+		input?: CanonicalMessageObject,
 	): AsyncGenerator<StreamEvent, void, undefined> {
 		const prompt = await fulfillPrompt(this.memoryModule, intent);
 
@@ -114,6 +116,7 @@ export class IntentFulfillService {
 		const modelOptions = this.modelModule.getModelOptions();
 		const messages = modelInstance.generateMessages({
 			query,
+			input: input ?? createModelInputMessage({ text: query }),
 			thread,
 			systemPrompt: prompt.trim(),
 		});
@@ -305,6 +308,7 @@ export class IntentFulfillService {
 	private getIntentStream(
 		triggeredIntent: TriggeredIntent,
 		thread: ThreadObject,
+		input?: CanonicalMessageObject,
 	): AsyncGenerator<StreamEvent> | undefined {
 		const { subquery = "", intent } = triggeredIntent;
 
@@ -319,7 +323,7 @@ export class IntentFulfillService {
 			}
 		}
 
-		return this.intentFulfilling(subquery, thread, intent);
+		return this.intentFulfilling(subquery, thread, intent, input);
 	}
 
 	/**
@@ -342,6 +346,7 @@ export class IntentFulfillService {
 		thread: ThreadObject,
 		originalQuery: string,
 		needsAggregation: boolean,
+		input?: CanonicalMessageObject,
 	): AsyncGenerator<
 		StreamEvent,
 		CanonicalMessageObject | undefined,
@@ -411,7 +416,7 @@ export class IntentFulfillService {
 			};
 
 			// Get the stream for this intent
-			const stream = this.getIntentStream(triggeredIntent, thread);
+			const stream = this.getIntentStream(triggeredIntent, thread, input);
 			if (!stream) {
 				return;
 			}

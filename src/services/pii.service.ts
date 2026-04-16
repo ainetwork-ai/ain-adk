@@ -1,5 +1,6 @@
 import type { MemoryModule, ModelModule } from "@/modules/index.js";
 import { loggers } from "@/utils/logger.js";
+import { createModelInputMessage } from "@/utils/message.js";
 import piiDetectPrompt from "./prompts/pii-detect.js";
 import piiFilterPrompt from "./prompts/pii-filter.js";
 
@@ -37,6 +38,7 @@ export class PIIService {
 			const modelOptions = this.modelModule.getModelOptions();
 			const messages = modelInstance.generateMessages({
 				query: text,
+				input: createModelInputMessage({ text }),
 				systemPrompt: await piiDetectPrompt(this.memoryModule),
 			});
 			const response = await modelInstance.fetch(messages, modelOptions);
@@ -55,6 +57,7 @@ export class PIIService {
 			const modelOptions = this.modelModule.getModelOptions();
 			const messages = modelInstance.generateMessages({
 				query: text,
+				input: createModelInputMessage({ text }),
 				systemPrompt: await piiFilterPrompt(this.memoryModule),
 			});
 			const response = await modelInstance.fetch(messages, modelOptions);

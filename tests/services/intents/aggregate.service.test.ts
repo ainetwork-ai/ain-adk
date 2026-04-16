@@ -13,12 +13,14 @@ describe("AggregateService", () => {
 
 	it("serializes canonical fulfillment messages when building aggregate prompts", async () => {
 		let aggregateQuery = "";
+		let aggregateInput;
 
 		const service = new AggregateService(
 			{
 				getModel: () => ({
-					generateMessages: ({ query }: { query: string }) => {
+					generateMessages: ({ input, query }: any) => {
 						aggregateQuery = query;
+						aggregateInput = input;
 						return [];
 					},
 					fetchStreamWithContextMessage: async () => ({
@@ -79,6 +81,11 @@ describe("AggregateService", () => {
 		expect(aggregateQuery).toContain("canonical artifact preview");
 		expect(aggregateQuery).toContain("canonical text result");
 		expect(aggregateQuery).not.toContain("legacy text should not be used");
+		expect(aggregateInput).toMatchObject({
+			role: MessageRole.USER,
+			schemaVersion: 2,
+			parts: [{ kind: "text", text: aggregateQuery }],
+		});
 		expect(events).toEqual([
 			expect.objectContaining({ event: "thinking_process" }),
 			{ event: "text_chunk", data: { delta: "combined reply" } },
