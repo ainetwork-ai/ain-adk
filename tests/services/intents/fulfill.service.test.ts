@@ -401,7 +401,36 @@ describe("IntentFulfillService", () => {
 			expect.objectContaining({ toolName: "search" }),
 			{ query: "hello", thinking_text: "checking sources" },
 		);
-		expect(appendMessages).toHaveBeenCalledWith([], "tool result text");
+		expect(appendMessages).toHaveBeenCalledWith(
+			[],
+			"tool result text",
+			expect.objectContaining({
+				role: MessageRole.TOOL,
+				schemaVersion: 2,
+				parts: [
+					{
+						kind: "thought",
+						title: "[Test Agent] MCP 실행: search",
+						description: "checking sources",
+					},
+					{
+						kind: "tool-call",
+						toolCallId: "tool-call-1",
+						toolName: "search",
+						args: {
+							query: "hello",
+							thinking_text: "checking sources",
+						},
+					},
+					{
+						kind: "tool-result",
+						toolCallId: "tool-call-1",
+						toolName: "search",
+						result: "tool result text",
+					},
+				],
+			}),
+		);
 		expect(finalMessage).toMatchObject({
 			role: MessageRole.MODEL,
 			schemaVersion: 2,
@@ -411,13 +440,14 @@ describe("IntentFulfillService", () => {
 
 	it("emits canonical tool events for A2A tool execution", async () => {
 		let streamCallCount = 0;
+		const appendMessages = jest.fn();
 
 		const service = new IntentFulfillService(
 			{
 				getModel: () => ({
 					generateMessages: () => [],
 					convertToolsToFunctions: () => [],
-					appendMessages: jest.fn(),
+					appendMessages,
 					fetchStreamWithContextMessage: async () => {
 						const isToolRequest = streamCallCount === 0;
 						streamCallCount += 1;
@@ -543,5 +573,34 @@ describe("IntentFulfillService", () => {
 				},
 			},
 		});
+		expect(appendMessages).toHaveBeenCalledWith(
+			[],
+			"remote result text",
+			expect.objectContaining({
+				role: MessageRole.TOOL,
+				schemaVersion: 2,
+				parts: [
+					{
+						kind: "thought",
+						title: "[Test Agent] A2A 실행: remote_agent",
+						description: "asking remote agent",
+					},
+					{
+						kind: "tool-call",
+						toolCallId: "a2a-call-1",
+						toolName: "remote_agent",
+						args: {
+							thinking_text: "asking remote agent",
+						},
+					},
+					{
+						kind: "tool-result",
+						toolCallId: "a2a-call-1",
+						toolName: "remote_agent",
+						result: "remote result text",
+					},
+				],
+			}),
+		);
 	});
 });

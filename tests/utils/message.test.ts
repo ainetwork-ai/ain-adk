@@ -6,6 +6,7 @@ import {
 	createTextMessage,
 	createThoughtPart,
 	createToolCallPart,
+	createToolMessage,
 	createToolResultPart,
 	normalizeMessageObject,
 	serializeMessageForIntent,
@@ -185,39 +186,71 @@ describe("message utilities", () => {
 	});
 
 	it("creates canonical tool and thought parts", () => {
-		expect(
-			createToolCallPart({
-				toolCallId: "call-1",
-				toolName: "search",
-				args: { query: "hello" },
-			}),
-		).toEqual({
+		const toolCallPart = createToolCallPart({
+			toolCallId: "call-1",
+			toolName: "search",
+			args: { query: "hello" },
+		});
+		const toolResultPart = createToolResultPart({
+			toolCallId: "call-1",
+			toolName: "search",
+			result: "found it",
+		});
+		const thoughtPart = createThoughtPart({
+			title: "Running search",
+			description: "Checking available sources.",
+		});
+
+		expect(toolCallPart).toEqual({
 			kind: "tool-call",
 			toolCallId: "call-1",
 			toolName: "search",
 			args: { query: "hello" },
 		});
-		expect(
-			createToolResultPart({
-				toolCallId: "call-1",
-				toolName: "search",
-				result: "found it",
-			}),
-		).toEqual({
+		expect(toolResultPart).toEqual({
 			kind: "tool-result",
 			toolCallId: "call-1",
 			toolName: "search",
 			result: "found it",
 		});
-		expect(
-			createThoughtPart({
-				title: "Running search",
-				description: "Checking available sources.",
-			}),
-		).toEqual({
+		expect(thoughtPart).toEqual({
 			kind: "thought",
 			title: "Running search",
 			description: "Checking available sources.",
+		});
+	});
+
+	it("creates canonical tool messages for model append bridges", () => {
+		const toolCallPart = createToolCallPart({
+			toolCallId: "call-1",
+			toolName: "search",
+			args: { query: "hello" },
+		});
+		const toolResultPart = createToolResultPart({
+			toolCallId: "call-1",
+			toolName: "search",
+			result: "found it",
+		});
+		const thoughtPart = createThoughtPart({
+			title: "Running search",
+			description: "Checking available sources.",
+		});
+
+		expect(
+			createToolMessage({
+				messageId: "tool-msg-1",
+				timestamp: 123,
+				thoughtPart,
+				toolCallPart,
+				toolResultPart,
+			}),
+		).toEqual({
+			messageId: "tool-msg-1",
+			role: MessageRole.TOOL,
+			timestamp: 123,
+			metadata: undefined,
+			schemaVersion: 2,
+			parts: [thoughtPart, toolCallPart, toolResultPart],
 		});
 	});
 });
