@@ -2,16 +2,53 @@ import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { getArtifactModule } from "@/config/modules";
 import type { QueryService } from "@/services";
+import type { ArtifactService } from "@/services/artifact.service";
 import { type CanonicalMessageObject, MessageRole } from "@/types/memory";
+import type { QueryMessageInput } from "@/types/message-input";
 import { loggers } from "@/utils/logger";
-import { createTextMessage, extractTextContent } from "@/utils/message";
+import {
+	createModelInputMessageFromQueryInput,
+	createTextMessage,
+	extractTextContent,
+	serializeMessageForModelFallback,
+} from "@/utils/message";
 import { normalizeQueryRequest } from "@/utils/query-input";
 
 export class QueryController {
 	private queryService: QueryService;
+	private artifactService?: ArtifactService;
 
-	constructor(queryService: QueryService) {
+	constructor(queryService: QueryService, artifactService?: ArtifactService) {
 		this.queryService = queryService;
+		this.artifactService = artifactService;
+	}
+
+	private async normalizeAndResolveInput(
+		body: unknown,
+		userId: string,
+	): Promise<{
+		input: QueryMessageInput;
+		query: string;
+		displayQuery?: string;
+	}> {
+		const normalized = normalizeQueryRequest(body, {
+			artifactModuleConfigured: !!getArtifactModule(),
+		});
+
+		const input = this.artifactService
+			? await this.artifactService.resolveQueryInputArtifacts(
+					userId,
+					normalized.input,
+				)
+			: normalized.input;
+
+		return {
+			input,
+			query: serializeMessageForModelFallback(
+				createModelInputMessageFromQueryInput({ input }),
+			),
+			displayQuery: normalized.displayQuery,
+		};
 	}
 
 	public handleQueryRequest = async (
@@ -23,9 +60,8 @@ export class QueryController {
 		const userId = res.locals.userId;
 
 		try {
-			const { input, query, displayQuery } = normalizeQueryRequest(req.body, {
-				artifactModuleConfigured: !!getArtifactModule(),
-			});
+			const { input, query, displayQuery } =
+				await this.normalizeAndResolveInput(req.body, userId);
 			const stream = this.queryService.handleQuery(
 				{ type, userId, threadId, workflowId, title },
 				{ input, query, displayQuery },
@@ -60,13 +96,23 @@ export class QueryController {
 	public handleQueryStreamRequest = async (
 		req: Request,
 		res: Response,
-		_next: NextFunction,
+		next: NextFunction,
 	) => {
 		const { type, threadId, workflowId, title } = req.body;
 		const userId = res.locals.userId;
-		const { input, query, displayQuery } = normalizeQueryRequest(req.body, {
-			artifactModuleConfigured: !!getArtifactModule(),
-		});
+		let input: QueryMessageInput;
+		let query: string;
+		let displayQuery: string | undefined;
+
+		try {
+			({ input, query, displayQuery } = await this.normalizeAndResolveInput(
+				req.body,
+				userId,
+			));
+		} catch (error) {
+			next(error);
+			return;
+		}
 
 		res.writeHead(200, {
 			"Content-Type": "text/event-stream",

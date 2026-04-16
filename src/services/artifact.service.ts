@@ -6,6 +6,10 @@ import type {
 	ArtifactObject,
 	ArtifactPutInput,
 } from "@/types/artifact";
+import type {
+	QueryArtifactInputPart,
+	QueryMessageInput,
+} from "@/types/message-input";
 
 export class ArtifactService {
 	private artifactModule?: ArtifactModule;
@@ -34,6 +38,20 @@ export class ArtifactService {
 				"ARTIFACT_ACCESS_DENIED",
 			);
 		}
+	}
+
+	private assertArtifactReady(artifact: ArtifactObject): void {
+		if (artifact.status !== "ready") {
+			throw new AinHttpError(
+				StatusCodes.CONFLICT,
+				"Artifact is not ready",
+				"ARTIFACT_NOT_READY",
+			);
+		}
+	}
+
+	private buildDownloadUrl(artifactId: string): string {
+		return `/api/artifacts/${artifactId}/download`;
 	}
 
 	public async getArtifact(
@@ -70,5 +88,35 @@ export class ArtifactService {
 			...input,
 			userId,
 		});
+	}
+
+	public async resolveQueryInputArtifacts(
+		userId: string,
+		input: QueryMessageInput,
+	): Promise<QueryMessageInput> {
+		const parts = await Promise.all(
+			input.parts.map(async (part) => {
+				if (part.kind !== "artifact") {
+					return part;
+				}
+
+				const artifact = await this.getArtifact(userId, part.artifactId);
+				this.assertArtifactReady(artifact);
+
+				const resolvedPart: QueryArtifactInputPart = {
+					kind: "artifact",
+					artifactId: artifact.artifactId,
+					name: artifact.name,
+					mimeType: artifact.mimeType,
+					size: artifact.size,
+					downloadUrl: this.buildDownloadUrl(artifact.artifactId),
+					previewText: artifact.previewText,
+				};
+
+				return resolvedPart;
+			}),
+		);
+
+		return { parts };
 	}
 }
