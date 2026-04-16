@@ -66,6 +66,9 @@ Completed groundwork so far:
 - added artifact metadata and download API skeletons
 - added ownership checks for artifact metadata and download access
 - added tests covering artifact service access control and download controller behavior
+- added JSON/base64 artifact upload endpoint scaffolding
+- added upload request validation for required fields and invalid base64 payloads
+- added tests covering artifact upload service wiring and controller validation behavior
 
 Not completed yet:
 
@@ -940,6 +943,9 @@ Completed groundwork in this phase:
 - added `/api/artifacts/:id` and `/api/artifacts/:id/download` route skeletons
 - mounted artifact API routes only when an `ArtifactModule` is configured
 - added focused tests for artifact service access control and artifact download response behavior
+- added `POST /api/artifacts` for JSON/base64 uploads
+- added controller-level validation for upload name, mime type, optional linkage metadata, and base64 payloads
+- added focused tests for artifact upload service wiring and invalid upload request handling
 
 ## Phase 11. A2A Expansion
 

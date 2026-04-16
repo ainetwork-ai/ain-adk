@@ -1,7 +1,11 @@
 import { StatusCodes } from "http-status-codes";
 import type { ArtifactModule } from "@/modules";
 import { AinHttpError } from "@/types/agent";
-import type { ArtifactDownloadResult, ArtifactObject } from "@/types/artifact";
+import type {
+	ArtifactDownloadResult,
+	ArtifactObject,
+	ArtifactPutInput,
+} from "@/types/artifact";
 
 export class ArtifactService {
 	private artifactModule?: ArtifactModule;
@@ -56,5 +60,15 @@ export class ArtifactService {
 	): Promise<ArtifactDownloadResult> {
 		await this.getArtifact(userId, artifactId);
 		return this.getStore().openDownload(artifactId);
+	}
+
+	public async uploadArtifact(
+		userId: string,
+		input: Omit<ArtifactPutInput, "userId">,
+	): Promise<ArtifactObject> {
+		return this.getStore().put({
+			...input,
+			userId,
+		});
 	}
 }

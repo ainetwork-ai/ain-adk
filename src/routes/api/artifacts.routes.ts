@@ -29,6 +29,11 @@ export const createArtifactApiRouter = (): Router => {
 	};
 
 	// APIs (prefix: /api/artifacts)
+	router.post(
+		"/",
+		checkArtifactModule,
+		artifactApiController.handleUploadArtifact,
+	);
 	router.get(
 		"/:id",
 		checkArtifactModule,

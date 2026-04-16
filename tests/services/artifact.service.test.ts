@@ -1,6 +1,60 @@
 import { ArtifactService } from "@/services/artifact.service";
 
 describe("ArtifactService", () => {
+	it("uploads artifacts with the authenticated user attached", async () => {
+		const put = jest.fn(async (input) => ({
+			artifactId: "art-1",
+			userId: input.userId,
+			threadId: input.threadId,
+			messageId: input.messageId,
+			status: "uploaded" as const,
+			name: input.name,
+			mimeType: input.mimeType,
+			size: input.data.length,
+			storageKey: "artifacts/report.pdf",
+			metadata: input.metadata,
+			createdAt: 100,
+		}));
+
+		const service = new ArtifactService({
+			getStore: () =>
+				({
+					get: jest.fn(),
+					put,
+					delete: jest.fn(),
+					openDownload: jest.fn(),
+				}) as any,
+		} as any);
+
+		await expect(
+			service.uploadArtifact("user-1", {
+				name: "report.pdf",
+				mimeType: "application/pdf",
+				data: new Uint8Array([1, 2, 3]),
+				threadId: "thread-1",
+				messageId: "msg-1",
+				metadata: { source: "upload" },
+			}),
+		).resolves.toMatchObject({
+			artifactId: "art-1",
+			userId: "user-1",
+			threadId: "thread-1",
+			messageId: "msg-1",
+			name: "report.pdf",
+			metadata: { source: "upload" },
+		});
+
+		expect(put).toHaveBeenCalledWith({
+			name: "report.pdf",
+			mimeType: "application/pdf",
+			data: new Uint8Array([1, 2, 3]),
+			userId: "user-1",
+			threadId: "thread-1",
+			messageId: "msg-1",
+			metadata: { source: "upload" },
+		});
+	});
+
 	it("returns artifact metadata when the user owns the artifact", async () => {
 		const get = jest.fn(async () => ({
 			artifactId: "art-1",
