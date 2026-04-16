@@ -163,6 +163,8 @@ export type ThreadObject = {
 	messages: Array<MessageObject>;
 };
 
+export type IntentToolChoice = "auto" | "required";
+
 export interface Intent {
 	id: string;
 	name: string;
@@ -171,6 +173,11 @@ export interface Intent {
 	prompt?: string;
 	triggeringSentences?: Array<string>;
 	tags?: Array<string>;
+	/** Controls whether the LLM must call a tool for this intent.
+	 * - "required": first LLM call must invoke at least one tool
+	 * - "auto": LLM decides (default)
+	 */
+	toolChoice?: IntentToolChoice;
 }
 
 export type TriggeredIntent = {
