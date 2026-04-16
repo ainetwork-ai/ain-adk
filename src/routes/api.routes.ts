@@ -1,6 +1,7 @@
 import { Router } from "express";
-import { getMemoryModule } from "@/config/modules";
+import { getArtifactModule, getMemoryModule } from "@/config/modules";
 import { createAgentApiRouter } from "./api/agent.routes.js";
+import { createArtifactApiRouter } from "./api/artifacts.routes.js";
 import { createIntentApiRouter } from "./api/intent.routes.js";
 import { createModelApiRouter } from "./api/model.routes.js";
 import { createThreadApiRouter } from "./api/threads.routes.js";
@@ -12,6 +13,9 @@ export const createApiRouter = (): Router => {
 
 	router.use("/model", createModelApiRouter());
 	router.use("/agent", createAgentApiRouter());
+	if (getArtifactModule()) {
+		router.use("/artifacts", createArtifactApiRouter());
+	}
 
 	const memoryModule = getMemoryModule();
 	if (memoryModule) {

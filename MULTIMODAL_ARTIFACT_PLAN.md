@@ -63,6 +63,9 @@ Completed groundwork so far:
 - added provider-facing model fallback serializers for multipart messages and threads
 - updated structured query normalization to reuse shared model fallback serialization rules
 - added tests covering artifact, data, tool, and thread fallback serialization
+- added artifact metadata and download API skeletons
+- added ownership checks for artifact metadata and download access
+- added tests covering artifact service access control and download controller behavior
 
 Not completed yet:
 
@@ -928,6 +931,15 @@ Why this comes after service refactors:
 - add artifact download endpoint
 - wire uploaded artifact references into query flow
 - add auth and ownership checks for artifact access
+
+Completed groundwork in this phase:
+
+- added `ArtifactService` for artifact metadata lookup and download access
+- added artifact ownership checks based on `artifact.userId`
+- added `ArtifactApiController` handlers for metadata lookup and binary download
+- added `/api/artifacts/:id` and `/api/artifacts/:id/download` route skeletons
+- mounted artifact API routes only when an `ArtifactModule` is configured
+- added focused tests for artifact service access control and artifact download response behavior
 
 ## Phase 11. A2A Expansion
 

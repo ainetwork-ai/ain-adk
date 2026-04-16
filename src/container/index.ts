@@ -64,6 +64,9 @@ class Container {
 	getAgentApiController() {
 		return this._controllers.getAgentApiController();
 	}
+	getArtifactApiController() {
+		return this._controllers.getArtifactApiController();
+	}
 	getThreadApiController() {
 		return this._controllers.getThreadApiController();
 	}

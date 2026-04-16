@@ -4,6 +4,7 @@ import {
 	getModelModule,
 } from "@/config/modules";
 import { AgentApiController } from "@/controllers/api/agent.api.controller";
+import { ArtifactApiController } from "@/controllers/api/artifact.api.controller";
 import { IntentApiController } from "@/controllers/api/intent.api.controller";
 import { ModelApiController } from "@/controllers/api/model.api.controller";
 import { ThreadApiController } from "@/controllers/api/threads.api.controller";
@@ -24,6 +25,7 @@ export class ControllerContainer {
 	private _intentController?: IntentController;
 	private _modelApiController?: ModelApiController;
 	private _agentApiController?: AgentApiController;
+	private _artifactApiController?: ArtifactApiController;
 	private _threadApiController?: ThreadApiController;
 	private _intentApiController?: IntentApiController;
 	private _workflowTemplateApiController?: WorkflowTemplateApiController;
@@ -66,6 +68,15 @@ export class ControllerContainer {
 		return this._agentApiController;
 	}
 
+	getArtifactApiController(): ArtifactApiController {
+		if (!this._artifactApiController) {
+			this._artifactApiController = new ArtifactApiController(
+				this.services.getArtifactService(),
+			);
+		}
+		return this._artifactApiController;
+	}
+
 	getThreadApiController(): ThreadApiController {
 		if (!this._threadApiController) {
 			this._threadApiController = new ThreadApiController(getMemoryModule());
@@ -104,6 +115,7 @@ export class ControllerContainer {
 		this._intentController = undefined;
 		this._modelApiController = undefined;
 		this._agentApiController = undefined;
+		this._artifactApiController = undefined;
 		this._threadApiController = undefined;
 		this._intentApiController = undefined;
 		this._workflowTemplateApiController = undefined;
