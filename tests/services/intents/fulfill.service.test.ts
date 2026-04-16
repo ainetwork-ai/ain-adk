@@ -13,10 +13,11 @@ describe("IntentFulfillService", () => {
 
 	it("emits canonical message stream events alongside compatibility text chunks", async () => {
 		const addMessagesToThread = jest.fn(async () => {});
+		const generateMessages = jest.fn(() => []);
 		const service = new IntentFulfillService(
 			{
 				getModel: () => ({
-					generateMessages: () => [],
+					generateMessages,
 					convertToolsToFunctions: () => [],
 					appendMessages: jest.fn(),
 					fetchStreamWithContextMessage: async () => ({
@@ -83,6 +84,16 @@ describe("IntentFulfillService", () => {
 			parts: [{ kind: "text", text: "streamed reply" }],
 		});
 		expect(completedMessages).toEqual([finalMessage]);
+		expect(generateMessages).toHaveBeenCalledWith(
+			expect.objectContaining({
+				query: "hello there",
+				input: expect.objectContaining({
+					role: MessageRole.USER,
+					schemaVersion: 2,
+					parts: [{ kind: "text", text: "hello there" }],
+				}),
+			}),
+		);
 		expect(addMessagesToThread).toHaveBeenCalledWith(
 			"user-1",
 			"thread-1",
@@ -92,6 +103,80 @@ describe("IntentFulfillService", () => {
 					role: MessageRole.MODEL,
 				}),
 			],
+		);
+	});
+
+	it("uses provided canonical model input for single-intent fulfillment", async () => {
+		const generateMessages = jest.fn(() => []);
+		const service = new IntentFulfillService(
+			{
+				getModel: () => ({
+					generateMessages,
+					convertToolsToFunctions: () => [],
+					appendMessages: jest.fn(),
+					fetchStreamWithContextMessage: async () => ({
+						async *[Symbol.asyncIterator]() {
+							yield {
+								delta: {
+									content: "structured reply",
+								},
+							};
+						},
+					}),
+				}),
+				getModelOptions: () => undefined,
+			} as any,
+			{
+				getAgentMemory: () => ({
+					getAgentPrompt: async () => "",
+				}),
+				getThreadMemory: () => ({
+					addMessagesToThread: jest.fn(async () => {}),
+				}),
+			} as any,
+		);
+
+		const modelInput = {
+			messageId: "input-1",
+			role: MessageRole.USER,
+			timestamp: 100,
+			schemaVersion: 2 as const,
+			parts: [
+				{ kind: "text" as const, text: "Summarize this" },
+				{
+					kind: "artifact" as const,
+					artifactId: "art-1",
+					previewText: "file preview",
+				},
+			],
+		};
+
+		const stream = service.intentFulfill(
+			[{ subquery: "Summarize this\nfile preview" }],
+			{
+				userId: "user-1",
+				threadId: "thread-1",
+				type: ThreadType.CHAT,
+				title: "Thread",
+				messages: [],
+			},
+			"Summarize this\nfile preview",
+			false,
+			modelInput,
+		);
+
+		while (true) {
+			const result = await stream.next();
+			if (result.done) {
+				break;
+			}
+		}
+
+		expect(generateMessages).toHaveBeenCalledWith(
+			expect.objectContaining({
+				query: "Summarize this\nfile preview",
+				input: modelInput,
+			}),
 		);
 	});
 

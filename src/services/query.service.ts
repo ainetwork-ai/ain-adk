@@ -17,7 +17,11 @@ import {
 import type { QueryMessageInput } from "@/types/message-input";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
-import { createMessageFromQueryInput } from "@/utils/message";
+import {
+	createMessageFromQueryInput,
+	createModelInputMessage,
+	createModelInputMessageFromQueryInput,
+} from "@/utils/message";
 import type { IntentFulfillService } from "./intents/fulfill.service";
 import type { IntentTriggerService } from "./intents/trigger.service";
 import { PIIFilterMode, type PIIService } from "./pii.service";
@@ -70,6 +74,7 @@ export class QueryService {
 			const modelOptions = this.modelModule.getModelOptions();
 			const messages = modelInstance.generateMessages({
 				query,
+				input: createModelInputMessage({ text: query }),
 				systemPrompt: await generateTitlePrompt(this.memoryModule),
 			});
 			const response = await modelInstance.fetch(
@@ -130,6 +135,7 @@ export class QueryService {
 			options,
 		} = threadMetadata;
 		const { displayQuery, input } = queryData;
+		const originalQuery = queryData.query;
 		let { query } = queryData;
 		const threadMemory = this.memoryModule.getThreadMemory();
 
@@ -214,6 +220,11 @@ export class QueryService {
 			};
 		}
 
+		const modelInput =
+			input && query === originalQuery
+				? createModelInputMessageFromQueryInput({ input })
+				: createModelInputMessage({ text: query });
+
 		// 2. intent triggering
 		const triggerResult = await this.intentTriggerService.intentTriggering(
 			query,
@@ -254,6 +265,7 @@ export class QueryService {
 			thread,
 			query,
 			needsAggregation,
+			modelInput,
 		);
 
 		while (true) {

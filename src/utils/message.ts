@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
 	ArtifactContentPart,
 	CanonicalMessageObject,
@@ -5,13 +6,13 @@ import type {
 	LegacyMessageObject,
 	MessageContentPart,
 	MessageObject,
-	MessageRole,
 	TextContentPart,
 	ThoughtContentPart,
 	ThreadObject,
 	ToolCallContentPart,
 	ToolResultContentPart,
 } from "@/types/memory";
+import { MessageRole } from "@/types/memory";
 import type {
 	QueryArtifactInputPart,
 	QueryDataInputPart,
@@ -179,6 +180,38 @@ export function createTextMessage(params: {
 		schemaVersion: 2,
 		parts: [{ kind: "text", text: params.text }],
 	};
+}
+
+export function createModelInputMessage(params: {
+	text: string;
+	role?: MessageRole;
+	messageId?: string;
+	timestamp?: number;
+	metadata?: Record<string, unknown>;
+}): CanonicalMessageObject {
+	return createTextMessage({
+		messageId: params.messageId ?? randomUUID(),
+		role: params.role ?? MessageRole.USER,
+		timestamp: params.timestamp ?? Date.now(),
+		text: params.text,
+		metadata: params.metadata,
+	});
+}
+
+export function createModelInputMessageFromQueryInput(params: {
+	input: QueryMessageInput;
+	role?: MessageRole;
+	messageId?: string;
+	timestamp?: number;
+	metadata?: Record<string, unknown>;
+}): CanonicalMessageObject {
+	return createMessageFromQueryInput({
+		messageId: params.messageId ?? randomUUID(),
+		role: params.role ?? MessageRole.USER,
+		timestamp: params.timestamp ?? Date.now(),
+		input: params.input,
+		metadata: params.metadata,
+	});
 }
 
 export function createToolCallPart(params: {

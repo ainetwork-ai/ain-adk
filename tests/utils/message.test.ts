@@ -1,5 +1,7 @@
 import { MessageRole, type MessageObject, ThreadType } from "@/types/memory";
 import {
+	createModelInputMessage,
+	createModelInputMessageFromQueryInput,
 	createMessageFromQueryInput,
 	createTextMessage,
 	createThoughtPart,
@@ -69,6 +71,53 @@ describe("message utilities", () => {
 					size: undefined,
 					downloadUrl: undefined,
 					previewText: "Revenue increased by 20 percent.",
+				},
+			],
+		});
+	});
+
+	it("creates canonical model input messages for provider bridge calls", () => {
+		expect(
+			createModelInputMessage({
+				messageId: "model-input-1",
+				timestamp: 123,
+				text: "hello model",
+			}),
+		).toEqual({
+			messageId: "model-input-1",
+			role: MessageRole.USER,
+			timestamp: 123,
+			schemaVersion: 2,
+			metadata: undefined,
+			parts: [{ kind: "text", text: "hello model" }],
+		});
+
+		expect(
+			createModelInputMessageFromQueryInput({
+				messageId: "model-input-2",
+				timestamp: 456,
+				input: {
+					parts: [
+						{ kind: "text", text: "Summarize this" },
+						{
+							kind: "artifact",
+							artifactId: "art-1",
+							previewText: "file preview",
+						},
+					],
+				},
+			}),
+		).toMatchObject({
+			messageId: "model-input-2",
+			role: MessageRole.USER,
+			timestamp: 456,
+			schemaVersion: 2,
+			parts: [
+				{ kind: "text", text: "Summarize this" },
+				{
+					kind: "artifact",
+					artifactId: "art-1",
+					previewText: "file preview",
 				},
 			],
 		});

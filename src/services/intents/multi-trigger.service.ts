@@ -5,7 +5,10 @@ import type {
 	TriggeredIntent,
 } from "@/types/memory";
 import { loggers } from "@/utils/logger";
-import { serializeThreadForIntent } from "@/utils/message";
+import {
+	createModelInputMessage,
+	serializeThreadForIntent,
+} from "@/utils/message";
 import multiTriggerPrompt from "../prompts/multi-trigger";
 
 /**
@@ -76,6 +79,7 @@ Based on the above conversation history, analyze the last user question and iden
 
 		const messages = modelInstance.generateMessages({
 			query: triggerMessage,
+			input: createModelInputMessage({ text: triggerMessage }),
 			systemPrompt,
 		});
 
@@ -95,7 +99,7 @@ Based on the above conversation history, analyze the last user question and iden
 		};
 		try {
 			parsed = JSON.parse(response.content);
-		} catch (error: unknown) {
+		} catch (_error: unknown) {
 			return { intents: [{ subquery: query }], needsAggregation: false };
 		}
 

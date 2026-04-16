@@ -14,7 +14,7 @@ Primary goals:
 
 ## Progress Snapshot
 
-Last updated: `2026-04-15`
+Last updated: `2026-04-16`
 
 Completed groundwork so far:
 
@@ -52,6 +52,10 @@ Completed groundwork so far:
 - updated fulfillment tool execution to emit `tool_start` and `tool_output` stream events
 - kept provider-facing tool result fallback through existing `appendMessages(..., toolResult)` behavior
 - added MCP and A2A tool execution tests covering canonical tool events and compatibility behavior
+- added an optional structured `input` bridge to `BaseModel.generateMessages`
+- added model input message helpers for text and structured query input
+- updated internal model calls to pass both compatibility `query` text and canonical `input` messages
+- added tests covering structured model input propagation without changing provider-facing fallback behavior
 
 Not completed yet:
 
@@ -885,6 +889,17 @@ Completed groundwork in this phase:
 - change `BaseModel` interfaces
 - update provider implementations
 - define degradation strategy for unsupported modalities
+
+Completed groundwork in this phase:
+
+- introduced `ModelGenerateMessagesParams` as the named `BaseModel.generateMessages` parameter contract
+- added optional `input?: CanonicalMessageObject` alongside the existing required `query: string`
+- exported the new generate-message params type from the public module surface
+- added shared helpers for creating canonical model input messages from text and structured query input
+- updated title generation, PII, intent trigger, fulfillment, and aggregation model calls to include canonical `input`
+- preserved the existing `query` fallback field so current provider implementations can keep using string-only input
+- preserved `BaseModel.appendMessages(messages, message: string)` for tool-result fallback pending a later provider migration
+- added focused tests for structured query propagation, fulfillment model input, aggregate model input, and model input helper construction
 
 Why this comes after service refactors:
 
