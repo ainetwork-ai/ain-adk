@@ -340,6 +340,27 @@ export function createMessageFromQueryInput(params: {
 	};
 }
 
+export function serializePartForModelFallback(
+	part: MessageContentPart,
+): string {
+	switch (part.kind) {
+		case "text":
+			return part.text;
+		case "artifact":
+			return serializeArtifactPart(part);
+		case "data":
+			return serializeDataPart(part);
+		case "tool-call":
+			return serializeToolCallPart(part);
+		case "tool-result":
+			return serializeToolResultPart(part);
+		case "thought":
+			return part.description
+				? `${part.title}\n${part.description}`
+				: part.title;
+	}
+}
+
 function serializeArtifactPart(part: ArtifactContentPart): string {
 	if (part.previewText?.trim()) {
 		return part.previewText;
@@ -391,30 +412,21 @@ function serializeToolResultPart(part: ToolResultContentPart): string {
 	}
 }
 
+export function serializeMessageForModelFallback(
+	message: MessageObject,
+): string {
+	return normalizeMessageParts(message)
+		.map(serializePartForModelFallback)
+		.filter((value) => value.trim() !== "")
+		.join("\n");
+}
+
 export function serializePartForIntent(part: MessageContentPart): string {
-	switch (part.kind) {
-		case "text":
-			return part.text;
-		case "artifact":
-			return serializeArtifactPart(part);
-		case "data":
-			return serializeDataPart(part);
-		case "tool-call":
-			return serializeToolCallPart(part);
-		case "tool-result":
-			return serializeToolResultPart(part);
-		case "thought":
-			return part.description
-				? `${part.title}\n${part.description}`
-				: part.title;
-	}
+	return serializePartForModelFallback(part);
 }
 
 export function serializeMessageForIntent(message: MessageObject): string {
-	return normalizeMessageParts(message)
-		.map(serializePartForIntent)
-		.filter((value) => value.trim() !== "")
-		.join("\n");
+	return serializeMessageForModelFallback(message);
 }
 
 function roleLabel(role: MessageRole): string {
@@ -433,6 +445,12 @@ function roleLabel(role: MessageRole): string {
 export function serializeThreadForIntent(
 	thread: ThreadObject | undefined,
 ): string {
+	return serializeThreadForModelFallback(thread);
+}
+
+export function serializeThreadForModelFallback(
+	thread: ThreadObject | undefined,
+): string {
 	if (!thread) {
 		return "";
 	}
@@ -441,7 +459,7 @@ export function serializeThreadForIntent(
 		.slice()
 		.sort((a, b) => a.timestamp - b.timestamp)
 		.map((message) => {
-			const content = serializeMessageForIntent(message);
+			const content = serializeMessageForModelFallback(message);
 			return `${roleLabel(message.role)}: """${content}"""`;
 		})
 		.join("\n");

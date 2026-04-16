@@ -60,6 +60,9 @@ Completed groundwork so far:
 - added a canonical `TOOL` message helper for tool-call/tool-result append payloads
 - updated fulfillment tool result append calls to pass both compatibility text and canonical `TOOL` messages
 - added MCP and A2A tests covering structured append payloads while preserving string fallback behavior
+- added provider-facing model fallback serializers for multipart messages and threads
+- updated structured query normalization to reuse shared model fallback serialization rules
+- added tests covering artifact, data, tool, and thread fallback serialization
 
 Not completed yet:
 
@@ -908,6 +911,10 @@ Completed groundwork in this phase:
 - added a shared helper for constructing canonical `TOOL` messages from thought, tool-call, and tool-result parts
 - updated MCP and A2A fulfillment tool append calls to pass canonical `TOOL` messages as opt-in provider input
 - added focused tests for MCP and A2A structured append payloads plus canonical tool message helper construction
+- added `serializePartForModelFallback`, `serializeMessageForModelFallback`, and `serializeThreadForModelFallback`
+- kept intent serializers aligned by routing them through the same multipart fallback behavior
+- updated structured query normalization to derive compatibility text through shared model fallback serializers
+- added focused tests for artifact-without-preview, data, tool, and thread fallback serialization behavior
 
 Why this comes after service refactors:
 

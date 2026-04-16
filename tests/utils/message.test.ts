@@ -9,7 +9,9 @@ import {
 	createToolMessage,
 	createToolResultPart,
 	normalizeMessageObject,
+	serializeMessageForModelFallback,
 	serializeMessageForIntent,
+	serializeThreadForModelFallback,
 	serializeThreadForIntent,
 } from "@/utils/message";
 
@@ -158,6 +160,9 @@ describe("message utilities", () => {
 		expect(serializeThreadForIntent(thread)).toBe(
 			'User: """Analyze this file"""\nAssistant: """month,revenue\nJan,100"""',
 		);
+		expect(serializeThreadForModelFallback(thread)).toBe(
+			'User: """Analyze this file"""\nAssistant: """month,revenue\nJan,100"""',
+		);
 	});
 
 	it("serializes thought and data parts consistently", () => {
@@ -182,6 +187,58 @@ describe("message utilities", () => {
 
 		expect(serializeMessageForIntent(message)).toBe(
 			'Collecting data\nFetching the latest metrics.\napplication/json: {"total":3}',
+		);
+		expect(serializeMessageForModelFallback(message)).toBe(
+			'Collecting data\nFetching the latest metrics.\napplication/json: {"total":3}',
+		);
+	});
+
+	it("serializes artifacts without preview text for model fallback", () => {
+		const message: MessageObject = {
+			messageId: "msg-6",
+			role: MessageRole.USER,
+			timestamp: 400,
+			schemaVersion: 2,
+			parts: [
+				{
+					kind: "artifact",
+					artifactId: "art-3",
+					name: "report.pdf",
+					mimeType: "application/pdf",
+					size: 1024,
+				},
+			],
+		};
+
+		expect(serializeMessageForModelFallback(message)).toBe(
+			"[Artifact: report.pdf (application/pdf, 1024 bytes)]",
+		);
+	});
+
+	it("serializes tool parts consistently for model fallback", () => {
+		const message: MessageObject = {
+			messageId: "msg-7",
+			role: MessageRole.TOOL,
+			timestamp: 500,
+			schemaVersion: 2,
+			parts: [
+				{
+					kind: "tool-call",
+					toolCallId: "call-1",
+					toolName: "search",
+					args: { query: "hello" },
+				},
+				{
+					kind: "tool-result",
+					toolCallId: "call-1",
+					toolName: "search",
+					result: { total: 2 },
+				},
+			],
+		};
+
+		expect(serializeMessageForModelFallback(message)).toBe(
+			'[Tool Call: search] {"query":"hello"}\n[Tool Result: search] {"total":2}',
 		);
 	});
 

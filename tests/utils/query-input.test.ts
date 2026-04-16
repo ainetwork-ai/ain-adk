@@ -54,6 +54,48 @@ describe("normalizeQueryRequest", () => {
 		);
 	});
 
+	it("serializes structured artifact input without preview using shared fallback formatting", () => {
+		const result = normalizeQueryRequest(
+			{
+				input: {
+					parts: [
+						{
+							kind: "artifact",
+							artifactId: "art_456",
+							name: "report.pdf",
+							mimeType: "application/pdf",
+							size: 2048,
+						},
+					],
+				},
+			},
+			{ artifactModuleConfigured: true },
+		);
+
+		expect(result.query).toBe(
+			"[Artifact: report.pdf (application/pdf, 2048 bytes)]",
+		);
+	});
+
+	it("serializes structured data input using shared fallback formatting", () => {
+		const result = normalizeQueryRequest(
+			{
+				input: {
+					parts: [
+						{
+							kind: "data",
+							mimeType: "application/json",
+							data: { total: 3 },
+						},
+					],
+				},
+			},
+			{ artifactModuleConfigured: false },
+		);
+
+		expect(result.query).toBe('application/json: {"total":3}');
+	});
+
 	it("rejects artifact input when artifact storage is not configured", () => {
 		expect(() =>
 			normalizeQueryRequest(

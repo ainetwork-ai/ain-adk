@@ -34,6 +34,8 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	 * Generates an array of messages from thread and current query.
 	 *
 	 * @param query - Current user query
+	 * @param input - Optional canonical multipart input. Providers that do not support multipart input
+	 * can degrade it through the shared model fallback serializers in `@/utils/message`.
 	 * @param thread - Previous conversation history
 	 * @param systemPrompt - Optional system prompt to set context
 	 * @returns Array of messages formatted for the specific model API
@@ -45,7 +47,9 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	 *
 	 * @param messages - Existing message array to expand
 	 * @param message - Text fallback for providers that have not migrated to structured append input yet
-	 * @param input - Canonical multipart message for providers that opt into structured append handling
+	 * @param input - Canonical multipart message for providers that opt into structured append handling.
+	 * Providers that do not support multipart append input can degrade it through the shared
+	 * model fallback serializers in `@/utils/message`.
 	 */
 	abstract appendMessages(
 		messages: MessageType[],
