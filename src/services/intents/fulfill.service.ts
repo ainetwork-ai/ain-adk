@@ -18,11 +18,41 @@ import {
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
-import { createTextMessage } from "@/utils/message";
+import { createTextMessage, extractTextContent } from "@/utils/message";
 import { PIIFilterMode, type PIIService } from "../pii.service";
 import fulfillPrompt from "../prompts/fulfill";
 import toolSelectPrompt from "../prompts/tool-select";
 import { AggregateService } from "./aggregate.service";
+
+function createFulfillmentResult(params: {
+	subquery: string;
+	intent?: Intent;
+	actionPlan?: string;
+	responseMessage: CanonicalMessageObject;
+}): FulfillmentResult {
+	return {
+		subquery: params.subquery,
+		intent: params.intent,
+		actionPlan: params.actionPlan,
+		responseMessage: params.responseMessage,
+		response: extractTextContent(params.responseMessage),
+	};
+}
+
+function createEphemeralModelContextMessage(
+	message: CanonicalMessageObject,
+): CanonicalMessageObject {
+	return {
+		...message,
+		messageId: randomUUID(),
+		timestamp: Date.now(),
+		metadata: {
+			...message.metadata,
+			isThinking: true,
+		},
+		parts: message.parts.map((part) => ({ ...part })),
+	};
+}
 
 export class IntentFulfillService {
 	private modelModule: ModelModule;
@@ -400,14 +430,14 @@ export class IntentFulfillService {
 						}
 					}
 					// Add intermediate result to thread context for next intent
+					const responseMessage = createTextMessage({
+						messageId: randomUUID(),
+						role: MessageRole.MODEL,
+						timestamp: Date.now(),
+						text: responseText,
+					});
 					thread.messages.push(
-						createTextMessage({
-							messageId: randomUUID(),
-							role: MessageRole.MODEL,
-							timestamp: Date.now(),
-							text: responseText,
-							metadata: { isThinking: true },
-						}),
+						createEphemeralModelContextMessage(responseMessage),
 					);
 				}
 			}
@@ -424,14 +454,16 @@ export class IntentFulfillService {
 				// Add previous result to thread context for inference (not stored in memory)
 				if (fulfillmentResults.length > 0) {
 					const lastResult = fulfillmentResults[fulfillmentResults.length - 1];
-					thread.messages.push(
+					const lastResponseMessage =
+						lastResult.responseMessage ??
 						createTextMessage({
 							messageId: randomUUID(),
 							role: MessageRole.MODEL,
 							timestamp: Date.now(),
 							text: lastResult.response,
-							metadata: { isThinking: true },
-						}),
+						});
+					thread.messages.push(
+						createEphemeralModelContextMessage(lastResponseMessage),
 					);
 				}
 
@@ -463,12 +495,21 @@ export class IntentFulfillService {
 					}
 				}
 
-				fulfillmentResults.push({
-					subquery,
-					intent,
-					actionPlan,
-					response: responseText,
+				const responseMessage = createTextMessage({
+					messageId: randomUUID(),
+					role: MessageRole.MODEL,
+					timestamp: Date.now(),
+					text: responseText,
 				});
+
+				fulfillmentResults.push(
+					createFulfillmentResult({
+						subquery,
+						intent,
+						actionPlan,
+						responseMessage,
+					}),
+				);
 			}
 
 			// Aggregate step: generate unified response

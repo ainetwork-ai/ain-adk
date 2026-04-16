@@ -14,7 +14,7 @@ Primary goals:
 
 ## Progress Snapshot
 
-Last updated: `2026-04-14`
+Last updated: `2026-04-15`
 
 Completed groundwork so far:
 
@@ -44,6 +44,10 @@ Completed groundwork so far:
 - kept `text_chunk` during the transition as a compatibility stream event for existing consumers
 - updated A2A consumption to fall back to canonical `message_complete` when compatibility text chunks are absent
 - added tests covering canonical stream event emission and A2A compatibility fallback
+- extended fulfillment results with canonical `responseMessage` payloads while preserving compatibility text
+- updated aggregation prompt construction to use shared canonical message serialization
+- updated multi-intent intermediate fulfillment context to reuse canonical model messages
+- added tests covering canonical fulfillment results, aggregation serialization, and stream compatibility
 
 Not completed yet:
 
@@ -856,6 +860,16 @@ Completed groundwork in this phase:
 - update trigger services to use serializer
 - update fulfill flow to produce message parts
 - update aggregate flow to aggregate structured outputs or summarized representations
+
+Completed groundwork in this phase:
+
+- extended `FulfillmentResult` with an optional canonical `responseMessage`
+- kept `FulfillmentResult.response` as deprecated compatibility text during the migration
+- added fulfillment result construction helpers that derive compatibility text from canonical messages
+- updated multi-intent no-aggregation intermediate context to push canonical model messages with thinking metadata
+- updated aggregation to serialize fulfillment `responseMessage` values through shared message serializers
+- preserved legacy aggregation fallback behavior for callers that still provide only `response`
+- added focused tests for canonical fulfillment stream completion, intermediate context, and aggregation serialization
 
 ## Phase 9. Model Abstraction Migration
 
