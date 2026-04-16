@@ -1,11 +1,13 @@
 import {
 	getA2AModule,
+	getArtifactModule,
 	getMCPModule,
 	getMemoryModule,
 	getModelModule,
 } from "@/config/modules";
 import { getOnIntentFallback } from "@/config/options";
 import { A2AService } from "@/services/a2a.service";
+import { ArtifactService } from "@/services/artifact.service";
 import { IntentFulfillService } from "@/services/intents/fulfill.service";
 import { IntentTriggerService } from "@/services/intents/trigger.service";
 import { PIIService } from "@/services/pii.service";
@@ -28,6 +30,7 @@ export class ServiceContainer {
 	private _queryService?: QueryService;
 	private _a2aService?: A2AService;
 	private _piiService?: PIIService;
+	private _artifactService?: ArtifactService;
 	private _userWorkflowService?: UserWorkflowService;
 	private _userWorkflowCoordinatorService?: UserWorkflowCoordinatorService;
 	private _workflowExecutionService?: WorkflowExecutionService;
@@ -92,6 +95,13 @@ export class ServiceContainer {
 		return this._a2aService;
 	}
 
+	getArtifactService(): ArtifactService {
+		if (!this._artifactService) {
+			this._artifactService = new ArtifactService(getArtifactModule());
+		}
+		return this._artifactService;
+	}
+
 	getUserWorkflowService(): UserWorkflowService {
 		if (!this._userWorkflowService) {
 			this._userWorkflowService = new UserWorkflowService(
@@ -147,6 +157,7 @@ export class ServiceContainer {
 		this._queryService = undefined;
 		this._a2aService = undefined;
 		this._piiService = undefined;
+		this._artifactService = undefined;
 		this._userWorkflowService = undefined;
 		this._userWorkflowCoordinatorService = undefined;
 		this._workflowExecutionService = undefined;
