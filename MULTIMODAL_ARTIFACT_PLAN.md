@@ -69,6 +69,9 @@ Completed groundwork so far:
 - added JSON/base64 artifact upload endpoint scaffolding
 - added upload request validation for required fields and invalid base64 payloads
 - added tests covering artifact upload service wiring and controller validation behavior
+- added structured query artifact reference validation against the artifact store
+- added ready-state and ownership checks for artifact-backed query input
+- added tests covering query artifact metadata enrichment and not-ready validation failures
 
 Not completed yet:
 
@@ -946,6 +949,9 @@ Completed groundwork in this phase:
 - added `POST /api/artifacts` for JSON/base64 uploads
 - added controller-level validation for upload name, mime type, optional linkage metadata, and base64 payloads
 - added focused tests for artifact upload service wiring and invalid upload request handling
+- added query-time artifact reference validation and metadata enrichment before inference
+- added `ARTIFACT_NOT_READY` handling for artifact references that are not yet usable
+- added focused tests covering resolved query artifact metadata and stream-path validation failures
 
 ## Phase 11. A2A Expansion
 

@@ -39,6 +39,7 @@ export class ControllerContainer {
 		if (!this._queryController) {
 			this._queryController = new QueryController(
 				this.services.getQueryService(),
+				this.services.getArtifactService(),
 			);
 		}
 		return this._queryController;

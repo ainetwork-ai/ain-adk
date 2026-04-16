@@ -145,4 +145,81 @@ describe("ArtifactService", () => {
 		});
 		expect(openDownload).toHaveBeenCalledWith("art-1");
 	});
+
+	it("resolves query artifact parts with store metadata", async () => {
+		const get = jest.fn(async () => ({
+			artifactId: "art-1",
+			userId: "user-1",
+			status: "ready" as const,
+			name: "report.pdf",
+			mimeType: "application/pdf",
+			size: 1024,
+			storageKey: "artifacts/report.pdf",
+			previewText: "Quarterly report preview",
+			createdAt: 100,
+		}));
+
+		const service = new ArtifactService({
+			getStore: () =>
+				({
+					get,
+					put: jest.fn(),
+					delete: jest.fn(),
+					openDownload: jest.fn(),
+				}) as any,
+		} as any);
+
+		await expect(
+			service.resolveQueryInputArtifacts("user-1", {
+				parts: [
+					{ kind: "text", text: "Summarize this" },
+					{ kind: "artifact", artifactId: "art-1" },
+				],
+			}),
+		).resolves.toEqual({
+			parts: [
+				{ kind: "text", text: "Summarize this" },
+				{
+					kind: "artifact",
+					artifactId: "art-1",
+					name: "report.pdf",
+					mimeType: "application/pdf",
+					size: 1024,
+					downloadUrl: "/api/artifacts/art-1/download",
+					previewText: "Quarterly report preview",
+				},
+			],
+		});
+		expect(get).toHaveBeenCalledWith("art-1");
+	});
+
+	it("rejects query artifact references that are not ready", async () => {
+		const service = new ArtifactService({
+			getStore: () =>
+				({
+					get: async () => ({
+						artifactId: "art-1",
+						userId: "user-1",
+						status: "processing" as const,
+						name: "report.pdf",
+						mimeType: "application/pdf",
+						size: 1024,
+						storageKey: "artifacts/report.pdf",
+						createdAt: 100,
+					}),
+					put: jest.fn(),
+					delete: jest.fn(),
+					openDownload: jest.fn(),
+				}) as any,
+		} as any);
+
+		await expect(
+			service.resolveQueryInputArtifacts("user-1", {
+				parts: [{ kind: "artifact", artifactId: "art-1" }],
+			}),
+		).rejects.toMatchObject({
+			message: "Artifact is not ready",
+			code: "ARTIFACT_NOT_READY",
+		});
+	});
 });
