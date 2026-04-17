@@ -1,4 +1,5 @@
 import type {
+	ArtifactContentPart,
 	CanonicalMessageObject,
 	MessageRole,
 	TextContentPart,
@@ -20,6 +21,10 @@ export type StreamEvent =
 				part: Pick<TextContentPart, "kind">;
 				delta: string;
 			};
+	  }
+	| {
+			event: "artifact_ready";
+			data: ArtifactContentPart;
 	  }
 	| {
 			event: "message_complete";
