@@ -1,5 +1,6 @@
 import { AINAgent } from "@/index";
 import { getArtifactModule } from "@/config/modules";
+import { A2AModule } from "@/modules/a2a/a2a.module";
 import { ArtifactModule } from "@/modules/artifacts/artifact.module";
 import type { IArtifactStore } from "@/modules/artifacts/base.artifact";
 import { AuthModule } from "@/modules/auth/auth.module";
@@ -159,5 +160,63 @@ describe("AINAgent artifact module wiring", () => {
 		expect(agent.artifactModule).toBe(artifactModule);
 		expect(getArtifactModule()).toBe(artifactModule);
 		expect(getArtifactModule()?.getStore()).toBe(artifactStore);
+	});
+
+	it("publishes an A2A agent card with streaming and artifact-aware modes", () => {
+		const modelModule = new ModelModule();
+		modelModule.addModel("test-model", new TestModel(), {}, true);
+
+		const artifactStore: IArtifactStore = {
+			put: jest.fn(),
+			get: jest.fn(),
+			delete: jest.fn(),
+			openDownload: jest.fn(),
+		};
+		const artifactModule = new ArtifactModule(artifactStore);
+		const a2aModule = new A2AModule();
+
+		const agent = new AINAgent(
+			{
+				name: "Test Agent",
+				description: "Test agent for A2A card generation",
+				url: "https://example.com/agent",
+			},
+			{
+				authModule: new TestAuthModule(),
+				modelModule,
+				memoryModule: new MemoryModule(new TestMemory()),
+				artifactModule,
+				a2aModule,
+			},
+		);
+
+		const card = agent.generateAgentCard();
+		expect(card).toMatchObject({
+			name: "Test Agent",
+			description: "Test agent for A2A card generation",
+			url: "https://example.com/a2a",
+			preferredTransport: "JSONRPC",
+			defaultInputModes: ["text", "data", "file"],
+			defaultOutputModes: ["text", "data", "file"],
+			capabilities: {
+				streaming: true,
+				pushNotifications: false,
+				stateTransitionHistory: true,
+			},
+			additionalInterfaces: [
+				{
+					url: "https://example.com/a2a",
+					transport: "JSONRPC",
+				},
+			],
+			skills: [
+				{
+					id: "query",
+					name: "Test Agent",
+					inputModes: ["text", "data", "file"],
+					outputModes: ["text", "data", "file"],
+				},
+			],
+		});
 	});
 });

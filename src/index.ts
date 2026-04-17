@@ -1,4 +1,4 @@
-import type { AgentCard } from "@a2a-js/sdk";
+import type { AgentCard, AgentSkill } from "@a2a-js/sdk";
 import cors from "cors";
 import express, { type Response } from "express";
 import helmet from "helmet";
@@ -130,6 +130,10 @@ export class AINAgent {
 
 		// Set global agent reference
 		setAgent(this);
+		this.a2aModule?.configureIdentity({
+			agentId: this.manifest.url || this.manifest.name,
+			agentName: this.manifest.name,
+		});
 
 		this.initializeMiddlewares();
 		this.initializeRoutes();
@@ -159,6 +163,30 @@ export class AINAgent {
 	public generateAgentCard = (): AgentCard => {
 		const _url = new URL(this.manifest.url || "");
 		_url.pathname = "a2a";
+		const defaultModes = ["text", "data"];
+		if (this.artifactModule) {
+			defaultModes.push("file");
+		}
+		const skills: AgentSkill[] = [
+			{
+				id: "query",
+				name: this.manifest.name,
+				description: this.manifest.description,
+				tags: [
+					"chat",
+					"query",
+					"streaming",
+					...(this.artifactModule ? ["artifacts"] : []),
+					...(this.a2aModule ? ["a2a"] : []),
+				],
+				inputModes: [...defaultModes],
+				outputModes: [...defaultModes],
+				examples: [
+					"Summarize a document",
+					"Answer a question with streamed updates",
+				],
+			},
+		];
 
 		return {
 			name: this.manifest.name,
@@ -166,14 +194,21 @@ export class AINAgent {
 			version: version,
 			protocolVersion: "0.3.0",
 			url: _url.toString(),
+			preferredTransport: "JSONRPC",
+			additionalInterfaces: [
+				{
+					url: _url.toString(),
+					transport: "JSONRPC",
+				},
+			],
 			capabilities: {
-				streaming: true, // The new framework supports streaming
-				pushNotifications: false, // Assuming not implemented for this agent yet
-				stateTransitionHistory: true, // Agent uses history
+				streaming: true,
+				pushNotifications: false,
+				stateTransitionHistory: true,
 			},
-			defaultInputModes: ["text"],
-			defaultOutputModes: ["text", "task-status"], // task-status is a common output mode
-			skills: [],
+			defaultInputModes: defaultModes,
+			defaultOutputModes: defaultModes,
+			skills,
 			supportsAuthenticatedExtendedCard: false,
 		};
 	};
