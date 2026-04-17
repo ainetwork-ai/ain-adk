@@ -4,6 +4,8 @@
 export enum CONNECTOR_PROTOCOL_TYPE {
 	/** Agent-to-Agent protocol */
 	A2A = "A2A",
+	/** Built-in deterministic tools provided by AIN-ADK */
+	BUILTIN = "BUILTIN",
 	/** Model Context Protocol */
 	MCP = "MCP",
 }

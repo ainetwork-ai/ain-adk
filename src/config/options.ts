@@ -1,8 +1,5 @@
-import type { OnIntentFallback } from "@/types/agent";
-
-export interface AgentOptions {
-	onIntentFallback?: OnIntentFallback;
-}
+import type { AgentOptions } from "@/types/agent";
+import type { CalculatorOptions } from "@/types/numeric";
 
 let _options: AgentOptions | null = null;
 
@@ -17,6 +14,10 @@ export function getOptions(): AgentOptions {
 	return _options;
 }
 
-export function getOnIntentFallback(): OnIntentFallback | undefined {
+export function getOnIntentFallback(): AgentOptions["onIntentFallback"] {
 	return getOptions().onIntentFallback;
+}
+
+export function getCalculatorOptions(): CalculatorOptions | undefined {
+	return getOptions().calculator;
 }

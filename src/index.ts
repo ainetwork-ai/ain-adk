@@ -19,13 +19,19 @@ import type {
 } from "./modules";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
-import type { AinAgentManifest, OnIntentFallback } from "./types/agent";
+import type {
+	AgentOptions,
+	AinAgentManifest,
+	OnIntentFallback,
+} from "./types/agent";
 
 export type {
+	AgentOptions,
 	AinAgentManifest,
 	IntentFallbackContext,
 	OnIntentFallback,
 } from "./types/agent";
+export type { CalculatorOptions } from "./types/numeric";
 
 import { container } from "./container";
 import isValidUrl from "./utils/isValidUrl";
@@ -91,9 +97,7 @@ export class AINAgent {
 			a2aModule?: A2AModule;
 			mcpModule?: MCPModule;
 		},
-		options?: {
-			onIntentFallback?: OnIntentFallback;
-		},
+		options?: AgentOptions,
 	) {
 		this.app = express();
 
@@ -120,6 +124,7 @@ export class AINAgent {
 		// Set global options
 		setOptions({
 			onIntentFallback: options?.onIntentFallback,
+			calculator: options?.calculator,
 		});
 
 		// Set global agent reference

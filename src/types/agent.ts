@@ -1,5 +1,6 @@
 import type { StatusCodes } from "http-status-codes";
 import type { ThreadObject, TriggeredIntent } from "./memory";
+import type { CalculatorOptions } from "./numeric";
 import type { StreamEvent } from "./stream";
 
 export type IntentFallbackContext = {
@@ -10,6 +11,11 @@ export type IntentFallbackContext = {
 export type OnIntentFallback = (
 	context: IntentFallbackContext,
 ) => AsyncGenerator<StreamEvent> | undefined;
+
+export type AgentOptions = {
+	onIntentFallback?: OnIntentFallback;
+	calculator?: CalculatorOptions;
+};
 
 /**
  * Agent manifest containing essential metadata and configuration.

@@ -18,6 +18,7 @@ import {
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
+import type { CalculatorService } from "../calculator.service";
 import { PIIFilterMode, type PIIService } from "../pii.service";
 import fulfillPrompt from "../prompts/fulfill";
 import toolSelectPrompt from "../prompts/tool-select";
@@ -30,6 +31,7 @@ export class IntentFulfillService {
 	private mcpModule?: MCPModule;
 	private onIntentFallback?: OnIntentFallback;
 	private aggregateService: AggregateService;
+	private calculatorService?: CalculatorService;
 	private piiService?: PIIService;
 
 	constructor(
@@ -38,6 +40,7 @@ export class IntentFulfillService {
 		a2aModule?: A2AModule,
 		mcpModule?: MCPModule,
 		onIntentFallback?: OnIntentFallback,
+		calculatorService?: CalculatorService,
 		piiService?: PIIService,
 	) {
 		this.modelModule = modelModule;
@@ -45,7 +48,12 @@ export class IntentFulfillService {
 		this.a2aModule = a2aModule;
 		this.mcpModule = mcpModule;
 		this.onIntentFallback = onIntentFallback;
-		this.aggregateService = new AggregateService(modelModule, memoryModule);
+		this.calculatorService = calculatorService;
+		this.aggregateService = new AggregateService(
+			modelModule,
+			memoryModule,
+			calculatorService,
+		);
 		this.piiService = piiService;
 	}
 
@@ -95,7 +103,11 @@ export class IntentFulfillService {
 		thread: ThreadObject,
 		intent?: Intent,
 	): AsyncGenerator<StreamEvent> {
-		const prompt = await fulfillPrompt(this.memoryModule, intent);
+		const prompt = await fulfillPrompt(
+			this.memoryModule,
+			intent,
+			this.calculatorService?.isToolAvailable() ?? false,
+		);
 
 		const modelInstance = this.modelModule.getModel();
 		const modelOptions = this.modelModule.getModelOptions();
@@ -115,6 +127,8 @@ export class IntentFulfillService {
 		this.mcpModule && tools.push(...this.mcpModule.getTools(toolPrompt));
 		this.a2aModule &&
 			tools.push(...(await this.a2aModule.getTools(toolPrompt)));
+		this.calculatorService &&
+			tools.push(...this.calculatorService.getTools(toolPrompt));
 
 		const processList: string[] = [];
 		let isFirstCall = true;
@@ -204,6 +218,12 @@ export class IntentFulfillService {
 					) {
 						loggers.intent.info("MCP tool call", { toolName, toolArgs });
 						toolResult = await this.mcpModule.useTool(selectedTool, toolArgs);
+					} else if (
+						this.calculatorService &&
+						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.BUILTIN
+					) {
+						loggers.intent.info("Built-in tool call", { toolName, toolArgs });
+						toolResult = this.calculatorService.useTool(selectedTool, toolArgs);
 					} else if (
 						this.a2aModule &&
 						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.A2A

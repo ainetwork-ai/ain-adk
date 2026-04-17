@@ -1,8 +1,11 @@
 import { getManifest } from "@/config/manifest";
 import type { MemoryModule, ModelModule } from "@/modules";
+import { CONNECTOR_PROTOCOL_TYPE, type ConnectorTool } from "@/types/connector";
 import type { FulfillmentResult, ThreadType } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
+import type { CalculatorService } from "../calculator.service";
 import aggregatePrompts from "../prompts/aggregate";
+import toolSelectPrompt from "../prompts/tool-select";
 
 /**
  * Service for determining whether multiple fulfillment results need to be
@@ -11,10 +14,16 @@ import aggregatePrompts from "../prompts/aggregate";
 export class AggregateService {
 	private modelModule: ModelModule;
 	private memoryModule: MemoryModule;
+	private calculatorService?: CalculatorService;
 
-	constructor(modelModule: ModelModule, memoryModule: MemoryModule) {
+	constructor(
+		modelModule: ModelModule,
+		memoryModule: MemoryModule,
+		calculatorService?: CalculatorService,
+	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
+		this.calculatorService = calculatorService;
 	}
 
 	/**
@@ -74,24 +83,81 @@ export class AggregateService {
 			title: "",
 		};
 
+		const toolPrompt = await toolSelectPrompt(this.memoryModule);
+		const tools: ConnectorTool[] = this.calculatorService
+			? this.calculatorService.getTools(toolPrompt)
+			: [];
 		const messages = modelInstance.generateMessages({
 			query,
 			thread: emptyThread,
-			systemPrompt: await aggregatePrompts(this.memoryModule),
+			systemPrompt: await aggregatePrompts(this.memoryModule, tools.length > 0),
 		});
 
-		const stream = await modelInstance.fetchStreamWithContextMessage(
-			messages,
-			[],
-			modelOptions,
-		);
+		while (true) {
+			const functions = modelInstance.convertToolsToFunctions(tools);
+			const stream = await modelInstance.fetchStreamWithContextMessage(
+				messages,
+				functions,
+				modelOptions,
+			);
+			const assembledToolCalls: {
+				id: string;
+				type: "function";
+				function: { name: string; arguments: string };
+			}[] = [];
 
-		for await (const chunk of stream) {
-			if (chunk.delta?.content) {
+			for await (const chunk of stream) {
+				const delta = chunk.delta;
+				if (delta?.tool_calls) {
+					for (const { index, id, function: func } of delta.tool_calls) {
+						assembledToolCalls[index] ??= {
+							id: "",
+							type: "function",
+							function: { name: "", arguments: "" },
+						};
+
+						if (id) assembledToolCalls[index].id = id;
+						if (func?.name) assembledToolCalls[index].function.name = func.name;
+						if (func?.arguments)
+							assembledToolCalls[index].function.arguments += func.arguments;
+					}
+				} else if (chunk.delta?.content) {
+					yield {
+						event: "text_chunk",
+						data: { delta: chunk.delta.content },
+					};
+				}
+			}
+
+			if (assembledToolCalls.length === 0) {
+				break;
+			}
+
+			for (const toolCall of assembledToolCalls) {
+				const selectedTool = tools.find(
+					(tool) => tool.toolName === toolCall.function.name,
+				);
+				if (
+					!selectedTool ||
+					selectedTool.protocol !== CONNECTOR_PROTOCOL_TYPE.BUILTIN ||
+					!this.calculatorService
+				) {
+					continue;
+				}
+
+				const toolArgs = JSON.parse(toolCall.function.arguments);
 				yield {
-					event: "text_chunk",
-					data: { delta: chunk.delta.content },
+					event: "thinking_process",
+					data: {
+						title: `[${getManifest().name}] ${selectedTool.protocol} 실행: ${selectedTool.toolName}`,
+						description: `${toolArgs.thinking_text || ""}`,
+					},
 				};
+				const toolResult = this.calculatorService.useTool(
+					selectedTool,
+					toolArgs,
+				);
+				modelInstance.appendMessages(messages, toolResult);
 			}
 		}
 	}

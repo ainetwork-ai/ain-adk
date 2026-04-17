@@ -4,8 +4,9 @@ import {
 	getMemoryModule,
 	getModelModule,
 } from "@/config/modules";
-import { getOnIntentFallback } from "@/config/options";
+import { getCalculatorOptions, getOnIntentFallback } from "@/config/options";
 import { A2AService } from "@/services/a2a.service";
+import { CalculatorService } from "@/services/calculator.service";
 import { IntentFulfillService } from "@/services/intents/fulfill.service";
 import { IntentTriggerService } from "@/services/intents/trigger.service";
 import { PIIService } from "@/services/pii.service";
@@ -27,6 +28,7 @@ export class ServiceContainer {
 	private _intentFulfillService?: IntentFulfillService;
 	private _queryService?: QueryService;
 	private _a2aService?: A2AService;
+	private _calculatorService?: CalculatorService;
 	private _piiService?: PIIService;
 	private _userWorkflowService?: UserWorkflowService;
 	private _userWorkflowCoordinatorService?: UserWorkflowCoordinatorService;
@@ -58,6 +60,13 @@ export class ServiceContainer {
 		return this._piiService;
 	}
 
+	getCalculatorService(): CalculatorService {
+		if (!this._calculatorService) {
+			this._calculatorService = new CalculatorService(getCalculatorOptions());
+		}
+		return this._calculatorService;
+	}
+
 	getIntentFulfillService(): IntentFulfillService {
 		if (!this._intentFulfillService) {
 			this._intentFulfillService = new IntentFulfillService(
@@ -66,6 +75,7 @@ export class ServiceContainer {
 				getA2AModule(),
 				getMCPModule(),
 				getOnIntentFallback(),
+				this.getCalculatorService(),
 				this.getPIIService(),
 			);
 		}
@@ -146,6 +156,7 @@ export class ServiceContainer {
 		this._intentFulfillService = undefined;
 		this._queryService = undefined;
 		this._a2aService = undefined;
+		this._calculatorService = undefined;
 		this._piiService = undefined;
 		this._userWorkflowService = undefined;
 		this._userWorkflowCoordinatorService = undefined;

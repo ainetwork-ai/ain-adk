@@ -1,9 +1,23 @@
 import type { MemoryModule } from "@/modules";
 import type { Intent } from "@/types/memory";
 
-async function fulfillPrompt(memoryModule: MemoryModule, intent?: Intent) {
+async function fulfillPrompt(
+	memoryModule: MemoryModule,
+	intent?: Intent,
+	calculatorEnabled = false,
+) {
 	const agentMemory = memoryModule.getAgentMemory();
 	const agentPrompt = agentMemory ? await agentMemory.getAgentPrompt() : "";
+	const builtinToolPrompt = calculatorEnabled
+		? `
+
+<BUILTIN_Tool>
+   BUILTIN_Tool is a deterministic internal tool provided by AIN-ADK.
+   If arithmetic is needed, do NOT calculate mentally. Use the built-in calculator tool instead.
+   Supported arithmetic is limited to add, subtract, multiply, and divide.
+   When the calculator returns a result, use that exact result value in your response.
+</BUILTIN_Tool>`
+		: "";
 
 	return `
 Today is ${new Date().toLocaleDateString()}.
@@ -43,10 +57,12 @@ Refer to the usage instructions below for each <tool_type>.
    IMPORTANT: When writing your final response, you MUST include all data (tables, numbers, statistics) from A2A_Tool results exactly as received. Do NOT summarize, round, or omit any numerical values.
 </A2A_Tool>
 
+${builtinToolPrompt}
+
 ${agentPrompt}
 
 ${intent?.prompt || ""}
-	`.trim();
+		`.trim();
 }
 
 export default fulfillPrompt;
