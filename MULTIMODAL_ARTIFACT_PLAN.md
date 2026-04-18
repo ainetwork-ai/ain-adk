@@ -80,6 +80,10 @@ Completed groundwork so far:
 - aligned outbound A2A sender identity and role metadata with agent-facing protocol usage
 - updated generated A2A agent cards to advertise streaming, structured modes, and a default query skill
 - added focused tests covering A2A artifact reference flow, direct message-event handling, and agent card generation
+- introduced explicit `QueryExecutionInput` and `WorkflowExecutionInput` boundary types
+- kept workflow execution text-first while reserving optional structured `input` for future expansion
+- updated workflow execution and query service boundaries to pass execution input objects instead of ad-hoc string pairs
+- added focused tests covering workflow execution input resolution and future-friendly workflow query boundary shape
 
 Not completed yet:
 
@@ -87,7 +91,6 @@ Not completed yet:
 - full query/request/response contract refactor across streaming and provider-facing paths
 - artifact upload/download runtime APIs
 - stream event redesign
-- workflow boundary refactor
 - migration adapters for old message records
 
 ---
@@ -106,6 +109,7 @@ The current implementation is still text-first in important inference paths, but
 - thread history is still flattened into strings for intent triggering, but now through a shared multipart-aware serializer
 - stream output still keeps `text_chunk` as a compatibility-first event, even though canonical message events and `artifact_ready` now exist
 - A2A paths now accept multipart inputs and exchange artifact references, but still avoid raw binary forwarding
+- workflow authoring and APIs remain text-only, but execution boundaries now use explicit input types that can absorb future structured input
 - server middleware only handles JSON and URL-encoded input, not multipart uploads
 
 ### Important impacted files
@@ -120,6 +124,9 @@ The current implementation is still text-first in important inference paths, but
 - [src/services/intents/fulfill.service.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/services/intents/fulfill.service.ts)
 - [src/services/a2a.service.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/services/a2a.service.ts)
 - [src/modules/a2a/a2a.module.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/modules/a2a/a2a.module.ts)
+- [src/services/workflow-variable-resolver.service.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/services/workflow-variable-resolver.service.ts)
+- [src/services/workflow-execution.service.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/services/workflow-execution.service.ts)
+- [src/types/message-input.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/types/message-input.ts)
 - [src/index.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/index.ts)
 
 ---
@@ -989,6 +996,15 @@ Completed groundwork in this phase:
 - keep workflow APIs text-only in the first milestone
 - review workflow service signatures for future structured input support
 - document the future path from string workflows to multipart workflows without implementing it yet
+
+Completed groundwork in this phase:
+
+- introduced explicit `QueryExecutionInput` and `WorkflowExecutionInput` types to make workflow/query execution boundaries more legible
+- updated `WorkflowVariableResolver.resolveForExecution(...)` to return a typed workflow execution input object instead of an ad-hoc string pair
+- updated `WorkflowExecutionService` to pass workflow execution through an explicit execution-input boundary while preserving current text-first behavior
+- updated `QueryService.handleQuery(...)` to accept a shared execution input type so workflow callers no longer need custom inline parameter shapes
+- kept workflow runtime behavior text-only for this milestone while reserving optional structured `input` support for later expansion
+- added focused tests covering text-first workflow execution input resolution and future-friendly workflow query boundary compatibility
 
 ## Phase 13. Migration and Compatibility Layer
 
