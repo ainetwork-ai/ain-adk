@@ -1,13 +1,28 @@
 import { randomUUID } from "node:crypto";
-import type { Task, TaskStatusUpdateEvent } from "@a2a-js/sdk";
+import type {
+	Artifact as A2AArtifact,
+	Message as A2AMessage,
+	Part as A2APart,
+	Task,
+	TaskArtifactUpdateEvent,
+	TaskStatusUpdateEvent,
+} from "@a2a-js/sdk";
 import type {
 	AgentExecutor,
 	ExecutionEventBus,
 	RequestContext,
 } from "@a2a-js/sdk/server";
 import type { ThreadType } from "@/types/memory.js";
+import {
+	createA2AArtifactsFromMessage,
+	createA2AMessagePartsFromMessage,
+	createQueryInputFromA2AMessage,
+} from "@/utils/a2a.js";
 import { loggers } from "@/utils/logger.js";
-import { extractTextContent } from "@/utils/message.js";
+import {
+	createModelInputMessageFromQueryInput,
+	serializeMessageForModelFallback,
+} from "@/utils/message.js";
 import type { QueryService } from "./query.service.js";
 
 /**
@@ -34,28 +49,55 @@ export class A2AService implements AgentExecutor {
 		contextId: string,
 		state: "working" | "failed" | "canceled" | "completed",
 		message?: string,
+		parts?: A2APart[],
 	): TaskStatusUpdateEvent => {
+		const statusMessage: A2AMessage | undefined =
+			parts && parts.length > 0
+				? {
+						kind: "message",
+						role: "agent",
+						messageId: randomUUID(),
+						parts,
+						taskId,
+						contextId,
+					}
+				: message
+					? {
+							kind: "message",
+							role: "agent",
+							messageId: randomUUID(),
+							parts: [{ kind: "text", text: message }],
+							taskId,
+							contextId,
+						}
+					: undefined;
+
 		return {
 			kind: "status-update",
 			taskId: taskId,
 			contextId: contextId,
 			status: {
 				state: state,
-				message: message
-					? {
-							kind: "message",
-							role: "agent",
-							messageId: randomUUID(),
-							parts: [{ kind: "text", text: message }],
-							taskId: taskId,
-							contextId: contextId,
-						}
-					: undefined,
+				message: statusMessage,
 				timestamp: new Date().toISOString(),
 			},
 			final: state !== "working",
 		};
 	};
+
+	private createTaskArtifactUpdateEvent(
+		taskId: string,
+		contextId: string,
+		artifact: A2AArtifact,
+	): TaskArtifactUpdateEvent {
+		return {
+			kind: "artifact-update",
+			taskId,
+			contextId,
+			artifact,
+			lastChunk: true,
+		};
+	}
 
 	async execute(
 		requestContext: RequestContext,
@@ -63,7 +105,8 @@ export class A2AService implements AgentExecutor {
 	): Promise<void> {
 		const userMessage = requestContext.userMessage;
 		// A2A context ID === AIN ADK thread ID
-		const threadId = userMessage.contextId!; // TODO: no context id case
+		const threadId =
+			userMessage.contextId || requestContext.task?.contextId || randomUUID();
 
 		const { agentId, type } = userMessage.metadata as {
 			agentId: string;
@@ -89,31 +132,33 @@ export class A2AService implements AgentExecutor {
 			eventBus.publish(initialTask);
 		}
 
-		const message: string = userMessage.parts
-			.filter((part) => part.kind === "text")
-			.map((part) => part.text)
-			.join("\n");
-		if (message.length === 0) {
+		const input = createQueryInputFromA2AMessage(userMessage);
+		if (input.parts.length === 0) {
 			loggers.server.warn(`Empty message received for task ${taskId}.`);
 			const failureUpdate = this.createTaskStatusUpdateEvent(
 				taskId,
 				threadId,
 				"failed",
-				"No message found to process.",
+				"No supported content parts found to process.",
 			);
 			eventBus.publish(failureUpdate);
 			return;
 		}
 
+		const query = serializeMessageForModelFallback(
+			createModelInputMessageFromQueryInput({ input }),
+		);
+
 		const stream = this.queryService.handleQuery(
 			{ userId: agentId, type, threadId },
-			{ query: message },
+			{ query, input },
 			true,
 		);
 
 		try {
 			let finalResponseText = "";
-			let sawCompatibilityTextChunk = false;
+			let finalResponseParts: A2APart[] | undefined;
+			let finalArtifacts: A2AArtifact[] = [];
 			for await (const event of stream) {
 				if (this.canceledTasks.has(taskId)) {
 					loggers.server.info(`Task ${taskId} was canceled.`);
@@ -127,13 +172,15 @@ export class A2AService implements AgentExecutor {
 				}
 
 				if (event.event === "text_chunk") {
-					sawCompatibilityTextChunk = true;
 					finalResponseText += event.data.delta;
-				} else if (
-					event.event === "message_complete" &&
-					!sawCompatibilityTextChunk
-				) {
-					finalResponseText = extractTextContent(event.data.message);
+				} else if (event.event === "message_complete") {
+					finalResponseText = serializeMessageForModelFallback(
+						event.data.message,
+					);
+					finalResponseParts = createA2AMessagePartsFromMessage(
+						event.data.message,
+					);
+					finalArtifacts = createA2AArtifactsFromMessage(event.data.message);
 				} else if (event.event === "thinking_process") {
 					const thinkingProcessUpdate = this.createTaskStatusUpdateEvent(
 						taskId,
@@ -145,11 +192,18 @@ export class A2AService implements AgentExecutor {
 				}
 			}
 
+			for (const artifact of finalArtifacts) {
+				eventBus.publish(
+					this.createTaskArtifactUpdateEvent(taskId, threadId, artifact),
+				);
+			}
+
 			const finalUpdate = this.createTaskStatusUpdateEvent(
 				taskId,
 				threadId,
 				"completed",
 				finalResponseText,
+				finalResponseParts,
 			);
 			eventBus.publish(finalUpdate);
 			loggers.server.info(`Task ${taskId} completed successfully.`);

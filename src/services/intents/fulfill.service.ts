@@ -254,7 +254,10 @@ export class IntentFulfillService {
 						// yield intermediate events and get final result
 						let result = await a2aStream.next();
 						while (!result.done) {
-							if (result.value.event === "thinking_process") {
+							if (
+								result.value.event === "thinking_process" ||
+								result.value.event === "artifact_ready"
+							) {
 								yield result.value;
 							}
 							result = await a2aStream.next();

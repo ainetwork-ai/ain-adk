@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type {
+	Artifact as A2AArtifact,
 	AgentCard,
 	Message,
 	MessageSendParams,
 	Task,
+	TaskArtifactUpdateEvent,
 	TaskStatusUpdateEvent,
 	TextPart,
 } from "@a2a-js/sdk";
@@ -14,7 +16,13 @@ import {
 } from "@/types/connector.js";
 import { ThreadType } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream.js";
+import {
+	artifactContentPartFromA2AArtifact,
+	extractArtifactPartsFromA2AMessage,
+	serializeA2AMessageForFallback,
+} from "@/utils/a2a.js";
 import { loggers } from "@/utils/logger.js";
+import { serializePartForModelFallback } from "@/utils/message.js";
 import { A2AConnector } from "./a2a.connector.js";
 
 /**
@@ -158,6 +166,12 @@ export class A2AModule {
 		threadId: string,
 	): AsyncGenerator<StreamEvent, string, unknown> {
 		const finalText: string[] = [];
+		const seenArtifactIds = new Set<string>();
+		const appendFinalText = (value: string) => {
+			if (value && !finalText.includes(value)) {
+				finalText.push(value);
+			}
+		};
 		const connector = this.a2aConnectors.get(tool.connectorName);
 		if (!connector) {
 			loggers.a2a.error("Unknown agent:", { tool });
@@ -185,28 +199,64 @@ export class A2AModule {
 
 					if (typedEvent.status.state === "working") {
 						// thinking process event
-						const eventData = JSON.parse(
-							(typedEvent.status.message?.parts[0] as TextPart).text,
-						);
-						yield {
-							event: "thinking_process",
-							data: eventData,
-						};
+						const workingText = (
+							typedEvent.status.message?.parts[0] as TextPart | undefined
+						)?.text;
+						if (workingText) {
+							try {
+								const eventData = JSON.parse(workingText);
+								yield {
+									event: "thinking_process",
+									data: eventData,
+								};
+							} catch {
+								finalText.push(workingText);
+							}
+						}
 					} else if (typedEvent.status.state === "completed") {
-						// TODO: handle 'file', 'data' parts
-						const texts = typedEvent.status.message?.parts
-							.filter((part) => part.kind === "text")
-							.map((part: TextPart) => part.text)
-							.join("\n");
-						if (texts) {
-							finalText.push(texts);
-							yield {
-								event: "text_chunk",
-								data: { delta: texts },
-							};
+						if (typedEvent.status.message?.parts.length) {
+							const fallbackText = serializeA2AMessageForFallback(
+								typedEvent.status.message,
+							);
+							if (fallbackText) {
+								appendFinalText(fallbackText);
+								yield {
+									event: "text_chunk",
+									data: { delta: fallbackText },
+								};
+							}
+
+							const artifactParts = extractArtifactPartsFromA2AMessage(
+								typedEvent.status.message,
+							);
+							for (const artifactPart of artifactParts) {
+								if (seenArtifactIds.has(artifactPart.artifactId)) {
+									continue;
+								}
+								seenArtifactIds.add(artifactPart.artifactId);
+								yield {
+									event: "artifact_ready",
+									data: artifactPart,
+								};
+							}
 						}
 					} else {
 						// ignore other status updates
+					}
+				} else if (event.kind === "artifact-update") {
+					const artifact = artifactContentPartFromA2AArtifact(
+						(event as TaskArtifactUpdateEvent).artifact as A2AArtifact,
+					);
+					if (!seenArtifactIds.has(artifact.artifactId)) {
+						seenArtifactIds.add(artifact.artifactId);
+						yield {
+							event: "artifact_ready",
+							data: artifact,
+						};
+					}
+					const artifactText = serializePartForModelFallback(artifact);
+					if (artifactText) {
+						appendFinalText(artifactText);
 					}
 				} else if (event.kind === "message") {
 					// FIXME: handling text in 'message'?
