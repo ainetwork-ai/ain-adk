@@ -14,7 +14,7 @@ import {
 	type ThreadObject,
 	ThreadType,
 } from "@/types/memory.js";
-import type { QueryMessageInput } from "@/types/message-input";
+import type { QueryExecutionInput } from "@/types/message-input";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
 import {
@@ -116,11 +116,7 @@ export class QueryService {
 			title?: string;
 			options?: ModelFetchOptions;
 		},
-		queryData: {
-			query: string;
-			displayQuery?: string;
-			input?: QueryMessageInput;
-		},
+		queryData: QueryExecutionInput,
 		isA2A?: boolean,
 	): AsyncGenerator<
 		StreamEvent,

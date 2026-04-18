@@ -1,4 +1,5 @@
 import type { UserWorkflow } from "@/types/memory.js";
+import type { WorkflowExecutionInput } from "@/types/message-input.js";
 import {
 	resolveTemplateRecord,
 	resolveTemplateString,
@@ -35,10 +36,7 @@ export class WorkflowVariableResolver {
 	resolveForExecution(
 		workflow: WorkflowTextFields,
 		executionVariables?: Record<string, string>,
-	): {
-		query: string;
-		displayQuery: string;
-	} {
+	): WorkflowExecutionInput {
 		const { timezone } = workflow;
 		let query = workflow.content;
 		let displayQuery = workflow.title;
