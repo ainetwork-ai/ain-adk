@@ -163,6 +163,10 @@ export type ThreadObject = {
 	messages: Array<MessageObject>;
 };
 
+export type CanonicalThreadObject = Omit<ThreadObject, "messages"> & {
+	messages: Array<CanonicalMessageObject>;
+};
+
 export type IntentToolChoice = "auto" | "required";
 
 export interface Intent {

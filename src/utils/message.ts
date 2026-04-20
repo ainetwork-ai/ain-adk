@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type {
 	ArtifactContentPart,
 	CanonicalMessageObject,
+	CanonicalThreadObject,
 	DataContentPart,
 	LegacyMessageObject,
 	MessageContentPart,
@@ -162,6 +163,21 @@ export function normalizeMessageObject(
 		metadata: message.metadata,
 		schemaVersion: 2,
 		parts: normalizeMessageParts(message),
+	};
+}
+
+export function normalizeThreadMessages(
+	messages: Array<MessageObject>,
+): Array<CanonicalMessageObject> {
+	return messages.map(normalizeMessageObject);
+}
+
+export function normalizeThreadObject(
+	thread: ThreadObject,
+): CanonicalThreadObject {
+	return {
+		...thread,
+		messages: normalizeThreadMessages(thread.messages),
 	};
 }
 

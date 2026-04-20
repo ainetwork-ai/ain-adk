@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { MemoryModule } from "@/modules/index.js";
 import type { ThreadFilter } from "@/types/memory.js";
+import { normalizeThreadObject } from "@/utils/message.js";
 
 export class ThreadApiController {
 	private memoryModule: MemoryModule;
@@ -22,7 +23,7 @@ export class ThreadApiController {
 			const userId = res.locals.userId || "";
 			const threadMemory = this.memoryModule.getThreadMemory();
 			const thread = await threadMemory?.getThread(userId, threadId);
-			res.json(thread);
+			res.json(thread ? normalizeThreadObject(thread) : thread);
 		} catch (error) {
 			next(error);
 		}

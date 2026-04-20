@@ -84,6 +84,9 @@ Completed groundwork so far:
 - kept workflow execution text-first while reserving optional structured `input` for future expansion
 - updated workflow execution and query service boundaries to pass execution input objects instead of ad-hoc string pairs
 - added focused tests covering workflow execution input resolution and future-friendly workflow query boundary shape
+- added thread-level legacy message read adapters that expose canonical `schemaVersion: 2` message views
+- normalized thread read and write boundaries in thread, query, and thread API services
+- added focused tests covering legacy thread message reads, canonicalized writes, and query intent processing compatibility
 
 Not completed yet:
 
@@ -91,7 +94,6 @@ Not completed yet:
 - full query/request/response contract refactor across streaming and provider-facing paths
 - artifact upload/download runtime APIs
 - stream event redesign
-- migration adapters for old message records
 
 ---
 
@@ -107,6 +109,7 @@ The current implementation is still text-first in important inference paths, but
 - `QueryService` still processes `query: string` for inference, even though it can now receive structured input for persistence
 - some runtime paths still assume `query: string`, but new message writes now converge on canonical `parts[]` messages
 - thread history is still flattened into strings for intent triggering, but now through a shared multipart-aware serializer
+- legacy thread records can still be read from memory providers, but SDK/API read boundaries now normalize messages to canonical `schemaVersion: 2`
 - stream output still keeps `text_chunk` as a compatibility-first event, even though canonical message events and `artifact_ready` now exist
 - A2A paths now accept multipart inputs and exchange artifact references, but still avoid raw binary forwarding
 - workflow authoring and APIs remain text-only, but execution boundaries now use explicit input types that can absorb future structured input
@@ -115,6 +118,8 @@ The current implementation is still text-first in important inference paths, but
 ### Important impacted files
 
 - [src/controllers/query.controller.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/controllers/query.controller.ts)
+- [src/controllers/api/threads.api.controller.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/controllers/api/threads.api.controller.ts)
+- [src/services/thread.service.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/services/thread.service.ts)
 - [src/services/query.service.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/services/query.service.ts)
 - [src/types/memory.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/types/memory.ts)
 - [src/types/stream.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/types/stream.ts)
@@ -1011,6 +1016,15 @@ Completed groundwork in this phase:
 - provide adapters for old text-only API usage
 - support old message reading where necessary
 - publish upgrade notes for provider and memory implementers
+
+Completed groundwork in this phase:
+
+- added `CanonicalThreadObject`, `normalizeThreadMessages(...)`, and `normalizeThreadObject(...)` as explicit thread-level migration adapters
+- updated `ThreadService.getThread(...)` to return canonical message views when memory providers return legacy message records
+- updated `ThreadService.addMessagesToThread(...)` to normalize incoming messages before writing to memory providers
+- updated `QueryService` thread loading so intent triggering and fulfillment receive canonicalized stored thread history
+- updated the thread API controller to return canonicalized thread messages without requiring a storage migration
+- added focused tests covering legacy thread message normalization at utility, service, query, and API-controller boundaries
 
 ## Phase 14. Tests and Documentation Sweep
 
