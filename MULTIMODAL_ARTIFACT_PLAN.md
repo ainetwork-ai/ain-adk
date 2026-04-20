@@ -14,7 +14,7 @@ Primary goals:
 
 ## Progress Snapshot
 
-Last updated: `2026-04-16`
+Last updated: `2026-04-18`
 
 Completed groundwork so far:
 
@@ -72,6 +72,14 @@ Completed groundwork so far:
 - added structured query artifact reference validation against the artifact store
 - added ready-state and ownership checks for artifact-backed query input
 - added tests covering query artifact metadata enrichment and not-ready validation failures
+- added shared A2A multipart/artifact conversion utilities
+- updated A2A inbound handling to convert multipart/file parts into structured query input
+- updated A2A outbound handling to publish artifact references through A2A `artifact-update` events
+- added `artifact_ready` stream events for A2A-delivered artifact references
+- updated A2A tool consumption to handle direct `message` events as content, not only task bookkeeping
+- aligned outbound A2A sender identity and role metadata with agent-facing protocol usage
+- updated generated A2A agent cards to advertise streaming, structured modes, and a default query skill
+- added focused tests covering A2A artifact reference flow, direct message-event handling, and agent card generation
 
 Not completed yet:
 
@@ -79,7 +87,6 @@ Not completed yet:
 - full query/request/response contract refactor across streaming and provider-facing paths
 - artifact upload/download runtime APIs
 - stream event redesign
-- A2A artifact reference support
 - workflow boundary refactor
 - migration adapters for old message records
 
@@ -87,7 +94,7 @@ Not completed yet:
 
 ## Current State Summary
 
-The current implementation is effectively text-only, even though some types are loosely structured.
+The current implementation is still text-first in important inference paths, but it is no longer purely text-only.
 
 ### Text-only assumptions in the current code
 
@@ -97,8 +104,8 @@ The current implementation is effectively text-only, even though some types are 
 - `QueryService` still processes `query: string` for inference, even though it can now receive structured input for persistence
 - some runtime paths still assume `query: string`, but new message writes now converge on canonical `parts[]` messages
 - thread history is still flattened into strings for intent triggering, but now through a shared multipart-aware serializer
-- stream output is centered on `text_chunk`
-- A2A paths read and write only text parts
+- stream output still keeps `text_chunk` as a compatibility-first event, even though canonical message events and `artifact_ready` now exist
+- A2A paths now accept multipart inputs and exchange artifact references, but still avoid raw binary forwarding
 - server middleware only handles JSON and URL-encoded input, not multipart uploads
 
 ### Important impacted files
@@ -626,13 +633,13 @@ Recommended follow-up:
 
 ## A2A Changes
 
-The current A2A path is also text-first.
+The A2A path is now multipart-aware for file references, but it still intentionally avoids raw binary forwarding.
 
-Target direction:
+Current direction:
 
-- agent card should advertise more than text-only capabilities where appropriate
-- inbound A2A messages should parse multipart content
-- outbound A2A responses should allow artifact references
+- agent card now advertises streaming and structured modes, with file mode enabled when artifact storage is configured
+- inbound A2A messages now parse multipart content into structured query input
+- outbound A2A responses now allow artifact references through `artifact-update` and multipart completion payloads
 - prefer artifact reference or downloadable URL exchange over raw binary transport
 
 Important note:
@@ -644,6 +651,13 @@ Additional recommendation:
 
 - define a canonical A2A-safe artifact reference payload shape early
 - avoid depending on provider-local download URLs when cross-agent access control would break portability
+
+Completed groundwork in this area:
+
+- added shared A2A-safe multipart/artifact conversion helpers
+- updated `A2AService` to accept multipart/file input and publish artifact reference updates
+- updated `A2AModule` to consume direct `message` events and `artifact-update` events as streamed content
+- aligned outbound sender role/metadata and generated agent-card capability declarations with the current A2A surface
 
 ---
 
@@ -959,6 +973,16 @@ Completed groundwork in this phase:
 - update agent card capabilities and modes
 - standardize artifact reference handling for A2A interoperability
 - address existing A2A TODO and FIXME items while touching the protocol surface
+
+Completed groundwork in this phase:
+
+- updated A2A inbound message handling to normalize multipart/file parts into structured query input
+- updated A2A outbound task completion to emit multipart content plus artifact references through `artifact-update`
+- added internal `artifact_ready` stream events so A2A-delivered artifact references can flow through the existing fulfillment pipeline
+- updated A2A tool consumption to process direct `message` events as real streamed content
+- aligned outbound A2A sender role and identity metadata with agent-facing protocol expectations
+- updated generated agent cards to advertise streaming, structured modes, JSON-RPC transport, and a default query skill
+- added focused tests covering A2A artifact references, direct message-event handling, outbound identity metadata, and agent card generation
 
 ## Phase 12. Workflow Boundary Review
 

@@ -12,7 +12,7 @@ import type {
 	ExecutionEventBus,
 	RequestContext,
 } from "@a2a-js/sdk/server";
-import type { ThreadType } from "@/types/memory.js";
+import { ThreadType } from "@/types/memory.js";
 import {
 	createA2AArtifactsFromMessage,
 	createA2AMessagePartsFromMessage,
@@ -99,6 +99,30 @@ export class A2AService implements AgentExecutor {
 		};
 	}
 
+	private getRequestMetadata(requestContext: RequestContext): {
+		agentId: string;
+		type: ThreadType;
+	} {
+		const metadata =
+			typeof requestContext.userMessage.metadata === "object" &&
+			requestContext.userMessage.metadata !== null
+				? requestContext.userMessage.metadata
+				: {};
+
+		const agentId =
+			typeof (metadata as { agentId?: unknown }).agentId === "string"
+				? (metadata as { agentId: string }).agentId
+				: requestContext.userMessage.taskId ||
+					requestContext.userMessage.contextId ||
+					"anonymous-a2a-agent";
+
+		const rawType = (metadata as { type?: unknown }).type;
+		const type =
+			rawType === ThreadType.WORKFLOW ? ThreadType.WORKFLOW : ThreadType.CHAT;
+
+		return { agentId, type };
+	}
+
 	async execute(
 		requestContext: RequestContext,
 		eventBus: ExecutionEventBus,
@@ -108,10 +132,7 @@ export class A2AService implements AgentExecutor {
 		const threadId =
 			userMessage.contextId || requestContext.task?.contextId || randomUUID();
 
-		const { agentId, type } = userMessage.metadata as {
-			agentId: string;
-			type: ThreadType;
-		};
+		const { agentId, type } = this.getRequestMetadata(requestContext);
 		const existingTask = requestContext.task;
 
 		const taskId = existingTask?.id || randomUUID();

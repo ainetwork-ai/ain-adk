@@ -10,6 +10,7 @@ import type {
 	TextPart,
 } from "@a2a-js/sdk";
 import { type Client as A2AClient, ClientFactory } from "@a2a-js/sdk/client";
+import { getManifest } from "@/config/manifest.js";
 import {
 	CONNECTOR_PROTOCOL_TYPE,
 	type ConnectorTool,
@@ -37,7 +38,50 @@ export class A2AModule {
 	private a2aConnectors: Map<string, A2AConnector> = new Map();
 	/** Map of session IDs to their A2A session state */
 	private a2aTasks: Map<string, string> = new Map();
-	private agentId: string = randomUUID(); /* FIXME */
+	private agentId?: string;
+	private agentName?: string;
+
+	public configureIdentity(identity: {
+		agentId?: string;
+		agentName?: string;
+	}): void {
+		if (identity.agentId?.trim()) {
+			this.agentId = identity.agentId;
+		}
+		if (identity.agentName?.trim()) {
+			this.agentName = identity.agentName;
+		}
+	}
+
+	private getAgentId(): string {
+		if (this.agentId) {
+			return this.agentId;
+		}
+
+		try {
+			const manifest = getManifest();
+			this.agentId = manifest.url || manifest.name;
+		} catch {
+			this.agentId = randomUUID();
+		}
+
+		return this.agentId;
+	}
+
+	private getAgentName(): string | undefined {
+		if (this.agentName) {
+			return this.agentName;
+		}
+
+		try {
+			const manifest = getManifest();
+			this.agentName = manifest.name;
+		} catch {
+			this.agentName = undefined;
+		}
+
+		return this.agentName;
+	}
 
 	/**
 	 * Registers a new A2A peer server URL for connection.
@@ -127,9 +171,10 @@ export class A2AModule {
 		const messagePayload: Message = {
 			messageId: randomUUID(),
 			kind: "message",
-			role: "user", // FIXME: it could be 'agent'
+			role: "agent",
 			metadata: {
-				agentId: this.agentId,
+				agentId: this.getAgentId(),
+				agentName: this.getAgentName(),
 				type: ThreadType.CHAT,
 			},
 			parts: [
@@ -146,6 +191,33 @@ export class A2AModule {
 		}
 
 		return messagePayload;
+	}
+
+	private *emitMessageContent(
+		message: Pick<Message, "parts">,
+		seenArtifactIds: Set<string>,
+		appendFinalText: (value: string) => void,
+	): Generator<StreamEvent> {
+		const fallbackText = serializeA2AMessageForFallback(message);
+		if (fallbackText) {
+			appendFinalText(fallbackText);
+			yield {
+				event: "text_chunk",
+				data: { delta: fallbackText },
+			};
+		}
+
+		const artifactParts = extractArtifactPartsFromA2AMessage(message);
+		for (const artifactPart of artifactParts) {
+			if (seenArtifactIds.has(artifactPart.artifactId)) {
+				continue;
+			}
+			seenArtifactIds.add(artifactPart.artifactId);
+			yield {
+				event: "artifact_ready",
+				data: artifactPart,
+			};
+		}
 	}
 
 	/**
@@ -215,30 +287,11 @@ export class A2AModule {
 						}
 					} else if (typedEvent.status.state === "completed") {
 						if (typedEvent.status.message?.parts.length) {
-							const fallbackText = serializeA2AMessageForFallback(
+							yield* this.emitMessageContent(
 								typedEvent.status.message,
+								seenArtifactIds,
+								appendFinalText,
 							);
-							if (fallbackText) {
-								appendFinalText(fallbackText);
-								yield {
-									event: "text_chunk",
-									data: { delta: fallbackText },
-								};
-							}
-
-							const artifactParts = extractArtifactPartsFromA2AMessage(
-								typedEvent.status.message,
-							);
-							for (const artifactPart of artifactParts) {
-								if (seenArtifactIds.has(artifactPart.artifactId)) {
-									continue;
-								}
-								seenArtifactIds.add(artifactPart.artifactId);
-								yield {
-									event: "artifact_ready",
-									data: artifactPart,
-								};
-							}
 						}
 					} else {
 						// ignore other status updates
@@ -259,11 +312,17 @@ export class A2AModule {
 						appendFinalText(artifactText);
 					}
 				} else if (event.kind === "message") {
-					// FIXME: handling text in 'message'?
 					const msg = event as Message;
 					const taskId = this.a2aTasks.get(threadId);
 					if (msg.taskId && msg.taskId !== taskId) {
 						this.a2aTasks.set(threadId, msg.taskId);
+					}
+					if (msg.parts.length > 0) {
+						yield* this.emitMessageContent(
+							msg,
+							seenArtifactIds,
+							appendFinalText,
+						);
 					}
 				} else if (event.kind === "task") {
 					// establishing the Task ID
