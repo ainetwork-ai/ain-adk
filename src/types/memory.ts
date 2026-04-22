@@ -159,7 +159,6 @@ export interface WorkflowTaskAgent {
 export interface WorkflowTask {
 	taskId: string;
 	title: string;
-	description?: string;
 	prompt: string;
 	agent?: WorkflowTaskAgent;
 	outputKey?: string;

@@ -45,7 +45,6 @@ Add structured fields to `WorkflowTemplate` and `UserWorkflow` while keeping `co
 export interface WorkflowTask {
   taskId: string;
   title: string;
-  description?: string;
   prompt: string;
   agent?: WorkflowTaskAgent;
   outputKey?: string;
