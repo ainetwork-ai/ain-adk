@@ -117,8 +117,8 @@ export class WorkflowExecutionService {
 		yield {
 			event: "thinking_process",
 			data: {
-				title: `[Workflow] ${workflow.title}`,
-				description: "Starting workflow execution.",
+				title: `[워크플로우] ${workflow.title}`,
+				description: "워크플로우 실행을 시작합니다.",
 				metadata: {
 					phase: "workflow_start",
 					workflowId,
@@ -277,10 +277,10 @@ export class WorkflowExecutionService {
 		yield {
 			event: "thinking_process",
 			data: {
-				title: `[Workflow] Running task: ${task.title}`,
+				title: `[워크플로우] 작업 실행: ${task.title}`,
 				description: task.agent
-					? `Delegating to ${task.agent.connectorName}.`
-					: "Running locally.",
+					? `${task.agent.connectorName} 에이전트에 작업을 위임합니다.`
+					: "로컬에서 작업을 실행합니다.",
 				metadata: {
 					phase: "task",
 					taskId: task.taskId,
@@ -334,7 +334,7 @@ export class WorkflowExecutionService {
 
 		const tools = await this.toolCallingService.getTools({
 			toolPrompt:
-				"Describe why this MCP tool is needed for the current workflow task and what result you expect.",
+				"현재 워크플로우 작업에 이 MCP 도구가 필요한 이유와 기대하는 결과를 한국어로 구체적으로 작성하세요.",
 			mode: "mcp",
 		});
 		const stream = this.toolCallingService.run({
@@ -413,8 +413,8 @@ ${task.prompt}`;
 		yield {
 			event: "thinking_process",
 			data: {
-				title: `[Workflow] Rendering ${block.type} block`,
-				description: "Composing the workflow response from task results.",
+				title: `[워크플로우] ${this.getBlockTypeLabel(block.type)} 블록 생성 중`,
+				description: "작업 결과를 바탕으로 워크플로우 응답을 구성합니다.",
 				metadata: {
 					phase: "response_block",
 					blockId: block.blockId,
@@ -457,6 +457,17 @@ ${task.prompt}`;
 			type: block.type,
 			content: finalContent,
 		};
+	}
+
+	private getBlockTypeLabel(type: WorkflowResponseBlock["type"]): string {
+		switch (type) {
+			case "heading":
+				return "제목";
+			case "text":
+				return "텍스트";
+			case "table":
+				return "표";
+		}
 	}
 
 	private async *renderGeneratedBlock(

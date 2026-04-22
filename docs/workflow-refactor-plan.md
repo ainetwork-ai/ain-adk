@@ -368,8 +368,8 @@ Workflow execution should not introduce workflow-specific SSE event names in the
 {
   event: "thinking_process",
   data: {
-    title: "[Workflow] Running task: Sales Summary",
-    description: "Delegating to sales-agent",
+    title: "[워크플로우] 작업 실행: 매출 요약",
+    description: "sales-agent 에이전트에 작업을 위임합니다.",
     metadata: {
       phase: "task",
       taskId: "sales-summary",
