@@ -25,7 +25,14 @@ export type StreamEvent =
 	| { event: "thread_id"; data: ThreadMetadata }
 	| { event: "intent_process"; data: { subquery: string; actionPlan: string } }
 	| { event: "collection_name"; data: { name: string } }
-	| { event: "thinking_process"; data: { title: string; description: string } };
+	| {
+			event: "thinking_process";
+			data: {
+				title: string;
+				description: string;
+				metadata?: Record<string, unknown>;
+			};
+	  };
 
 /**
  * Tool call delta for streaming tool invocations

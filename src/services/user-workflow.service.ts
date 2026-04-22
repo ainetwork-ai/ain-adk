@@ -23,7 +23,7 @@ export class UserWorkflowService {
 
 	async createWorkflow(workflow: UserWorkflow): Promise<UserWorkflow> {
 		const memory = this.memoryModule.getUserWorkflowMemory();
-		const { content, title } =
+		const { content, title, definition } =
 			this.workflowVariableResolver.resolveForCreation(workflow);
 
 		const newWorkflow: UserWorkflow = {
@@ -32,6 +32,7 @@ export class UserWorkflowService {
 			active: workflow.active ?? true,
 			content,
 			title,
+			definition,
 		};
 		return memory.createUserWorkflow(newWorkflow);
 	}

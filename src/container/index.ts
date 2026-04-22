@@ -45,6 +45,9 @@ class Container {
 	getA2AService() {
 		return this._services.getA2AService();
 	}
+	getToolCallingService() {
+		return this._services.getToolCallingService();
+	}
 	getUserWorkflowService() {
 		return this._services.getUserWorkflowService();
 	}

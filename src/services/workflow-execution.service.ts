@@ -1,71 +1,536 @@
-import { ThreadType } from "@/types/memory.js";
+import { randomUUID } from "node:crypto";
+import type { A2AModule, MemoryModule, ModelModule } from "@/modules";
+import {
+	type MessageObject,
+	MessageRole,
+	type ThreadMetadata,
+	type ThreadObject,
+	ThreadType,
+	type UserWorkflow,
+	type WorkflowRenderedBlock,
+	type WorkflowResponseBlock,
+	type WorkflowTask,
+	type WorkflowTaskResult,
+} from "@/types/memory.js";
+import type { StreamEvent } from "@/types/stream.js";
 import { loggers } from "@/utils/logger.js";
 import type { QueryService } from "./query.service.js";
+import type { ToolCallingService } from "./tool-calling.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
 import type { WorkflowVariableResolver } from "./workflow-variable-resolver.service.js";
+
+type WorkflowExecutionResult = {
+	content: string;
+	threadId?: string;
+};
 
 export class WorkflowExecutionService {
 	private userWorkflowService: UserWorkflowService;
 	private queryService: QueryService;
 	private workflowVariableResolver: WorkflowVariableResolver;
+	private modelModule: ModelModule;
+	private memoryModule: MemoryModule;
+	private a2aModule?: A2AModule;
+	private toolCallingService: ToolCallingService;
 
 	constructor(
 		userWorkflowService: UserWorkflowService,
 		queryService: QueryService,
 		workflowVariableResolver: WorkflowVariableResolver,
+		modelModule: ModelModule,
+		memoryModule: MemoryModule,
+		toolCallingService: ToolCallingService,
+		a2aModule?: A2AModule,
 	) {
 		this.userWorkflowService = userWorkflowService;
 		this.queryService = queryService;
 		this.workflowVariableResolver = workflowVariableResolver;
+		this.modelModule = modelModule;
+		this.memoryModule = memoryModule;
+		this.toolCallingService = toolCallingService;
+		this.a2aModule = a2aModule;
 	}
 
 	async executeWorkflow(
 		workflowId: string,
 		executionVariables?: Record<string, string>,
-	): Promise<{ threadId?: string }> {
+	): Promise<WorkflowExecutionResult> {
+		let content = "";
+		let threadId: string | undefined;
+		const stream = this.executeWorkflowStream(workflowId, executionVariables);
+
+		for await (const event of stream) {
+			if (event.event === "thread_id") {
+				threadId = event.data.threadId;
+			} else if (event.event === "text_chunk") {
+				content += event.data.delta;
+			}
+		}
+
+		return { content, threadId };
+	}
+
+	async *executeWorkflowStream(
+		workflowId: string,
+		executionVariables?: Record<string, string>,
+	): AsyncGenerator<StreamEvent> {
 		const workflow = await this.userWorkflowService.getWorkflow(workflowId);
 		if (!workflow) {
 			throw new Error(`User workflow not found: ${workflowId}`);
 		}
 
-		const { query, displayQuery } =
+		const { query, displayQuery, definition } =
 			this.workflowVariableResolver.resolveForExecution(
 				workflow,
 				executionVariables,
 			);
 
-		loggers.agent.info(`Executing user workflow: ${workflow.title}`, {
-			workflowId,
+		if (!definition) {
+			yield* this.executeLegacyWorkflowStream(workflow, query, displayQuery);
+			return;
+		}
+
+		loggers.agent.info(
+			`Executing structured user workflow: ${workflow.title}`,
+			{
+				workflowId,
+				taskCount: definition.tasks.length,
+			},
+		);
+
+		const thread = await this.createWorkflowThread(
+			workflow,
+			displayQuery || workflow.title,
+			query,
+		);
+		yield {
+			event: "thread_id",
+			data: {
+				type: thread.type,
+				userId: thread.userId,
+				threadId: thread.threadId,
+				title: thread.title,
+				workflowId: thread.workflowId,
+			},
+		};
+
+		yield {
+			event: "thinking_process",
+			data: {
+				title: `[Workflow] ${workflow.title}`,
+				description: "Starting workflow execution.",
+				metadata: {
+					phase: "workflow_start",
+					workflowId,
+				},
+			},
+		};
+
+		const taskResults: Record<string, WorkflowTaskResult> = {};
+		for (const task of definition.tasks) {
+			const stream = this.executeTask(task, thread, taskResults);
+			let result = await stream.next();
+			while (!result.done) {
+				yield result.value;
+				result = await stream.next();
+			}
+			taskResults[task.taskId] = result.value;
+		}
+
+		const renderedBlocks: WorkflowRenderedBlock[] = [];
+		let finalContent = "";
+		for (const block of definition.response.blocks) {
+			const stream = this.renderResponseBlock(block, taskResults);
+			let result = await stream.next();
+			while (!result.done) {
+				if (result.value.event === "text_chunk") {
+					finalContent += result.value.data.delta;
+				}
+				yield result.value;
+				result = await stream.next();
+			}
+			renderedBlocks.push(result.value);
+		}
+
+		await this.addMessageToThread(thread, {
+			role: MessageRole.MODEL,
+			content: finalContent,
+			metadata: {
+				workflowId,
+				workflowRun: true,
+				taskResults,
+				responseBlocks: renderedBlocks,
+			},
+		});
+
+		await this.userWorkflowService.updateWorkflow(workflowId, {
+			lastRunAt: Date.now(),
+			lastThreadId: thread.threadId,
+		});
+
+		loggers.agent.info(
+			`Structured user workflow completed: ${workflow.title}`,
+			{
+				workflowId,
+				threadId: thread.threadId,
+			},
+		);
+	}
+
+	private async *executeLegacyWorkflowStream(
+		workflow: UserWorkflow,
+		query: string,
+		displayQuery: string,
+	): AsyncGenerator<StreamEvent> {
+		loggers.agent.info(`Executing legacy user workflow: ${workflow.title}`, {
+			workflowId: workflow.workflowId,
 			resolvedQuery: query,
 		});
 
+		let threadId: string | undefined;
 		const stream = this.queryService.handleQuery(
 			{
 				type: ThreadType.WORKFLOW,
 				userId: workflow.userId,
-				workflowId,
+				workflowId: workflow.workflowId,
 				title: workflow.title,
 			},
 			{ query, displayQuery },
 		);
 
-		let threadId: string | undefined;
 		for await (const event of stream) {
 			if (event.event === "thread_id") {
 				threadId = event.data.threadId;
 			}
+			yield event;
 		}
 
-		await this.userWorkflowService.updateWorkflow(workflowId, {
+		await this.userWorkflowService.updateWorkflow(workflow.workflowId, {
 			lastRunAt: Date.now(),
 			lastThreadId: threadId,
 		});
+	}
 
-		loggers.agent.info(`User workflow completed: ${workflow.title}`, {
-			workflowId,
+	private async createWorkflowThread(
+		workflow: UserWorkflow,
+		displayQuery: string,
+		resolvedQuery: string,
+	): Promise<ThreadObject> {
+		const threadMemory = this.memoryModule.getThreadMemory();
+		const threadId = randomUUID();
+		const title = displayQuery || workflow.title;
+		const metadata: ThreadMetadata = (await threadMemory?.createThread(
+			ThreadType.WORKFLOW,
+			workflow.userId,
 			threadId,
+			title,
+			workflow.workflowId,
+		)) || {
+			type: ThreadType.WORKFLOW,
+			userId: workflow.userId,
+			threadId,
+			title,
+			workflowId: workflow.workflowId,
+		};
+
+		const thread: ThreadObject = { ...metadata, messages: [] };
+		await this.addMessageToThread(thread, {
+			role: MessageRole.USER,
+			content: title,
+			metadata: {
+				workflowId: workflow.workflowId,
+				workflowRun: true,
+				query: resolvedQuery,
+			},
 		});
 
-		return { threadId };
+		return thread;
+	}
+
+	private async addMessageToThread(
+		thread: ThreadObject,
+		params: {
+			role: MessageRole;
+			content: string;
+			metadata?: Record<string, unknown>;
+		},
+	): Promise<void> {
+		const message: MessageObject = {
+			messageId: randomUUID(),
+			role: params.role,
+			timestamp: Date.now(),
+			content: { type: "text", parts: [params.content] },
+			metadata: params.metadata,
+		};
+		thread.messages.push(message);
+		await this.memoryModule
+			.getThreadMemory()
+			?.addMessagesToThread(thread.userId, thread.threadId, [message]);
+	}
+
+	private async *executeTask(
+		task: WorkflowTask,
+		thread: ThreadObject,
+		taskResults: Record<string, WorkflowTaskResult>,
+	): AsyncGenerator<StreamEvent, WorkflowTaskResult, unknown> {
+		const startedAt = Date.now();
+		yield {
+			event: "thinking_process",
+			data: {
+				title: `[Workflow] Running task: ${task.title}`,
+				description: task.agent
+					? `Delegating to ${task.agent.connectorName}.`
+					: "Running locally.",
+				metadata: {
+					phase: "task",
+					taskId: task.taskId,
+					agent: task.agent,
+				},
+			},
+		};
+
+		try {
+			const content = task.agent
+				? yield* this.executeA2ATask(task, thread, taskResults)
+				: yield* this.executeLocalTask(task, thread, taskResults);
+
+			return {
+				taskId: task.taskId,
+				title: task.title,
+				agent: task.agent,
+				status: "completed",
+				content,
+				startedAt,
+				completedAt: Date.now(),
+			};
+		} catch (error) {
+			const message =
+				error instanceof Error ? error.message : JSON.stringify(error);
+			loggers.agent.error(`Workflow task failed: ${task.taskId}`, { error });
+			return {
+				taskId: task.taskId,
+				title: task.title,
+				agent: task.agent,
+				status: "failed",
+				content: "",
+				error: message,
+				startedAt,
+				completedAt: Date.now(),
+			};
+		}
+	}
+
+	private async *executeLocalTask(
+		task: WorkflowTask,
+		thread: ThreadObject,
+		taskResults: Record<string, WorkflowTaskResult>,
+	): AsyncGenerator<StreamEvent, string, unknown> {
+		const model = this.modelModule.getModel();
+		const messages = model.generateMessages({
+			query: this.buildTaskPrompt(task, taskResults),
+			systemPrompt:
+				"You execute one local workflow task. Use MCP tools when useful, use the provided previous task results as context, and return only the task result.",
+		});
+
+		const tools = await this.toolCallingService.getTools({
+			toolPrompt:
+				"Describe why this MCP tool is needed for the current workflow task and what result you expect.",
+			mode: "mcp",
+		});
+		const stream = this.toolCallingService.run({
+			messages,
+			tools,
+			query: task.prompt,
+			thread,
+			toolChoice: "auto",
+		});
+
+		let content = "";
+		let result = await stream.next();
+		while (!result.done) {
+			if (result.value.event === "text_chunk") {
+				content += result.value.data.delta;
+			}
+			yield result.value;
+			result = await stream.next();
+		}
+		return content;
+	}
+
+	private async *executeA2ATask(
+		task: WorkflowTask,
+		thread: ThreadObject,
+		taskResults: Record<string, WorkflowTaskResult>,
+	): AsyncGenerator<StreamEvent, string, unknown> {
+		if (!this.a2aModule || !task.agent) {
+			throw new Error("A2A module is not configured for this workflow task.");
+		}
+
+		let content = "";
+		const stream = this.a2aModule.sendTask({
+			connectorName: task.agent.connectorName,
+			message: this.buildTaskPrompt(task, taskResults),
+			threadId: thread.threadId,
+			metadata: {
+				type: ThreadType.WORKFLOW,
+				workflowId: thread.workflowId,
+				taskId: task.taskId,
+			},
+		});
+
+		let result = await stream.next();
+		while (!result.done) {
+			if (result.value.event === "thinking_process") {
+				yield result.value;
+			} else if (result.value.event === "text_chunk") {
+				content += result.value.data.delta;
+			}
+			result = await stream.next();
+		}
+
+		return content || result.value;
+	}
+
+	private buildTaskPrompt(
+		task: WorkflowTask,
+		taskResults: Record<string, WorkflowTaskResult>,
+	): string {
+		const previousResults = Object.values(taskResults)
+			.map(
+				(result) =>
+					`[${result.taskId}] ${result.title}\nStatus: ${result.status}\nResult:\n${result.content || result.error || ""}`,
+			)
+			.join("\n\n---\n\n");
+
+		return `${previousResults ? `Previous task results:\n${previousResults}\n\n` : ""}Task:
+${task.prompt}`;
+	}
+
+	private async *renderResponseBlock(
+		block: WorkflowResponseBlock,
+		taskResults: Record<string, WorkflowTaskResult>,
+	): AsyncGenerator<StreamEvent, WorkflowRenderedBlock, unknown> {
+		yield {
+			event: "thinking_process",
+			data: {
+				title: `[Workflow] Rendering ${block.type} block`,
+				description: "Composing the workflow response from task results.",
+				metadata: {
+					phase: "response_block",
+					blockId: block.blockId,
+					blockType: block.type,
+				},
+			},
+		};
+
+		if (block.type === "heading") {
+			const level = block.level ?? 2;
+			const content = `${"#".repeat(level)} ${block.text}\n\n`;
+			yield { event: "text_chunk", data: { delta: content } };
+			return {
+				blockId: block.blockId,
+				type: block.type,
+				content,
+			};
+		}
+
+		const content =
+			block.type === "table"
+				? yield* this.renderGeneratedBlock(
+						block,
+						taskResults,
+						"Generate a concise markdown table from the workflow task results. Return only markdown.",
+					)
+				: yield* this.renderGeneratedBlock(
+						block,
+						taskResults,
+						"Generate this workflow response text from the task results. Return only the response block content.",
+					);
+
+		const finalContent = content.endsWith("\n\n") ? content : `${content}\n\n`;
+		if (finalContent !== content) {
+			yield { event: "text_chunk", data: { delta: "\n\n" } };
+		}
+
+		return {
+			blockId: block.blockId,
+			type: block.type,
+			content: finalContent,
+		};
+	}
+
+	private async *renderGeneratedBlock(
+		block: Exclude<WorkflowResponseBlock, { type: "heading" }>,
+		taskResults: Record<string, WorkflowTaskResult>,
+		systemPrompt: string,
+	): AsyncGenerator<StreamEvent, string, unknown> {
+		const model = this.modelModule.getModel();
+		const modelOptions = this.modelModule.getModelOptions();
+		const sourceResults = this.getSourceTaskResults(block, taskResults);
+		const messages = model.generateMessages({
+			query: this.buildBlockPrompt(block, sourceResults),
+			systemPrompt,
+		});
+		const stream = await model.fetchStreamWithContextMessage(
+			messages,
+			[],
+			modelOptions,
+		);
+
+		let content = "";
+		for await (const chunk of stream) {
+			if (chunk.delta?.content) {
+				content += chunk.delta.content;
+				yield {
+					event: "text_chunk",
+					data: { delta: chunk.delta.content },
+				};
+			}
+		}
+
+		return content;
+	}
+
+	private getSourceTaskResults(
+		block: Exclude<WorkflowResponseBlock, { type: "heading" }>,
+		taskResults: Record<string, WorkflowTaskResult>,
+	): WorkflowTaskResult[] {
+		if (!block.sourceTaskIds || block.sourceTaskIds.length === 0) {
+			return Object.values(taskResults);
+		}
+
+		return block.sourceTaskIds
+			.map((taskId) => taskResults[taskId])
+			.filter((result): result is WorkflowTaskResult => Boolean(result));
+	}
+
+	private buildBlockPrompt(
+		block: Exclude<WorkflowResponseBlock, { type: "heading" }>,
+		taskResults: WorkflowTaskResult[],
+	): string {
+		const resultsText = taskResults
+			.map(
+				(result) =>
+					`[${result.taskId}] ${result.title}\nStatus: ${result.status}\nResult:\n${result.content || result.error || ""}`,
+			)
+			.join("\n\n---\n\n");
+
+		if (block.type === "table") {
+			return `Task results:
+${resultsText}
+
+Table title: ${block.title || ""}
+Columns:
+${block.columns.map((column) => `- ${column.key}: ${column.label}${column.source ? ` (${column.source})` : ""}`).join("\n")}
+
+Instructions:
+${block.prompt || "Create the requested table from the task results."}`;
+		}
+
+		return `Task results:
+${resultsText}
+
+Instructions:
+${block.prompt}`;
 	}
 }

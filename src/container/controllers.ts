@@ -94,6 +94,8 @@ export class ControllerContainer {
 			this._userWorkflowApiController = new UserWorkflowApiController(
 				this.services.getUserWorkflowService(),
 				this.services.getUserWorkflowCoordinatorService(),
+				this.services.getWorkflowExecutionService(),
+				this.services.getQueryService(),
 			);
 		}
 		return this._userWorkflowApiController;

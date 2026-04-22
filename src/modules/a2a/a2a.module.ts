@@ -106,7 +106,11 @@ export class A2AModule {
 	 * @param threadId - The session identifier
 	 * @returns Formatted Message object for A2A protocol
 	 */
-	public getMessagePayload(query: string, threadId: string): Message {
+	public getMessagePayload(
+		query: string,
+		threadId: string,
+		metadata?: Record<string, unknown>,
+	): Message {
 		const messagePayload: Message = {
 			messageId: randomUUID(),
 			kind: "message",
@@ -114,6 +118,7 @@ export class A2AModule {
 			metadata: {
 				agentId: this.agentId,
 				type: ThreadType.CHAT,
+				...metadata,
 			},
 			parts: [
 				{
@@ -129,6 +134,100 @@ export class A2AModule {
 		}
 
 		return messagePayload;
+	}
+
+	private async *sendMessageToConnector(
+		connector: A2AConnector,
+		toolName: string,
+		query: string,
+		threadId: string,
+		metadata?: Record<string, unknown>,
+	): AsyncGenerator<StreamEvent, string, unknown> {
+		const finalText: string[] = [];
+		const messagePayload = this.getMessagePayload(query, threadId, metadata);
+		const params: MessageSendParams = {
+			message: messagePayload,
+		};
+
+		const client = await this.getOrCreateClient(connector);
+		const stream = client.sendMessageStream(params);
+		for await (const event of stream) {
+			if (event.kind === "status-update") {
+				const typedEvent = event as TaskStatusUpdateEvent;
+				if (typedEvent.final && typedEvent.status.state !== "input-required") {
+					this.a2aTasks.delete(threadId);
+				}
+
+				if (typedEvent.status.state === "working") {
+					const text = (typedEvent.status.message?.parts[0] as TextPart)?.text;
+					if (!text) {
+						continue;
+					}
+
+					yield {
+						event: "thinking_process",
+						data: JSON.parse(text),
+					};
+				} else if (typedEvent.status.state === "completed") {
+					const texts = typedEvent.status.message?.parts
+						.filter((part) => part.kind === "text")
+						.map((part: TextPart) => part.text)
+						.join("\n");
+					if (texts) {
+						finalText.push(texts);
+						yield {
+							event: "text_chunk",
+							data: { delta: texts },
+						};
+					}
+				}
+			} else if (event.kind === "message") {
+				const msg = event as Message;
+				const taskId = this.a2aTasks.get(threadId);
+				if (msg.taskId && msg.taskId !== taskId) {
+					this.a2aTasks.set(threadId, msg.taskId);
+				}
+			} else if (event.kind === "task") {
+				const task = event as Task;
+				if (task.id !== this.a2aTasks.get(threadId)) {
+					this.a2aTasks.set(threadId, task.id);
+				}
+			} else {
+				loggers.a2a.warn("Received unknown event structure from stream:", {
+					event,
+				});
+			}
+		}
+
+		return `[Bot Called A2A Tool ${toolName}]\n${finalText.join("\n")}`;
+	}
+
+	public async *sendTask(params: {
+		connectorName: string;
+		message: string;
+		threadId: string;
+		metadata?: Record<string, unknown>;
+	}): AsyncGenerator<StreamEvent, string, unknown> {
+		const connector = this.a2aConnectors.get(params.connectorName);
+		if (!connector) {
+			loggers.a2a.error("Unknown agent connector:", {
+				connectorName: params.connectorName,
+			});
+			return `[Bot Called A2A Tool ${params.connectorName}]\n"Unknown agent connector"`;
+		}
+
+		try {
+			return yield* this.sendMessageToConnector(
+				connector,
+				params.connectorName,
+				params.message,
+				params.threadId,
+				params.metadata,
+			);
+		} catch (error) {
+			loggers.a2a.error("Error communicating with agent:", { error });
+			return `[Bot Called A2A Tool ${params.connectorName}]\n${typeof error === "string" ? error : JSON.stringify(error, null, 2)}`;
+		}
 	}
 
 	/**
@@ -148,7 +247,6 @@ export class A2AModule {
 		query: string,
 		threadId: string,
 	): AsyncGenerator<StreamEvent, string, unknown> {
-		const finalText: string[] = [];
 		const connector = this.a2aConnectors.get(tool.connectorName);
 		if (!connector) {
 			loggers.a2a.error("Unknown agent:", { tool });
@@ -156,74 +254,17 @@ export class A2AModule {
 			return toolResult;
 		}
 
-		const messagePayload = this.getMessagePayload(query, threadId);
-		const params: MessageSendParams = {
-			message: messagePayload,
-		};
-
 		try {
-			const client = await this.getOrCreateClient(connector);
-			const stream = client.sendMessageStream(params);
-			for await (const event of stream) {
-				if (event.kind === "status-update") {
-					const typedEvent = event as TaskStatusUpdateEvent;
-					if (
-						typedEvent.final &&
-						typedEvent.status.state !== "input-required"
-					) {
-						this.a2aTasks.delete(threadId);
-					}
-
-					if (typedEvent.status.state === "working") {
-						// thinking process event
-						const eventData = JSON.parse(
-							(typedEvent.status.message?.parts[0] as TextPart).text,
-						);
-						yield {
-							event: "thinking_process",
-							data: eventData,
-						};
-					} else if (typedEvent.status.state === "completed") {
-						// TODO: handle 'file', 'data' parts
-						const texts = typedEvent.status.message?.parts
-							.filter((part) => part.kind === "text")
-							.map((part: TextPart) => part.text)
-							.join("\n");
-						if (texts) {
-							finalText.push(texts);
-							yield {
-								event: "text_chunk",
-								data: { delta: texts },
-							};
-						}
-					} else {
-						// ignore other status updates
-					}
-				} else if (event.kind === "message") {
-					// FIXME: handling text in 'message'?
-					const msg = event as Message;
-					const taskId = this.a2aTasks.get(threadId);
-					if (msg.taskId && msg.taskId !== taskId) {
-						this.a2aTasks.set(threadId, msg.taskId);
-					}
-				} else if (event.kind === "task") {
-					// establishing the Task ID
-					const task = event as Task;
-					if (task.id !== this.a2aTasks.get(threadId)) {
-						this.a2aTasks.set(threadId, task.id);
-					}
-				} else {
-					loggers.a2a.warn("Received unknown event structure from stream:", {
-						event,
-					});
-				}
-			}
+			return yield* this.sendMessageToConnector(
+				connector,
+				tool.toolName,
+				query,
+				threadId,
+			);
 		} catch (error) {
 			loggers.a2a.error("Error communicating with agent:", { error });
 			const toolResult = `[Bot Called A2A Tool ${tool.toolName}]\n${typeof error === "string" ? error : JSON.stringify(error, null, 2)}`;
 			return toolResult;
 		}
-
-		return `[Bot Called A2A Tool ${tool.toolName}]\n${finalText.join("\n")}`;
 	}
 }

@@ -12,6 +12,7 @@ import { PIIService } from "@/services/pii.service";
 import { QueryService } from "@/services/query.service";
 import { SchedulerService } from "@/services/scheduler.service";
 import { ThreadService } from "@/services/thread.service";
+import { ToolCallingService } from "@/services/tool-calling.service";
 import { UserWorkflowService } from "@/services/user-workflow.service";
 import { UserWorkflowCoordinatorService } from "@/services/user-workflow-coordinator.service";
 import { WorkflowExecutionService } from "@/services/workflow-execution.service";
@@ -28,6 +29,7 @@ export class ServiceContainer {
 	private _queryService?: QueryService;
 	private _a2aService?: A2AService;
 	private _piiService?: PIIService;
+	private _toolCallingService?: ToolCallingService;
 	private _userWorkflowService?: UserWorkflowService;
 	private _userWorkflowCoordinatorService?: UserWorkflowCoordinatorService;
 	private _workflowExecutionService?: WorkflowExecutionService;
@@ -58,13 +60,23 @@ export class ServiceContainer {
 		return this._piiService;
 	}
 
+	getToolCallingService(): ToolCallingService {
+		if (!this._toolCallingService) {
+			this._toolCallingService = new ToolCallingService(
+				getModelModule(),
+				getA2AModule(),
+				getMCPModule(),
+			);
+		}
+		return this._toolCallingService;
+	}
+
 	getIntentFulfillService(): IntentFulfillService {
 		if (!this._intentFulfillService) {
 			this._intentFulfillService = new IntentFulfillService(
 				getModelModule(),
 				getMemoryModule(),
-				getA2AModule(),
-				getMCPModule(),
+				this.getToolCallingService(),
 				getOnIntentFallback(),
 				this.getPIIService(),
 			);
@@ -118,6 +130,10 @@ export class ServiceContainer {
 				this.getUserWorkflowService(),
 				this.getQueryService(),
 				this.getWorkflowVariableResolver(),
+				getModelModule(),
+				getMemoryModule(),
+				this.getToolCallingService(),
+				getA2AModule(),
 			);
 		}
 		return this._workflowExecutionService;
@@ -147,6 +163,7 @@ export class ServiceContainer {
 		this._queryService = undefined;
 		this._a2aService = undefined;
 		this._piiService = undefined;
+		this._toolCallingService = undefined;
 		this._userWorkflowService = undefined;
 		this._userWorkflowCoordinatorService = undefined;
 		this._workflowExecutionService = undefined;

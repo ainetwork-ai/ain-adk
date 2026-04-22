@@ -19,7 +19,7 @@ export type MessageContentObject = {
 	/** Content type (e.g., "text", "image", "tool_use") */
 	type: string;
 	/** Array of content parts, structure depends on content type */
-	parts: any[];
+	parts: unknown[];
 };
 
 /**
@@ -151,6 +151,79 @@ export type FulfillmentResult = {
 	response: string;
 };
 
+export interface WorkflowTaskAgent {
+	protocol: "A2A";
+	connectorName: string;
+}
+
+export interface WorkflowTask {
+	taskId: string;
+	title: string;
+	description?: string;
+	prompt: string;
+	agent?: WorkflowTaskAgent;
+	outputKey?: string;
+	dependsOn?: string[];
+}
+
+export interface WorkflowHeadingBlock {
+	blockId: string;
+	type: "heading";
+	level?: 1 | 2 | 3;
+	text: string;
+}
+
+export interface WorkflowTextBlock {
+	blockId: string;
+	type: "text";
+	prompt: string;
+	sourceTaskIds?: string[];
+}
+
+export interface WorkflowTableBlock {
+	blockId: string;
+	type: "table";
+	title?: string;
+	columns: Array<{
+		key: string;
+		label: string;
+		source?: string;
+	}>;
+	sourceTaskIds?: string[];
+	prompt?: string;
+}
+
+export type WorkflowResponseBlock =
+	| WorkflowHeadingBlock
+	| WorkflowTextBlock
+	| WorkflowTableBlock;
+
+export interface WorkflowDefinition {
+	tasks: WorkflowTask[];
+	response: {
+		blocks: WorkflowResponseBlock[];
+	};
+}
+
+export interface WorkflowTaskResult {
+	taskId: string;
+	title: string;
+	agent?: WorkflowTaskAgent;
+	status: "completed" | "failed" | "skipped";
+	content: string;
+	raw?: unknown;
+	error?: string;
+	startedAt: number;
+	completedAt: number;
+}
+
+export interface WorkflowRenderedBlock {
+	blockId: string;
+	type: WorkflowResponseBlock["type"];
+	content: string;
+	data?: unknown;
+}
+
 export type WorkflowVariableType =
 	| "select"
 	| "date_range"
@@ -184,6 +257,8 @@ export interface WorkflowTemplate {
 	active: boolean;
 	/** The prompt/instruction template with {{variable}} placeholders */
 	content: string;
+	/** Structured workflow definition. If omitted, legacy content execution is used. */
+	definition?: WorkflowDefinition;
 	/** Variable schema definitions (type, label, options) for UI rendering */
 	variables?: Record<string, WorkflowVariable>;
 }
@@ -208,6 +283,8 @@ export interface UserWorkflow {
 	templateId?: string;
 	/** The prompt/instruction content with {{variable}} placeholders */
 	content: string;
+	/** Structured workflow definition. If omitted, legacy content execution is used. */
+	definition?: WorkflowDefinition;
 	/** Variable schema definitions (copied from template, used for UI rendering) */
 	variables?: Record<string, WorkflowVariable>;
 	/** User-provided variable values (can contain template variables like {{today}}) */

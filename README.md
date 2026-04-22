@@ -50,6 +50,10 @@ To see how to use this package in your project, check out our comprehensive exam
 - **A2AModule** (`src/modules/a2a/`): Manages agent-to-agent communication
 - **MemoryModule** (`src/modules/memory/`): Provides threads, intents, and conversation history
 
+### Runtime Scope
+
+AIN-ADK currently assumes a single agent runtime per Node.js process. Create one `AINAgent` instance per process; running multiple `AINAgent` instances concurrently in the same process is not currently supported.
+
 ### Module System
 
 The library uses a flexible module architecture:
@@ -81,6 +85,7 @@ Built-in workflow management capabilities:
 
 - **Workflow Storage**: Save, retrieve, list, and delete workflows via MemoryModule
 - **Display Query Support**: Separate display query for workflow execution visualization
+- **Structured Execution**: Define workflows with tasks and response blocks
 - **RESTful API**: Complete workflow management through `/api/workflow-template` and `/api/user-workflow` endpoints
 
 ### Dependency Injection
@@ -224,6 +229,8 @@ modelLogger.error('Model API error');
 - `GET /api/user-workflow` - List user workflows
 - `GET /api/user-workflow/:id` - Get user workflow details
 - `POST /api/user-workflow` - Create user workflow
+- `POST /api/user-workflow/:id/execute` - Execute user workflow (non-streaming)
+- `POST /api/user-workflow/:id/execute/stream` - Execute user workflow with streaming (SSE)
 - `POST /api/user-workflow/update/:id` - Update user workflow
 - `POST /api/user-workflow/delete/:id` - Delete user workflow
 
