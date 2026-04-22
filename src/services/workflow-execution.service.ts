@@ -127,7 +127,19 @@ export class WorkflowExecutionService {
 		};
 
 		const taskResults: Record<string, WorkflowTaskResult> = {};
-		for (const task of definition.tasks) {
+		for (let i = 0; i < definition.tasks.length; i++) {
+			const task = definition.tasks[i];
+			loggers.agent.debug(
+				`Workflow task starting (${i + 1}/${definition.tasks.length}): ${task.title}`,
+				{
+					workflowId,
+					threadId: thread.threadId,
+					taskId: task.taskId,
+					executionType: task.agent ? "a2a" : "local",
+					agent: task.agent,
+					promptPreview: task.prompt?.slice(0, 200),
+				},
+			);
 			const stream = this.executeTask(task, thread, taskResults);
 			let result = await stream.next();
 			while (!result.done) {
@@ -135,11 +147,36 @@ export class WorkflowExecutionService {
 				result = await stream.next();
 			}
 			taskResults[task.taskId] = result.value;
+			loggers.agent.debug(
+				`Workflow task finished (${i + 1}/${definition.tasks.length}): ${task.title}`,
+				{
+					workflowId,
+					threadId: thread.threadId,
+					taskId: task.taskId,
+					status: result.value.status,
+					durationMs: result.value.completedAt - result.value.startedAt,
+					contentLength: result.value.content?.length ?? 0,
+					contentPreview: result.value.content?.slice(0, 500),
+					error: result.value.error,
+				},
+			);
 		}
 
 		const renderedBlocks: WorkflowRenderedBlock[] = [];
 		let finalContent = "";
-		for (const block of definition.response.blocks) {
+		for (let i = 0; i < definition.response.blocks.length; i++) {
+			const block = definition.response.blocks[i];
+			loggers.agent.debug(
+				`Workflow response block rendering (${i + 1}/${definition.response.blocks.length})`,
+				{
+					workflowId,
+					threadId: thread.threadId,
+					blockId: block.blockId,
+					blockType: block.type,
+					sourceTaskIds:
+						block.type === "heading" ? undefined : block.sourceTaskIds,
+				},
+			);
 			const stream = this.renderResponseBlock(block, taskResults);
 			let result = await stream.next();
 			while (!result.done) {
@@ -150,6 +187,17 @@ export class WorkflowExecutionService {
 				result = await stream.next();
 			}
 			renderedBlocks.push(result.value);
+			loggers.agent.debug(
+				`Workflow response block rendered (${i + 1}/${definition.response.blocks.length})`,
+				{
+					workflowId,
+					threadId: thread.threadId,
+					blockId: result.value.blockId,
+					blockType: result.value.type,
+					contentLength: result.value.content?.length ?? 0,
+					contentPreview: result.value.content?.slice(0, 500),
+				},
+			);
 		}
 
 		await this.addMessageToThread(thread, {
@@ -366,10 +414,19 @@ export class WorkflowExecutionService {
 			throw new Error("A2A module is not configured for this workflow task.");
 		}
 
+		const message = this.buildTaskPrompt(task, taskResults);
+		loggers.agent.debug(`Delegating workflow task via A2A: ${task.taskId}`, {
+			taskId: task.taskId,
+			connectorName: task.agent.connectorName,
+			threadId: thread.threadId,
+			messageLength: message.length,
+			messagePreview: message.slice(0, 500),
+		});
+
 		let content = "";
 		const stream = this.a2aModule.sendTask({
 			connectorName: task.agent.connectorName,
-			message: this.buildTaskPrompt(task, taskResults),
+			message,
 			threadId: thread.threadId,
 			metadata: {
 				type: ThreadType.WORKFLOW,
