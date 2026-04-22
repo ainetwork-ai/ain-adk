@@ -162,6 +162,19 @@ export class WorkflowExecutionService {
 			);
 		}
 
+		yield {
+			event: "thinking_process",
+			data: {
+				title: "[워크플로우] 응답 구성 중",
+				description: "작업 결과를 바탕으로 워크플로우 응답을 구성합니다.",
+				metadata: {
+					phase: "response_start",
+					workflowId,
+					blockCount: definition.response.blocks.length,
+				},
+			},
+		};
+
 		const renderedBlocks: WorkflowRenderedBlock[] = [];
 		let finalContent = "";
 		for (let i = 0; i < definition.response.blocks.length; i++) {
@@ -467,19 +480,6 @@ ${task.prompt}`;
 		block: WorkflowResponseBlock,
 		taskResults: Record<string, WorkflowTaskResult>,
 	): AsyncGenerator<StreamEvent, WorkflowRenderedBlock, unknown> {
-		yield {
-			event: "thinking_process",
-			data: {
-				title: `[워크플로우] ${this.getBlockTypeLabel(block.type)} 블록 생성 중`,
-				description: "작업 결과를 바탕으로 워크플로우 응답을 구성합니다.",
-				metadata: {
-					phase: "response_block",
-					blockId: block.blockId,
-					blockType: block.type,
-				},
-			},
-		};
-
 		if (block.type === "heading") {
 			const level = block.level ?? 2;
 			const content = `${"#".repeat(level)} ${block.text}\n\n`;
@@ -514,17 +514,6 @@ ${task.prompt}`;
 			type: block.type,
 			content: finalContent,
 		};
-	}
-
-	private getBlockTypeLabel(type: WorkflowResponseBlock["type"]): string {
-		switch (type) {
-			case "heading":
-				return "제목";
-			case "text":
-				return "텍스트";
-			case "table":
-				return "표";
-		}
 	}
 
 	private async *renderGeneratedBlock(
