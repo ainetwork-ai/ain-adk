@@ -18,6 +18,7 @@ import {
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
+import { splitAdkToolArgs } from "@/utils/tool-args";
 import { PIIFilterMode, type PIIService } from "../pii.service";
 import fulfillPrompt from "../prompts/fulfill";
 import toolSelectPrompt from "../prompts/tool-select";
@@ -187,10 +188,26 @@ export class IntentFulfillService {
 						continue;
 					}
 
-					const toolArgs = JSON.parse(toolCall.function.arguments);
+					let toolArgs: Record<string, unknown>;
+					try {
+						toolArgs = JSON.parse(toolCall.function.arguments || "{}");
+					} catch (error) {
+						loggers.intent.warn("Invalid tool arguments JSON", {
+							toolName,
+							arguments: toolCall.function.arguments,
+							error,
+						});
+						modelInstance.appendMessages(
+							messages,
+							`[Bot Called Tool ${toolName}]\nInvalid tool arguments JSON: ${toolCall.function.arguments}`,
+						);
+						continue;
+					}
+
+					const { thinkingText, protocolArgs } = splitAdkToolArgs(toolArgs);
 					const thinkData = {
 						title: `[${getManifest().name}] ${selectedTool.protocol} 실행: ${toolName}`,
-						description: `${toolArgs.thinking_text || ""}`,
+						description: thinkingText,
 					};
 					yield {
 						event: "thinking_process",
@@ -202,8 +219,14 @@ export class IntentFulfillService {
 						this.mcpModule &&
 						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.MCP
 					) {
-						loggers.intent.info("MCP tool call", { toolName, toolArgs });
-						toolResult = await this.mcpModule.useTool(selectedTool, toolArgs);
+						loggers.intent.info("MCP tool call", {
+							toolName,
+							toolArgs: protocolArgs,
+						});
+						toolResult = await this.mcpModule.useTool(
+							selectedTool,
+							protocolArgs,
+						);
 					} else if (
 						this.a2aModule &&
 						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.A2A

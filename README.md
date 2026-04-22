@@ -81,7 +81,7 @@ Built-in workflow management capabilities:
 
 - **Workflow Storage**: Save, retrieve, list, and delete workflows via MemoryModule
 - **Display Query Support**: Separate display query for workflow execution visualization
-- **RESTful API**: Complete workflow management through `/api/workflows` endpoints
+- **RESTful API**: Complete workflow management through `/api/workflow-template` and `/api/user-workflow` endpoints
 
 ### Dependency Injection
 
@@ -195,42 +195,46 @@ modelLogger.error('Model API error');
 ### Standard Endpoints
 - `GET /` - Welcome message and health check
 - `POST /query` - Process queries (non-streaming)
-  - Request: `{ query: string, threadId?: string, type?: string, displayQuery?: string }`
+  - Request: `{ message: string, threadId?: string, type?: string, workflowId?: string, title?: string, displayMessage?: string }`
   - Response: `{ content: string, threadId: string }`
 - `POST /query/stream` - Process queries with streaming (SSE)
-  - Request: `{ query: string, threadId?: string, type?: string, displayQuery?: string }`
+  - Request: `{ message: string, threadId?: string, type?: string, workflowId?: string, title?: string, displayMessage?: string }`
   - Response: Server-Sent Events stream with event types:
     - `text_chunk`: Incremental text response
-    - `tool_start`: Tool execution started
-    - `tool_output`: Tool execution result
     - `thread_id`: Thread metadata
-    - `intent_process`: Intent processing status
     - `thinking_process`: Thinking/reasoning steps
+    - `collection_name`: Collection metadata emitted by integrations
     - `error`: Error message
 
 ### Agent Management
 - `GET /api/threads` - List user threads (userId from auth)
 - `GET /api/threads/:id` - Get thread details
-- `POST /api/threads/:id/delete` - Delete thread
+- `POST /api/threads/pin/:id` - Update thread pin state
+- `POST /api/threads/delete/:id` - Delete thread
 - `GET /api/model` - Get model list
 - `GET /api/agent/a2a` - Get A2A connectors
 - `GET /api/intent` - List all intents
 - `POST /api/intent/save` - Save intent
-- `POST /api/intent/:id/delete` - Delete intent
-- `GET /api/workflows` - List all workflows
-- `GET /api/workflows/:id` - Get workflow details
-- `POST /api/workflows` - Create new workflow
-- `POST /api/workflows/update/:id` - Update workflow
-- `POST /api/workflows/delete/:id` - Delete workflow
+- `POST /api/intent/delete/:id` - Delete intent
+- `GET /api/workflow-template` - List all workflow templates
+- `GET /api/workflow-template/:id` - Get workflow template details
+- `POST /api/workflow-template` - Create workflow template
+- `POST /api/workflow-template/update/:id` - Update workflow template
+- `POST /api/workflow-template/delete/:id` - Delete workflow template
+- `GET /api/user-workflow` - List user workflows
+- `GET /api/user-workflow/:id` - Get user workflow details
+- `POST /api/user-workflow` - Create user workflow
+- `POST /api/user-workflow/update/:id` - Update user workflow
+- `POST /api/user-workflow/delete/:id` - Delete user workflow
 
 ### A2A Server Endpoints (when `manifest.url` is configured)
 - `GET /.well-known/agent.json` - Agent discovery endpoint (A2A ~v0.2.0)
 - `GET /.well-known/agent-card.json` - Agent discovery endpoint (A2A v0.3.0~)
   - Returns `AgentCard` with capabilities and supported modes
 - `POST /a2a` - A2A communication endpoint
-  - Supports streaming responses via SSE
-  - Request: `{ message: string, threadId?: string, stream?: boolean }`
-  - Response: JSON or SSE stream based on `stream` parameter
+  - Uses the `@a2a-js/sdk` JSON-RPC transport
+  - Supports JSON-RPC responses and SDK-managed SSE streaming responses
+  - A2A `contextId` is treated as the AIN-ADK thread ID
 
 ## Build System
 

@@ -83,6 +83,19 @@ export class QueryService {
 		}
 	}
 
+	public async filterThinkingDataForStorage(
+		data: Extract<StreamEvent, { event: "thinking_process" }>["data"],
+	): Promise<Extract<StreamEvent, { event: "thinking_process" }>["data"]> {
+		if (this.piiService?.getMode() !== PIIFilterMode.MASK) {
+			return data;
+		}
+
+		return {
+			title: await this.piiService.filterText(data.title),
+			description: await this.piiService.filterText(data.description),
+		};
+	}
+
 	/**
 	 * Main entry point for processing streaming user queries.
 	 *

@@ -15,6 +15,7 @@ import {
 import { ThreadType } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream.js";
 import { loggers } from "@/utils/logger.js";
+import { withAdkThinkingArg } from "@/utils/tool-args.js";
 import { A2AConnector } from "./a2a.connector.js";
 
 /**
@@ -84,21 +85,11 @@ export class A2AModule {
 					connectorName: name,
 					protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
 					description: card.description,
-					// add thinking_text inputSchema
-					inputSchema: {
-						type: "object",
-						properties: {
-							thinking_text: {
-								type: "string",
-								description: prompt,
-							},
-						},
-						required: ["thinking_text"],
-					},
+					inputSchema: withAdkThinkingArg(undefined, prompt),
 				};
 
 				tools.push(tool);
-			} catch (_error: any) {
+			} catch (_error: unknown) {
 				// Agent not responded, just skip
 			}
 		}

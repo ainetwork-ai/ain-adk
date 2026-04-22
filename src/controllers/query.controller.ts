@@ -103,15 +103,17 @@ export class QueryController {
 					currentThreadId = event.data.threadId;
 				} else if (event.event === "thinking_process") {
 					// a2a 호출에 대해서는 데이터베이스에 추가하지 않기 위해 여기서 thread message에 기록
-					this.queryService.addToThreadMessages(userId, currentThreadId, [
+					const thinkData =
+						await this.queryService.filterThinkingDataForStorage(event.data);
+					await this.queryService.addToThreadMessages(userId, currentThreadId, [
 						{
 							messageId: randomUUID(),
 							role: MessageRole.MODEL,
 							timestamp: Date.now(),
-							content: { type: "text", parts: [event.data.title] },
+							content: { type: "text", parts: [thinkData.title] },
 							metadata: {
 								isThinking: true,
-								thinkData: event.data,
+								thinkData,
 							},
 						},
 					]);
