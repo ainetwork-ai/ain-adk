@@ -257,11 +257,23 @@ export type WorkflowVariableType =
 
 export type WorkflowVariableResolveAt = "creation" | "execution";
 
+export interface WorkflowVariablePartSpec {
+	token?: string;
+	id?: string;
+	key?: string;
+	label?: string;
+	name?: string;
+	placeholder?: string;
+	format?: string;
+	source?: "value" | "start" | "end";
+}
+
 export interface WorkflowVariable {
 	id: string; // e.g. "workplace_id"
 	label: string; // e.g. "분석할 업장을 선택해주세요"
 	type: WorkflowVariableType;
 	options?: Array<string>; // for "select" type
+	parts?: Record<string, string> | WorkflowVariablePartSpec[];
 	/** When to resolve this variable:
 	 * - "creation": resolved when copying template → my workflow (e.g., store selection)
 	 * - "execution": resolved each time the workflow runs (e.g., date range)

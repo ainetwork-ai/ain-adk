@@ -1,6 +1,11 @@
 import { StatusCodes } from "http-status-codes";
 import { AinHttpError } from "@/types/agent.js";
-import type { UserWorkflow, WorkflowDefinition } from "@/types/memory.js";
+import type {
+	UserWorkflow,
+	WorkflowDefinition,
+	WorkflowVariable,
+	WorkflowVariablePartSpec,
+} from "@/types/memory.js";
 import {
 	resolveTemplateRecord,
 	resolveTemplateString,
@@ -15,6 +20,253 @@ type WorkflowTextFields = Pick<
 	| "variableValues"
 	| "definition"
 >;
+
+type VariableReplacement = {
+	token: string;
+	value: string;
+	resolveAt: "creation" | "execution";
+};
+
+type ParsedDateValue = {
+	year: string;
+	month?: string;
+	day?: string;
+};
+
+function getVariableTokens(key: string, variable?: WorkflowVariable): string[] {
+	const tokens = [key];
+	if (variable?.id && variable.id !== key) {
+		tokens.push(variable.id);
+	}
+	return [...new Set(tokens)];
+}
+
+function normalizePartSpecs(
+	parts?: WorkflowVariable["parts"],
+): Array<{ token: string; format: string; source: "value" | "start" | "end" }> {
+	if (!parts) {
+		return [];
+	}
+
+	if (Array.isArray(parts)) {
+		return parts
+			.map((part) => {
+				const token =
+					part.token ||
+					part.placeholder ||
+					part.id ||
+					part.key ||
+					part.name ||
+					part.label;
+				if (!token) {
+					return undefined;
+				}
+
+				return {
+					token,
+					format:
+						part.format ||
+						inferDatePartFormat(
+							part.key || part.name || part.label || part.id || token,
+						),
+					source: part.source || "value",
+				};
+			})
+			.filter(
+				(
+					part,
+				): part is {
+					token: string;
+					format: string;
+					source: "value" | "start" | "end";
+				} => Boolean(part),
+			);
+	}
+
+	return Object.entries(parts)
+		.map(([partKey, tokenOrSpec]) => {
+			if (typeof tokenOrSpec === "string") {
+				if (!tokenOrSpec.trim()) {
+					return undefined;
+				}
+				return {
+					token: tokenOrSpec,
+					format: inferDatePartFormat(partKey),
+					source: inferDatePartSource(partKey),
+				};
+			}
+
+			const spec = tokenOrSpec as WorkflowVariablePartSpec;
+			const token =
+				spec.token ||
+				spec.placeholder ||
+				spec.id ||
+				spec.key ||
+				spec.name ||
+				spec.label;
+			if (!token) {
+				return undefined;
+			}
+
+			return {
+				token,
+				format: spec.format || inferDatePartFormat(partKey),
+				source: spec.source || inferDatePartSource(partKey),
+			};
+		})
+		.filter(
+			(
+				part,
+			): part is {
+				token: string;
+				format: string;
+				source: "value" | "start" | "end";
+			} => Boolean(part?.token),
+		);
+}
+
+function inferDatePartFormat(input: string): string {
+	if (/year|년도|연도|yyyy/i.test(input)) {
+		return "YYYY";
+	}
+	if (/month|월|mm/i.test(input)) {
+		return "MM";
+	}
+	if (/day|일|dd/i.test(input)) {
+		return "DD";
+	}
+	return "YYYY-MM-DD";
+}
+
+function inferDatePartSource(input: string): "value" | "start" | "end" {
+	if (/^start/i.test(input)) {
+		return "start";
+	}
+	if (/^end/i.test(input)) {
+		return "end";
+	}
+	return "value";
+}
+
+function parseDateValue(
+	value: string,
+	source: "value" | "start" | "end",
+): ParsedDateValue | undefined {
+	const segments = value.split(/\s*~\s*/);
+	const target =
+		source === "start"
+			? segments[0]
+			: source === "end"
+				? segments[segments.length - 1]
+				: value;
+	const match = target.trim().match(/(\d{4})[-/.]?(\d{2})?[-/.]?(\d{2})?/);
+	if (!match) {
+		return undefined;
+	}
+
+	return {
+		year: match[1],
+		month: match[2],
+		day: match[3],
+	};
+}
+
+function formatParsedDateValue(
+	dateValue: ParsedDateValue,
+	format: string,
+): string {
+	return format
+		.replace("YYYY", dateValue.year)
+		.replace("YY", dateValue.year.slice(-2))
+		.replace("MM", dateValue.month || "")
+		.replace("M", dateValue.month ? String(Number(dateValue.month)) : "")
+		.replace("DD", dateValue.day || "")
+		.replace("D", dateValue.day ? String(Number(dateValue.day)) : "");
+}
+
+function buildVariableReplacements(
+	variableValues: Record<string, string>,
+	variables?: WorkflowTextFields["variables"],
+): VariableReplacement[] {
+	const replacements: VariableReplacement[] = [];
+
+	for (const [key, variableValue] of Object.entries(variableValues)) {
+		const variable = variables?.[key];
+		const resolveAt = variable?.resolveAt ?? "creation";
+
+		for (const token of getVariableTokens(key, variable)) {
+			replacements.push({ token, value: variableValue, resolveAt });
+		}
+
+		if (variable?.type !== "date_parts") {
+			continue;
+		}
+
+		for (const part of normalizePartSpecs(variable.parts)) {
+			const parsedDateValue = parseDateValue(variableValue, part.source);
+			if (!parsedDateValue) {
+				continue;
+			}
+
+			replacements.push({
+				token: part.token,
+				value: formatParsedDateValue(parsedDateValue, part.format),
+				resolveAt,
+			});
+		}
+	}
+
+	return replacements;
+}
+
+function applyReplacements(
+	input: string,
+	replacements: VariableReplacement[],
+	resolveAt: "creation" | "execution",
+): string {
+	return replacements
+		.filter((replacement) => replacement.resolveAt === resolveAt)
+		.reduce(
+			(result, replacement) =>
+				result.replaceAll(`{{${replacement.token}}}`, replacement.value),
+			input,
+		);
+}
+
+function replaceWorkflowVariablesInValue(
+	value: unknown,
+	replacements: VariableReplacement[],
+	resolveAt: "creation" | "execution",
+): unknown {
+	if (typeof value === "string") {
+		return applyReplacements(value, replacements, resolveAt);
+	}
+
+	if (Array.isArray(value)) {
+		return value.map((item) =>
+			replaceWorkflowVariablesInValue(item, replacements, resolveAt),
+		);
+	}
+
+	if (value && typeof value === "object") {
+		return Object.fromEntries(
+			Object.entries(value).map(([key, item]) => [
+				key,
+				replaceWorkflowVariablesInValue(item, replacements, resolveAt),
+			]),
+		);
+	}
+
+	return value;
+}
+
+function resolveWorkflowVariables(
+	input: string,
+	replacements: VariableReplacement[],
+	resolveAt: "creation" | "execution",
+): string {
+	return applyReplacements(input, replacements, resolveAt);
+}
 
 function validateWorkflowDefinition(
 	definition?: WorkflowDefinition,
@@ -119,52 +371,6 @@ function resolveTemplateValue(value: unknown, timezone?: string): unknown {
 	return value;
 }
 
-function replaceWorkflowVariablesInValue(
-	value: unknown,
-	variableValues: Record<string, string>,
-	resolveAt: "creation" | "execution",
-	variables?: WorkflowTextFields["variables"],
-): unknown {
-	if (typeof value === "string") {
-		let resolved = value;
-		for (const [key, variableValue] of Object.entries(variableValues)) {
-			const variable = variables?.[key];
-			const variableResolveAt = variable?.resolveAt ?? "creation";
-			if (variableResolveAt === resolveAt) {
-				resolved = resolved.replaceAll(`{{${key}}}`, variableValue);
-			}
-		}
-		return resolved;
-	}
-
-	if (Array.isArray(value)) {
-		return value.map((item) =>
-			replaceWorkflowVariablesInValue(
-				item,
-				variableValues,
-				resolveAt,
-				variables,
-			),
-		);
-	}
-
-	if (value && typeof value === "object") {
-		return Object.fromEntries(
-			Object.entries(value).map(([key, item]) => [
-				key,
-				replaceWorkflowVariablesInValue(
-					item,
-					variableValues,
-					resolveAt,
-					variables,
-				),
-			]),
-		);
-	}
-
-	return value;
-}
-
 export class WorkflowVariableResolver {
 	normalizeDefinition(
 		definition?: WorkflowDefinition,
@@ -188,20 +394,18 @@ export class WorkflowVariableResolver {
 			};
 		}
 
-		for (const [key, value] of Object.entries(workflow.variableValues)) {
-			const variable = workflow.variables[key];
-			const resolveAt = variable?.resolveAt ?? "creation";
-			if (resolveAt === "creation") {
-				content = content.replaceAll(`{{${key}}}`, value);
-				title = title.replaceAll(`{{${key}}}`, value);
-			}
-		}
+		const replacements = buildVariableReplacements(
+			workflow.variableValues,
+			workflow.variables,
+		);
+
+		content = resolveWorkflowVariables(content, replacements, "creation");
+		title = resolveWorkflowVariables(title, replacements, "creation");
 
 		definition = replaceWorkflowVariablesInValue(
 			definition,
-			workflow.variableValues,
+			replacements,
 			"creation",
-			workflow.variables,
 		) as WorkflowDefinition | undefined;
 
 		return {
@@ -233,19 +437,20 @@ export class WorkflowVariableResolver {
 				mergedExecutionVariables,
 				timezone,
 			);
-			for (const [key, value] of Object.entries(resolvedVars)) {
-				const variable = workflow.variables?.[key];
-				const resolveAt = variable?.resolveAt ?? "creation";
-				if (resolveAt === "execution") {
-					query = query.replaceAll(`{{${key}}}`, value);
-					displayQuery = displayQuery.replaceAll(`{{${key}}}`, value);
-				}
-			}
+			const replacements = buildVariableReplacements(
+				resolvedVars,
+				workflow.variables,
+			);
+			query = resolveWorkflowVariables(query, replacements, "execution");
+			displayQuery = resolveWorkflowVariables(
+				displayQuery,
+				replacements,
+				"execution",
+			);
 			definition = replaceWorkflowVariablesInValue(
 				definition,
-				resolvedVars,
+				replacements,
 				"execution",
-				workflow.variables,
 			) as WorkflowDefinition | undefined;
 		}
 

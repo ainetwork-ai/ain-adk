@@ -102,4 +102,92 @@ describe("WorkflowVariableResolver", () => {
 			/^날짜 \d{4}-\d{2}-\d{2} \/ 매장 hongdae$/,
 		);
 	});
+
+	it("replaces placeholders by variable id as well as variable key", () => {
+		const resolver = new WorkflowVariableResolver();
+
+		const result = resolver.resolveForExecution({
+			title: "{{년도}}년 {{월}}월 리포트",
+			content: "기간={{년도}}-{{월}}",
+			timezone: "Asia/Seoul",
+			variables: {
+				year: {
+					id: "년도",
+					label: "년도",
+					type: "text",
+					resolveAt: "execution",
+				},
+				month: {
+					id: "월",
+					label: "월",
+					type: "text",
+					resolveAt: "execution",
+				},
+			},
+			variableValues: {
+				year: "2026",
+				month: "04",
+			},
+			definition: {
+				tasks: [
+					{
+						taskId: "fetch",
+						title: "조회",
+						prompt: "{{년도}}년 {{월}}월 데이터 조회",
+					},
+				],
+				response: {
+					blocks: [],
+				},
+			},
+		});
+
+		expect(result.displayQuery).toBe("2026년 04월 리포트");
+		expect(result.query).toBe("기간=2026-04");
+		expect(result.definition?.tasks[0].prompt).toBe("2026년 04월 데이터 조회");
+	});
+
+	it("expands date_parts variables through parts mappings", () => {
+		const resolver = new WorkflowVariableResolver();
+
+		const result = resolver.resolveForExecution({
+			title: "{{년도}}년 {{월}}월 리포트",
+			content: "기간={{년도}}-{{월}} / 일자={{일}}",
+			timezone: "Asia/Seoul",
+			variables: {
+				report_date: {
+					id: "report_date",
+					label: "기준일",
+					type: "date_parts",
+					resolveAt: "execution",
+					parts: {
+						year: "년도",
+						month: "월",
+						day: "일",
+					},
+				},
+			},
+			variableValues: {
+				report_date: "2026-04-23",
+			},
+			definition: {
+				tasks: [
+					{
+						taskId: "fetch",
+						title: "조회",
+						prompt: "{{년도}}년 {{월}}월 {{일}}일 데이터 조회",
+					},
+				],
+				response: {
+					blocks: [],
+				},
+			},
+		});
+
+		expect(result.displayQuery).toBe("2026년 04월 리포트");
+		expect(result.query).toBe("기간=2026-04 / 일자=23");
+		expect(result.definition?.tasks[0].prompt).toBe(
+			"2026년 04월 23일 데이터 조회",
+		);
+	});
 });
