@@ -184,6 +184,37 @@ describe("WorkflowTableService", () => {
 		);
 	});
 
+	it("does not treat all division formulas as percent columns", () => {
+		const adrBlock: WorkflowTableBlock = {
+			blockId: "adr-by-day",
+			type: "table",
+			layout: "records",
+			title: "ADR by day",
+			columns: ["date", "grandRNs", "grandRev", "grandADR"],
+			formulas: ["grandADR = grandRev / grandRNs"],
+		};
+		const rawContent = JSON.stringify([
+			{
+				date: "2026-01-01",
+				grandRNs: 9,
+				grandRev: "1,260,000",
+			},
+		]);
+
+		const rendered = service.renderTable(adrBlock, rawContent);
+
+		expect(rendered.data.table.rows).toEqual([
+			{
+				kind: "data",
+				cells: ["2026-01-01", 9, 1260000, 140000],
+			},
+		]);
+		expect(rendered.content).toContain(
+			"| 2026-01-01 | 9 | 1,260,000 | 140,000 |",
+		);
+		expect(rendered.content).not.toContain("%");
+	});
+
 	it("builds a record extraction prompt with only source columns", () => {
 		const prompt = service.buildExtractionPrompt(
 			recordBlock,

@@ -339,8 +339,7 @@ export class WorkflowTableService {
 							(
 								formula,
 							): formula is Extract<ParsedRecordFormula, { type: "binary" }> =>
-								formula.type === "binary" &&
-								(formula.operator === "/" || looksPercentLike(formula.target)),
+								formula.type === "binary" && looksPercentLike(formula.target),
 						)
 						.map((formula) => formula.target),
 				),
