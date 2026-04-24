@@ -350,6 +350,30 @@ function validateWorkflowDefinition(
 	return definition;
 }
 
+function normalizeVariableType(
+	type: WorkflowVariable["type"],
+): WorkflowVariable["type"] {
+	return type === "dropdown" ? "select" : type;
+}
+
+function normalizeWorkflowVariablesRecord(
+	variables?: Record<string, WorkflowVariable>,
+): Record<string, WorkflowVariable> | undefined {
+	if (!variables) {
+		return undefined;
+	}
+
+	return Object.fromEntries(
+		Object.entries(variables).map(([key, variable]) => [
+			key,
+			{
+				...variable,
+				type: normalizeVariableType(variable.type),
+			},
+		]),
+	);
+}
+
 function resolveTemplateValue(value: unknown, timezone?: string): unknown {
 	if (typeof value === "string") {
 		return resolveTemplateString(value, timezone);
@@ -378,6 +402,12 @@ export class WorkflowVariableResolver {
 		return validateWorkflowDefinition(definition);
 	}
 
+	normalizeVariables(
+		variables?: Record<string, WorkflowVariable>,
+	): Record<string, WorkflowVariable> | undefined {
+		return normalizeWorkflowVariablesRecord(variables);
+	}
+
 	resolveForCreation(workflow: WorkflowTextFields): {
 		content: string;
 		title: string;
@@ -385,8 +415,11 @@ export class WorkflowVariableResolver {
 	} {
 		let { content, title } = workflow;
 		let { definition } = workflow;
+		const normalizedVariables = normalizeWorkflowVariablesRecord(
+			workflow.variables,
+		);
 
-		if (!workflow.variableValues || !workflow.variables) {
+		if (!workflow.variableValues || !normalizedVariables) {
 			return {
 				content,
 				title,
@@ -396,7 +429,7 @@ export class WorkflowVariableResolver {
 
 		const replacements = buildVariableReplacements(
 			workflow.variableValues,
-			workflow.variables,
+			normalizedVariables,
 		);
 
 		content = resolveWorkflowVariables(content, replacements, "creation");
@@ -427,6 +460,9 @@ export class WorkflowVariableResolver {
 		let query = workflow.content;
 		let displayQuery = workflow.title;
 		let definition = workflow.definition;
+		const normalizedVariables = normalizeWorkflowVariablesRecord(
+			workflow.variables,
+		);
 		const mergedExecutionVariables = {
 			...(workflow.variableValues || {}),
 			...(executionVariables || {}),
@@ -439,7 +475,7 @@ export class WorkflowVariableResolver {
 			);
 			const replacements = buildVariableReplacements(
 				resolvedVars,
-				workflow.variables,
+				normalizedVariables,
 			);
 			query = resolveWorkflowVariables(query, replacements, "execution");
 			displayQuery = resolveWorkflowVariables(

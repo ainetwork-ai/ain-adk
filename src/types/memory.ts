@@ -250,6 +250,7 @@ export interface WorkflowRenderedBlock {
 
 export type WorkflowVariableType =
 	| "select"
+	| "dropdown"
 	| "date_range"
 	| "date_parts"
 	| "text"
@@ -272,7 +273,7 @@ export interface WorkflowVariable {
 	id: string; // e.g. "workplace_id"
 	label: string; // e.g. "분석할 업장을 선택해주세요"
 	type: WorkflowVariableType;
-	options?: Array<string>; // for "select" type
+	options?: Array<string>; // for "select" or "dropdown" type
 	parts?: Record<string, string> | WorkflowVariablePartSpec[];
 	/** When to resolve this variable:
 	 * - "creation": resolved when copying template → my workflow (e.g., store selection)

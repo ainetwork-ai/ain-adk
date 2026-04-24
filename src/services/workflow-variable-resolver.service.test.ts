@@ -190,4 +190,26 @@ describe("WorkflowVariableResolver", () => {
 			"2026년 04월 23일 데이터 조회",
 		);
 	});
+
+	it("accepts dropdown as an alias for select", () => {
+		const resolver = new WorkflowVariableResolver();
+
+		expect(
+			resolver.normalizeVariables({
+				store: {
+					id: "store",
+					label: "업장",
+					type: "dropdown",
+					options: ["A", "B"],
+				},
+			}),
+		).toEqual({
+			store: {
+				id: "store",
+				label: "업장",
+				type: "select",
+				options: ["A", "B"],
+			},
+		});
+	});
 });

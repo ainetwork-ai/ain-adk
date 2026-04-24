@@ -26,6 +26,9 @@ export class UserWorkflowService {
 		const normalizedWorkflow: UserWorkflow = {
 			...workflow,
 			content: workflow.content || workflow.title,
+			variables: this.workflowVariableResolver.normalizeVariables(
+				workflow.variables,
+			),
 		};
 		const { content, title, definition } =
 			this.workflowVariableResolver.resolveForCreation(normalizedWorkflow);
@@ -48,6 +51,9 @@ export class UserWorkflowService {
 		const memory = this.memoryModule.getUserWorkflowMemory();
 		await memory.updateUserWorkflow(workflowId, {
 			...updates,
+			variables: this.workflowVariableResolver.normalizeVariables(
+				updates.variables,
+			),
 			definition: this.workflowVariableResolver.normalizeDefinition(
 				updates.definition,
 			),
