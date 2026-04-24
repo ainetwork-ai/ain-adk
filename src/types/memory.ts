@@ -179,15 +179,17 @@ export interface WorkflowTextBlock {
 	sourceTaskIds?: string[];
 }
 
+export type WorkflowTableLayout = "records" | "matrix";
+
 export interface WorkflowTableBlock {
 	blockId: string;
 	type: "table";
+	layout: WorkflowTableLayout;
 	title?: string;
-	columns: Array<{
-		key: string;
-		label: string;
-		source?: string;
-	}>;
+	rowHeader?: string;
+	rows?: string[];
+	columns: string[];
+	formulas?: string[];
 	sourceTaskIds?: string[];
 	prompt?: string;
 }
@@ -216,11 +218,34 @@ export interface WorkflowTaskResult {
 	completedAt: number;
 }
 
+export interface WorkflowRenderedTableSpec {
+	layout: WorkflowTableLayout;
+	rowHeader?: string;
+	rows?: string[];
+	columns: string[];
+	formulas?: string[];
+}
+
+export interface WorkflowRenderedTableGridRow {
+	key?: string;
+	cells: Array<string | number | null>;
+	kind?: "data" | "total";
+}
+
+export interface WorkflowRenderedTableData {
+	spec: WorkflowRenderedTableSpec;
+	table: {
+		headers: string[];
+		rows: WorkflowRenderedTableGridRow[];
+	};
+	warnings?: string[];
+}
+
 export interface WorkflowRenderedBlock {
 	blockId: string;
 	type: WorkflowResponseBlock["type"];
 	content: string;
-	data?: unknown;
+	data?: WorkflowRenderedTableData;
 }
 
 export type WorkflowVariableType =

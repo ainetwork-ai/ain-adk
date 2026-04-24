@@ -9,14 +9,20 @@ import {
 	type UserWorkflow,
 	type WorkflowRenderedBlock,
 	type WorkflowResponseBlock,
+	type WorkflowTableBlock,
 	type WorkflowTask,
 	type WorkflowTaskResult,
+	type WorkflowTextBlock,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream.js";
 import { loggers } from "@/utils/logger.js";
 import type { QueryService } from "./query.service.js";
 import type { ToolCallingService } from "./tool-calling.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
+import {
+	type WorkflowTableRenderResult,
+	WorkflowTableService,
+} from "./workflow-table.service.js";
 import type { WorkflowVariableResolver } from "./workflow-variable-resolver.service.js";
 
 type WorkflowExecutionResult = {
@@ -32,6 +38,7 @@ export class WorkflowExecutionService {
 	private memoryModule: MemoryModule;
 	private a2aModule?: A2AModule;
 	private toolCallingService: ToolCallingService;
+	private workflowTableService: WorkflowTableService;
 
 	constructor(
 		userWorkflowService: UserWorkflowService,
@@ -49,6 +56,7 @@ export class WorkflowExecutionService {
 		this.memoryModule = memoryModule;
 		this.toolCallingService = toolCallingService;
 		this.a2aModule = a2aModule;
+		this.workflowTableService = new WorkflowTableService();
 	}
 
 	async executeWorkflow(
@@ -219,7 +227,6 @@ export class WorkflowExecutionService {
 			metadata: {
 				workflowId,
 				workflowRun: true,
-				taskResults,
 				responseBlocks: renderedBlocks,
 			},
 		});
@@ -480,6 +487,19 @@ ${task.prompt}`;
 		block: WorkflowResponseBlock,
 		taskResults: Record<string, WorkflowTaskResult>,
 	): AsyncGenerator<StreamEvent, WorkflowRenderedBlock, unknown> {
+		yield {
+			event: "thinking_process",
+			data: {
+				title: `[워크플로우] ${this.getBlockTypeLabel(block.type)} 블록 생성 중`,
+				description: "작업 결과를 바탕으로 워크플로우 응답을 구성합니다.",
+				metadata: {
+					phase: "response_block",
+					blockId: block.blockId,
+					blockType: block.type,
+				},
+			},
+		};
+
 		if (block.type === "heading") {
 			const level = block.level ?? 2;
 			const content = `${"#".repeat(level)} ${block.text}\n\n`;
@@ -491,18 +511,24 @@ ${task.prompt}`;
 			};
 		}
 
-		const content =
-			block.type === "table"
-				? yield* this.renderGeneratedBlock(
-						block,
-						taskResults,
-						"Generate a concise markdown table from the workflow task results. Return only markdown.",
-					)
-				: yield* this.renderGeneratedBlock(
-						block,
-						taskResults,
-						"Generate this workflow response text from the task results. Return only the response block content.",
-					);
+		if (block.type === "table") {
+			const rendered = yield* this.renderDeterministicTableBlock(
+				block,
+				taskResults,
+			);
+			return {
+				blockId: block.blockId,
+				type: block.type,
+				content: rendered.content,
+				data: rendered.data,
+			};
+		}
+
+		const content = yield* this.renderGeneratedTextBlock(
+			block,
+			taskResults,
+			"Generate this workflow response text from the task results. Return only the response block content.",
+		);
 
 		const finalContent = content.endsWith("\n\n") ? content : `${content}\n\n`;
 		if (finalContent !== content) {
@@ -516,8 +542,41 @@ ${task.prompt}`;
 		};
 	}
 
-	private async *renderGeneratedBlock(
-		block: Exclude<WorkflowResponseBlock, { type: "heading" }>,
+	private async *renderDeterministicTableBlock(
+		block: WorkflowTableBlock,
+		taskResults: Record<string, WorkflowTaskResult>,
+	): AsyncGenerator<StreamEvent, WorkflowTableRenderResult, unknown> {
+		const model = this.modelModule.getModel();
+		const modelOptions = this.modelModule.getModelOptions();
+		const sourceResults = this.getSourceTaskResults(block, taskResults);
+		const messages = model.generateMessages({
+			query: this.workflowTableService.buildExtractionPrompt(
+				block,
+				this.serializeTaskResults(sourceResults),
+			),
+			systemPrompt:
+				"Extract only the requested table source values as valid JSON. Return only JSON.",
+		});
+		const response = await model.fetch(messages, modelOptions);
+		const rawContent = response.content || "{}";
+		const rendered = this.workflowTableService.renderTable(block, rawContent);
+		yield { event: "text_chunk", data: { delta: rendered.content } };
+		return rendered;
+	}
+
+	private getBlockTypeLabel(type: WorkflowResponseBlock["type"]): string {
+		switch (type) {
+			case "heading":
+				return "제목";
+			case "text":
+				return "텍스트";
+			case "table":
+				return "표";
+		}
+	}
+
+	private async *renderGeneratedTextBlock(
+		block: WorkflowTextBlock,
 		taskResults: Record<string, WorkflowTaskResult>,
 		systemPrompt: string,
 	): AsyncGenerator<StreamEvent, string, unknown> {
@@ -562,32 +621,23 @@ ${task.prompt}`;
 	}
 
 	private buildBlockPrompt(
-		block: Exclude<WorkflowResponseBlock, { type: "heading" }>,
+		block: WorkflowTextBlock,
 		taskResults: WorkflowTaskResult[],
 	): string {
-		const resultsText = taskResults
-			.map(
-				(result) =>
-					`[${result.taskId}] ${result.title}\nStatus: ${result.status}\nResult:\n${result.content || result.error || ""}`,
-			)
-			.join("\n\n---\n\n");
-
-		if (block.type === "table") {
-			return `Task results:
-${resultsText}
-
-Table title: ${block.title || ""}
-Columns:
-${block.columns.map((column) => `- ${column.key}: ${column.label}${column.source ? ` (${column.source})` : ""}`).join("\n")}
-
-Instructions:
-${block.prompt || "Create the requested table from the task results."}`;
-		}
-
+		const resultsText = this.serializeTaskResults(taskResults);
 		return `Task results:
 ${resultsText}
 
 Instructions:
 ${block.prompt}`;
+	}
+
+	private serializeTaskResults(taskResults: WorkflowTaskResult[]): string {
+		return taskResults
+			.map(
+				(result) =>
+					`[${result.taskId}] ${result.title}\nStatus: ${result.status}\nResult:\n${result.content || result.error || ""}`,
+			)
+			.join("\n\n---\n\n");
 	}
 }
