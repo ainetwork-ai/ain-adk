@@ -223,12 +223,23 @@ export class WorkflowVariableResolver {
 		let query = workflow.content;
 		let displayQuery = workflow.title;
 		let definition = workflow.definition;
+		const mergedExecutionVariables = {
+			...(workflow.variableValues || {}),
+			...(executionVariables || {}),
+		};
 
-		if (executionVariables) {
-			const resolvedVars = resolveTemplateRecord(executionVariables, timezone);
+		if (Object.keys(mergedExecutionVariables).length > 0) {
+			const resolvedVars = resolveTemplateRecord(
+				mergedExecutionVariables,
+				timezone,
+			);
 			for (const [key, value] of Object.entries(resolvedVars)) {
-				query = query.replaceAll(`{{${key}}}`, value);
-				displayQuery = displayQuery.replaceAll(`{{${key}}}`, value);
+				const variable = workflow.variables?.[key];
+				const resolveAt = variable?.resolveAt ?? "creation";
+				if (resolveAt === "execution") {
+					query = query.replaceAll(`{{${key}}}`, value);
+					displayQuery = displayQuery.replaceAll(`{{${key}}}`, value);
+				}
 			}
 			definition = replaceWorkflowVariablesInValue(
 				definition,
