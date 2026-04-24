@@ -1,6 +1,8 @@
 import type {
 	WorkflowRenderedTableData,
 	WorkflowTableBlock,
+	WorkflowTableColumnFormat,
+	WorkflowTableColumnFormatKind,
 } from "@/types/memory.js";
 
 type NumericCellValue = number | null;
@@ -54,6 +56,7 @@ type MatrixDefinition = {
 	rowHeader: string;
 	rows: string[];
 	columns: string[];
+	columnFormats: Record<string, WorkflowTableColumnFormat>;
 	sourceRows: string[];
 	sourceColumns: string[];
 	computedRowTargets: Set<string>;
@@ -67,6 +70,7 @@ type MatrixDefinition = {
 type RecordDefinition = {
 	layout: "records";
 	columns: string[];
+	columnFormats: Record<string, WorkflowTableColumnFormat>;
 	sourceColumns: string[];
 	computedColumns: Set<string>;
 	percentColumns: Set<string>;
@@ -77,6 +81,15 @@ type RecordDefinition = {
 export type WorkflowTableRenderResult = {
 	content: string;
 	data: WorkflowRenderedTableData;
+};
+
+type ResolvedColumnFormat = {
+	kind: WorkflowTableColumnFormatKind;
+	grouping: boolean;
+	decimals: number;
+	prefix: string;
+	suffix: string;
+	nullDisplay: string;
 };
 
 function isFiniteNumber(value: unknown): value is number {
@@ -127,9 +140,16 @@ function parseNumberish(value: unknown): NumericCellValue {
 	return Number.isFinite(parsed) ? parsed : null;
 }
 
-function parseRecordCell(value: unknown): RecordCellValue {
+function parseRecordCell(
+	value: unknown,
+	format?: WorkflowTableColumnFormat,
+): RecordCellValue {
 	if (value === null || value === undefined || value === "") {
 		return null;
+	}
+
+	if (format?.kind === "text") {
+		return typeof value === "string" ? value.trim() : String(value);
 	}
 
 	if (isFiniteNumber(value)) {
@@ -154,12 +174,15 @@ function parseRecordCell(value: unknown): RecordCellValue {
 	return parsed === null ? trimmed : parsed;
 }
 
-function formatNumber(value: number, isPercent: boolean): string {
-	const formatted = value.toLocaleString("en-US", {
+function formatNumber(
+	value: number,
+	options: { grouping: boolean; decimals: number },
+): string {
+	return value.toLocaleString("en-US", {
+		useGrouping: options.grouping,
 		minimumFractionDigits: 0,
-		maximumFractionDigits: 1,
+		maximumFractionDigits: options.decimals,
 	});
-	return isPercent ? `${formatted}%` : formatted;
 }
 
 function safeDivide(
@@ -290,6 +313,7 @@ export class WorkflowTableService {
 			rowHeader: block.rowHeader || "구분",
 			rows,
 			columns,
+			columnFormats: block.columnFormats || {},
 			sourceRows: rows.filter((row) => !computedRowTargets.has(row)),
 			sourceColumns: columns.filter(
 				(column) => !computedColumnTargets.has(column),
@@ -348,6 +372,7 @@ export class WorkflowTableService {
 		return {
 			layout: "records",
 			columns,
+			columnFormats: block.columnFormats || {},
 			sourceColumns: columns.filter((column) => !computedColumns.has(column)),
 			computedColumns,
 			percentColumns,
@@ -473,7 +498,11 @@ ${jsonShape}`;
 	): WorkflowTableRenderResult {
 		const definition = this.buildRecordDefinition(block);
 		const warnings: string[] = [];
-		const rows = this.parseRecordContent(rawContent, definition.sourceColumns);
+		const rows = this.parseRecordContent(
+			rawContent,
+			definition.sourceColumns,
+			definition.columnFormats,
+		);
 
 		for (const formula of definition.formulas) {
 			if (formula.type === "binary") {
@@ -510,6 +539,7 @@ ${jsonShape}`;
 				rows: definition.rows,
 				columns: definition.columns,
 				formulas: block.formulas,
+				columnFormats: definition.columnFormats,
 			},
 			table: {
 				headers: [definition.rowHeader, ...definition.columns],
@@ -540,6 +570,7 @@ ${jsonShape}`;
 				layout: "records",
 				columns: definition.columns,
 				formulas: block.formulas,
+				columnFormats: definition.columnFormats,
 			},
 			table: {
 				headers: definition.columns,
@@ -695,6 +726,7 @@ ${jsonShape}`;
 	private parseRecordContent(
 		rawContent: string,
 		sourceColumns: string[],
+		columnFormats: Record<string, WorkflowTableColumnFormat>,
 	): RecordTableRow[] {
 		const jsonText = this.extractJsonValue(rawContent, "array");
 		const parsed = JSON.parse(jsonText) as unknown;
@@ -711,7 +743,7 @@ ${jsonShape}`;
 				Object.fromEntries(
 					sourceColumns.map((column) => [
 						column,
-						parseRecordCell(item[column]),
+						parseRecordCell(item[column], columnFormats[column]),
 					]),
 				),
 			);
@@ -964,6 +996,7 @@ ${jsonShape}`;
 			const values = definition.columns.map((column) =>
 				this.formatNumericCell(
 					matrix[row]?.[column] ?? null,
+					definition.columnFormats[column],
 					definition.percentRows.has(row) ||
 						definition.percentColumns.has(column),
 				),
@@ -980,9 +1013,12 @@ ${jsonShape}`;
 		totalRow?: RecordTableRow,
 	): string {
 		const numericColumns = new Set(
-			definition.columns.filter((column) =>
-				this.isNumericRecordColumn(column, rows, totalRow),
-			),
+			definition.columns.filter((column) => {
+				if (definition.columnFormats[column]?.kind === "text") {
+					return false;
+				}
+				return this.isNumericRecordColumn(column, rows, totalRow);
+			}),
 		);
 		const lines = [
 			`| ${definition.columns.join(" | ")} |`,
@@ -999,6 +1035,7 @@ ${jsonShape}`;
 					.map((column) =>
 						this.formatRecordCell(
 							row[column] ?? null,
+							definition.columnFormats[column],
 							definition.percentColumns.has(column),
 						),
 					)
@@ -1013,6 +1050,7 @@ ${jsonShape}`;
 						(column) =>
 							`**${this.formatRecordCell(
 								totalRow[column] ?? null,
+								definition.columnFormats[column],
 								definition.percentColumns.has(column),
 							)}**`,
 					)
@@ -1025,22 +1063,101 @@ ${jsonShape}`;
 
 	private formatNumericCell(
 		value: NumericCellValue,
+		columnFormat: WorkflowTableColumnFormat | undefined,
+		isPercent: boolean,
+	): string {
+		return this.formatNumericValue(value, columnFormat, isPercent);
+	}
+
+	private formatRecordCell(
+		value: RecordCellValue,
+		columnFormat: WorkflowTableColumnFormat | undefined,
 		isPercent: boolean,
 	): string {
 		if (value === null) {
-			return "-";
+			return this.resolveColumnFormat(columnFormat, isPercent).nullDisplay;
 		}
-		return formatNumber(value, isPercent);
-	}
-
-	private formatRecordCell(value: RecordCellValue, isPercent: boolean): string {
-		if (value === null) {
-			return "-";
+		const resolvedFormat = this.resolveColumnFormat(columnFormat, isPercent);
+		if (resolvedFormat.kind === "text") {
+			return String(value);
 		}
 		if (typeof value === "number") {
-			return formatNumber(value, isPercent);
+			return this.formatNumericValue(value, columnFormat, isPercent);
 		}
 		return value;
+	}
+
+	private formatNumericValue(
+		value: NumericCellValue,
+		columnFormat: WorkflowTableColumnFormat | undefined,
+		isPercent: boolean,
+	): string {
+		const resolvedFormat = this.resolveColumnFormat(columnFormat, isPercent);
+		if (value === null) {
+			return resolvedFormat.nullDisplay;
+		}
+
+		const formatted = formatNumber(value, {
+			grouping: resolvedFormat.grouping,
+			decimals: resolvedFormat.decimals,
+		});
+		return `${resolvedFormat.prefix}${formatted}${resolvedFormat.suffix}`;
+	}
+
+	private resolveColumnFormat(
+		columnFormat: WorkflowTableColumnFormat | undefined,
+		isPercent: boolean,
+	): ResolvedColumnFormat {
+		const kind =
+			columnFormat?.kind && columnFormat.kind !== "auto"
+				? columnFormat.kind
+				: isPercent
+					? "percent"
+					: "number";
+
+		const defaults: Record<
+			Exclude<WorkflowTableColumnFormatKind, "auto">,
+			Omit<ResolvedColumnFormat, "kind">
+		> = {
+			text: {
+				grouping: false,
+				decimals: 0,
+				prefix: "",
+				suffix: "",
+				nullDisplay: "-",
+			},
+			number: {
+				grouping: true,
+				decimals: 0,
+				prefix: "",
+				suffix: "",
+				nullDisplay: "-",
+			},
+			currency: {
+				grouping: true,
+				decimals: 0,
+				prefix: "",
+				suffix: "",
+				nullDisplay: "-",
+			},
+			percent: {
+				grouping: false,
+				decimals: 1,
+				prefix: "",
+				suffix: "%",
+				nullDisplay: "-",
+			},
+		};
+
+		const fallback = defaults[kind];
+		return {
+			kind,
+			grouping: columnFormat?.grouping ?? fallback.grouping,
+			decimals: columnFormat?.decimals ?? fallback.decimals,
+			prefix: columnFormat?.prefix ?? fallback.prefix,
+			suffix: columnFormat?.suffix ?? fallback.suffix,
+			nullDisplay: columnFormat?.nullDisplay ?? fallback.nullDisplay,
+		};
 	}
 
 	private isNumericRecordColumn(

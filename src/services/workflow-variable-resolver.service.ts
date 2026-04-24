@@ -336,6 +336,69 @@ function validateWorkflowDefinition(
 		}
 
 		if (
+			block.columnFormats &&
+			(typeof block.columnFormats !== "object" ||
+				Array.isArray(block.columnFormats))
+		) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Table block "${block.blockId}" must use columnFormats: Record<string, object>.`,
+			);
+		}
+
+		for (const [column, format] of Object.entries(block.columnFormats || {})) {
+			if (!format || typeof format !== "object" || Array.isArray(format)) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Table block "${block.blockId}" columnFormats.${column} must be an object.`,
+				);
+			}
+
+			if (
+				format.kind &&
+				!["auto", "text", "number", "currency", "percent"].includes(
+					String(format.kind),
+				)
+			) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Table block "${block.blockId}" columnFormats.${column}.kind is invalid.`,
+				);
+			}
+
+			if (
+				format.grouping !== undefined &&
+				typeof format.grouping !== "boolean"
+			) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Table block "${block.blockId}" columnFormats.${column}.grouping must be boolean.`,
+				);
+			}
+
+			if (
+				format.decimals !== undefined &&
+				(typeof format.decimals !== "number" ||
+					!Number.isFinite(format.decimals))
+			) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Table block "${block.blockId}" columnFormats.${column}.decimals must be a number.`,
+				);
+			}
+
+			for (const key of ["prefix", "suffix", "nullDisplay"] as const) {
+				const value = format[key];
+				if (value !== undefined && typeof value !== "string") {
+					throw new AinHttpError(
+						StatusCodes.BAD_REQUEST,
+						`Table block "${block.blockId}" columnFormats.${column}.${key} must be a string.`,
+					);
+				}
+			}
+		}
+
+		if (
 			block.sourceTaskIds &&
 			(!Array.isArray(block.sourceTaskIds) ||
 				block.sourceTaskIds.some((taskId) => typeof taskId !== "string"))

@@ -80,6 +80,7 @@ describe("WorkflowTableService", () => {
 				"vsLYPct",
 			],
 			formulas: matrixBlock.formulas,
+			columnFormats: {},
 		});
 		expect(rendered.data.table.headers).toEqual([
 			"구분",
@@ -154,6 +155,7 @@ describe("WorkflowTableService", () => {
 			layout: "records",
 			columns: ["store", "grossSales", "refunds", "netSales"],
 			formulas: recordBlock.formulas,
+			columnFormats: {},
 		});
 		expect(rendered.data.table.headers).toEqual([
 			"store",
@@ -213,6 +215,56 @@ describe("WorkflowTableService", () => {
 			"| 2026-01-01 | 9 | 1,260,000 | 140,000 |",
 		);
 		expect(rendered.content).not.toContain("%");
+	});
+
+	it("applies column formats for text, grouping, decimals, and suffixes", () => {
+		const productBlock: WorkflowTableBlock = {
+			blockId: "product-sales",
+			type: "table",
+			layout: "records",
+			title: "상품별 매출",
+			columns: ["상품코드", "QTY(개)", "REV(원)"],
+			columnFormats: {
+				상품코드: {
+					kind: "text",
+				},
+				"QTY(개)": {
+					kind: "number",
+					grouping: false,
+					decimals: 0,
+					suffix: "개",
+				},
+				"REV(원)": {
+					kind: "currency",
+					grouping: true,
+					decimals: 0,
+					suffix: "원",
+				},
+			},
+		};
+		const rawContent = JSON.stringify([
+			{
+				상품코드: "9000176886",
+				"QTY(개)": "266",
+				"REV(원)": "14904541",
+			},
+		]);
+
+		const rendered = service.renderTable(productBlock, rawContent);
+
+		expect(rendered.data.spec).toEqual({
+			layout: "records",
+			columns: ["상품코드", "QTY(개)", "REV(원)"],
+			formulas: undefined,
+			columnFormats: productBlock.columnFormats,
+		});
+		expect(rendered.data.table.rows).toEqual([
+			{
+				kind: "data",
+				cells: ["9000176886", 266, 14904541],
+			},
+		]);
+		expect(rendered.content).toContain("| 9000176886 | 266개 | 14,904,541원 |");
 	});
 
 	it("builds a record extraction prompt with only source columns", () => {

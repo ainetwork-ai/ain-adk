@@ -181,6 +181,22 @@ export interface WorkflowTextBlock {
 
 export type WorkflowTableLayout = "records" | "matrix";
 
+export type WorkflowTableColumnFormatKind =
+	| "auto"
+	| "text"
+	| "number"
+	| "currency"
+	| "percent";
+
+export interface WorkflowTableColumnFormat {
+	kind?: WorkflowTableColumnFormatKind;
+	grouping?: boolean;
+	decimals?: number;
+	prefix?: string;
+	suffix?: string;
+	nullDisplay?: string;
+}
+
 export interface WorkflowTableBlock {
 	blockId: string;
 	type: "table";
@@ -192,6 +208,7 @@ export interface WorkflowTableBlock {
 	formulas?: string[];
 	sourceTaskIds?: string[];
 	prompt?: string;
+	columnFormats?: Record<string, WorkflowTableColumnFormat>;
 }
 
 export type WorkflowResponseBlock =
@@ -224,6 +241,7 @@ export interface WorkflowRenderedTableSpec {
 	rows?: string[];
 	columns: string[];
 	formulas?: string[];
+	columnFormats?: Record<string, WorkflowTableColumnFormat>;
 }
 
 export interface WorkflowRenderedTableGridRow {
