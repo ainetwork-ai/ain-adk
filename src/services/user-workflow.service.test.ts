@@ -1,0 +1,53 @@
+import type { MemoryModule } from "../modules";
+import type { IUserWorkflowMemory } from "../modules/memory/base.memory";
+import type { UserWorkflow } from "../types/memory";
+import { UserWorkflowService } from "./user-workflow.service";
+import type { WorkflowVariableResolver } from "./workflow-variable-resolver.service";
+
+describe("UserWorkflowService", () => {
+	it("defaults content to title when content is missing", async () => {
+		const createUserWorkflow = jest.fn(
+			async (workflow: UserWorkflow) => workflow,
+		);
+		const memory = {
+			createUserWorkflow,
+		} as unknown as IUserWorkflowMemory;
+		const memoryModule = {
+			getUserWorkflowMemory: () => memory,
+		} as unknown as MemoryModule;
+		const workflowVariableResolver = {
+			resolveForCreation: jest.fn((workflow: UserWorkflow) => ({
+				content: workflow.content,
+				title: workflow.title,
+				definition: workflow.definition,
+			})),
+		} as unknown as WorkflowVariableResolver;
+
+		const service = new UserWorkflowService(
+			memoryModule,
+			workflowVariableResolver,
+		);
+
+		const created = await service.createWorkflow({
+			workflowId: "",
+			userId: "user-1",
+			title: "일일 매출 분석",
+			content: "" as unknown as string,
+			active: true,
+		});
+
+		expect(workflowVariableResolver.resolveForCreation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: "일일 매출 분석",
+				content: "일일 매출 분석",
+			}),
+		);
+		expect(createUserWorkflow).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: "일일 매출 분석",
+				content: "일일 매출 분석",
+			}),
+		);
+		expect(created.content).toBe("일일 매출 분석");
+	});
+});

@@ -23,11 +23,15 @@ export class UserWorkflowService {
 
 	async createWorkflow(workflow: UserWorkflow): Promise<UserWorkflow> {
 		const memory = this.memoryModule.getUserWorkflowMemory();
+		const normalizedWorkflow: UserWorkflow = {
+			...workflow,
+			content: workflow.content || workflow.title,
+		};
 		const { content, title, definition } =
-			this.workflowVariableResolver.resolveForCreation(workflow);
+			this.workflowVariableResolver.resolveForCreation(normalizedWorkflow);
 
 		const newWorkflow: UserWorkflow = {
-			...workflow,
+			...normalizedWorkflow,
 			workflowId: workflow.workflowId || randomUUID(),
 			active: workflow.active ?? true,
 			content,
@@ -42,7 +46,12 @@ export class UserWorkflowService {
 		updates: Partial<UserWorkflow>,
 	): Promise<void> {
 		const memory = this.memoryModule.getUserWorkflowMemory();
-		await memory.updateUserWorkflow(workflowId, updates);
+		await memory.updateUserWorkflow(workflowId, {
+			...updates,
+			definition: this.workflowVariableResolver.normalizeDefinition(
+				updates.definition,
+			),
+		});
 	}
 
 	async deleteWorkflow(workflowId: string, userId: string): Promise<void> {
