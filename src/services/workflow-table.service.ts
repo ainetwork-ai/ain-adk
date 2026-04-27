@@ -511,14 +511,33 @@ ${jsonShape}`;
 			}
 		}
 
-		for (const formula of definition.formulas) {
-			this.applyMatrixFormula(formula, definition, matrix, warnings);
-		}
+		this.applyMatrixFormulas(definition, matrix, warnings);
 
 		return {
 			content: this.renderMarkdownMatrix(definition, matrix),
 			data: this.buildMatrixRenderedData(block, definition, matrix, warnings),
 		};
+	}
+
+	private applyMatrixFormulas(
+		definition: MatrixDefinition,
+		matrix: MatrixTable,
+		warnings: string[],
+	): void {
+		const phases: Array<ParsedMatrixFormula["type"][]> = [
+			["sum"],
+			["share", "ratio"],
+			["delta", "rate", "growth"],
+		];
+
+		for (const phase of phases) {
+			for (const formula of definition.formulas) {
+				if (!phase.includes(formula.type)) {
+					continue;
+				}
+				this.applyMatrixFormula(formula, definition, matrix, warnings);
+			}
+		}
 	}
 
 	private renderRecordTable(
@@ -828,7 +847,7 @@ ${jsonShape}`;
 	): void {
 		switch (formula.type) {
 			case "sum":
-				for (const row of definition.rows) {
+				for (const row of definition.sourceRows) {
 					const values = formula.args.map(
 						(column) => matrix[row]?.[column] ?? null,
 					);

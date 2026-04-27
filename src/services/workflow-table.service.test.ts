@@ -124,6 +124,48 @@ describe("WorkflowTableService", () => {
 		]);
 	});
 
+	it("does not sum computed ratio rows into aggregate columns", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "daily-sales-ordered-differently",
+			type: "table",
+			layout: "matrix",
+			rowHeader: "구분",
+			title: "일일 매출 분석",
+			rows: ["Rev", "Cover", "AveCheck"],
+			columns: ["Breakfast", "Lunch", "Dinner", "Midnight", "Actual"],
+			formulas: [
+				"AveCheck = ratio(Rev, Cover)",
+				"Actual = sum(Breakfast, Lunch, Dinner, Midnight)",
+			],
+		};
+		const rawContent = JSON.stringify({
+			Rev: {
+				Breakfast: 0,
+				Lunch: 7941181,
+				Dinner: 8440036,
+				Midnight: 0,
+			},
+			Cover: {
+				Breakfast: 0,
+				Lunch: 113,
+				Dinner: 69,
+				Midnight: 0,
+			},
+		});
+
+		const rendered = service.renderTable(block, rawContent);
+		const aveCheckRow = rendered.data.table.rows.find(
+			(row) => row.kind === "data" && row.cells[0] === "AveCheck",
+		);
+
+		expect(aveCheckRow).toBeDefined();
+		expect(aveCheckRow?.cells[5]).toBeCloseTo(16381217 / 182, 6);
+		expect(aveCheckRow?.cells[5]).not.toBeCloseTo(
+			7941181 / 113 + 8440036 / 69,
+			6,
+		);
+	});
+
 	it("builds a matrix extraction prompt with only source rows and source columns", () => {
 		const prompt = service.buildExtractionPrompt(
 			matrixBlock,
