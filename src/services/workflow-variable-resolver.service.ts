@@ -290,6 +290,29 @@ function validateWorkflowDefinition(
 	}
 
 	for (const block of definition.response.blocks) {
+		if (block.type === "heading") {
+			if (typeof block.text !== "string" || !block.text.trim()) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Heading block "${block.blockId}" must use a non-empty text string.`,
+				);
+			}
+
+			if (
+				block.level !== undefined &&
+				block.level !== 1 &&
+				block.level !== 2 &&
+				block.level !== 3
+			) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Heading block "${block.blockId}" level must be 1, 2, or 3.`,
+				);
+			}
+
+			continue;
+		}
+
 		if (block.type !== "table") {
 			continue;
 		}

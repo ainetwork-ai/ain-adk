@@ -52,6 +52,30 @@ describe("WorkflowVariableResolver", () => {
 		);
 	});
 
+	it("rejects heading blocks without text", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [],
+			response: {
+				blocks: [
+					{
+						blockId: "1. WPC 쿠폰(금액권) 사용 분석 (단위: 개)",
+						type: "heading",
+						level: 2,
+						text: "",
+					},
+				],
+			},
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			AinHttpError,
+		);
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			'Heading block "1. WPC 쿠폰(금액권) 사용 분석 (단위: 개)" must use a non-empty text string.',
+		);
+	});
+
 	it("applies stored execution-time variableValues and lets executionVariables override them", () => {
 		const resolver = new WorkflowVariableResolver();
 

@@ -267,6 +267,90 @@ describe("WorkflowTableService", () => {
 		expect(rendered.content).toContain("| 9000176886 | 266개 | 14,904,541원 |");
 	});
 
+	it("keeps numeric JSON values unformatted for text columns", () => {
+		const productBlock: WorkflowTableBlock = {
+			blockId: "product-sales",
+			type: "table",
+			layout: "records",
+			title: "상품별 매출",
+			columns: ["상품코드", "QTY(개)", "REV(원)"],
+			columnFormats: {
+				상품코드: {
+					kind: "text",
+					grouping: false,
+				},
+				"QTY(개)": {
+					kind: "number",
+					grouping: false,
+				},
+				"REV(원)": {
+					kind: "currency",
+					grouping: true,
+				},
+			},
+		};
+		const rawContent = JSON.stringify([
+			{
+				상품코드: 9000176600,
+				"QTY(개)": 4,
+				"REV(원)": 409091,
+			},
+		]);
+
+		const rendered = service.renderTable(productBlock, rawContent);
+
+		expect(rendered.data.table.rows).toEqual([
+			{
+				kind: "data",
+				cells: ["9000176600", 4, 409091],
+			},
+		]);
+		expect(rendered.content).toContain("| 9000176600 | 4 | 409,091 |");
+		expect(rendered.content).not.toContain("9,000,176,600");
+	});
+
+	it("normalizes grouped numeric strings for text identifier columns", () => {
+		const productBlock: WorkflowTableBlock = {
+			blockId: "product-sales",
+			type: "table",
+			layout: "records",
+			title: "상품별 매출",
+			columns: ["상품코드", "QTY(개)", "REV(원)"],
+			columnFormats: {
+				상품코드: {
+					kind: "text",
+					grouping: false,
+				},
+				"QTY(개)": {
+					kind: "number",
+					grouping: false,
+				},
+				"REV(원)": {
+					kind: "currency",
+					grouping: true,
+				},
+			},
+		};
+		const rawContent = JSON.stringify([
+			{
+				상품코드: "9,000,176,600",
+				"QTY(개)": 4,
+				"REV(원)": 409091,
+			},
+		]);
+
+		const rendered = service.renderTable(productBlock, rawContent);
+
+		expect(rendered.data.table.rows).toEqual([
+			{
+				kind: "data",
+				cells: ["9000176600", 4, 409091],
+			},
+		]);
+		expect(rendered.content).toContain("| 9000176600 | 4 | 409,091 |");
+		expect(rendered.content).not.toContain("9,000,176,600");
+	});
+
 	it("builds a record extraction prompt with only source columns", () => {
 		const prompt = service.buildExtractionPrompt(
 			recordBlock,
@@ -279,7 +363,51 @@ describe("WorkflowTableService", () => {
 		expect(extractionSection).toContain(
 			"Columns to extract:\n- store\n- grossSales\n- refunds",
 		);
+		expect(prompt).toContain("Column format guidance:");
+		expect(prompt).toContain(
+			"- store: return a raw string, number, or null without display formatting.",
+		);
 		expect(extractionSection).not.toContain("- netSales");
 		expect(prompt).toContain("Do not add total rows.");
+		expect(prompt).toContain(
+			"Do not apply display formatting such as digit grouping commas, currency symbols, unit suffixes, or percent signs",
+		);
+	});
+
+	it("builds text-column guidance for identifier fields", () => {
+		const productBlock: WorkflowTableBlock = {
+			blockId: "product-sales",
+			type: "table",
+			layout: "records",
+			title: "상품별 매출",
+			columns: ["상품코드", "QTY(개)", "REV(원)"],
+			columnFormats: {
+				상품코드: {
+					kind: "text",
+					grouping: false,
+				},
+				"QTY(개)": {
+					kind: "number",
+					grouping: false,
+				},
+				"REV(원)": {
+					kind: "currency",
+					grouping: true,
+				},
+			},
+		};
+
+		const prompt = service.buildExtractionPrompt(
+			productBlock,
+			"[task-3] Product Sales\nStatus: completed\nResult:\n...",
+		);
+
+		expect(prompt).toContain("Column format guidance:");
+		expect(prompt).toContain(
+			"- 상품코드: treat as text/identifier. Preserve the source text exactly and never add digit grouping commas or numeric formatting.",
+		);
+		expect(prompt).toContain(
+			"- REV(원): return a raw number or null, without currency symbols or display formatting.",
+		);
 	});
 });

@@ -108,6 +108,14 @@ function normalizeNumberishString(value: string): string {
 		.trim();
 }
 
+function normalizeTextIdentifierString(value: string): string {
+	const trimmed = value.trim();
+	if (/^\d[\d,]*$/.test(trimmed)) {
+		return trimmed.replace(/,/g, "");
+	}
+	return trimmed;
+}
+
 function parseNumberish(value: unknown): NumericCellValue {
 	if (value === null || value === undefined || value === "") {
 		return null;
@@ -149,7 +157,9 @@ function parseRecordCell(
 	}
 
 	if (format?.kind === "text") {
-		return typeof value === "string" ? value.trim() : String(value);
+		return typeof value === "string"
+			? normalizeTextIdentifierString(value)
+			: String(value);
 	}
 
 	if (isFiniteNumber(value)) {
@@ -429,6 +439,21 @@ ${jsonShape}`;
 		resultsText: string,
 	): string {
 		const definition = this.buildRecordDefinition(block);
+		const formatGuidance = definition.sourceColumns
+			.map((column) => {
+				const format = definition.columnFormats[column];
+				if (format?.kind === "text") {
+					return `- ${column}: treat as text/identifier. Preserve the source text exactly and never add digit grouping commas or numeric formatting.`;
+				}
+				if (format?.kind === "currency") {
+					return `- ${column}: return a raw number or null, without currency symbols or display formatting.`;
+				}
+				if (format?.kind === "percent") {
+					return `- ${column}: return a raw numeric value or null. Do not append the % symbol.`;
+				}
+				return `- ${column}: return a raw ${format?.kind === "number" ? "number" : "string, number,"} or null without display formatting.`;
+			})
+			.join("\n");
 		const jsonShape = JSON.stringify(
 			[
 				Object.fromEntries(
@@ -450,11 +475,15 @@ Return only a valid JSON array of objects.
 Use string, number, or null values.
 Do not calculate computed columns.
 Do not add total rows.
+Do not apply display formatting such as digit grouping commas, currency symbols, unit suffixes, or percent signs unless the source text itself already contains them and the column is plain text.
 Do not include markdown fences or prose.
 
 Table title: ${block.title || ""}
 ${block.prompt ? `Extra extraction instructions: ${block.prompt}\n` : ""}Columns to extract:
 ${definition.sourceColumns.map((column) => `- ${column}`).join("\n")}
+
+Column format guidance:
+${formatGuidance}
 
 Formulas for later calculation:
 ${(block.formulas || []).map((formula) => `- ${formula}`).join("\n") || "- none"}
