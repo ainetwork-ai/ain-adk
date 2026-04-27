@@ -92,6 +92,8 @@ type ResolvedColumnFormat = {
 	nullDisplay: string;
 };
 
+type MatrixCellRef = `${string}::${string}`;
+
 function isFiniteNumber(value: unknown): value is number {
 	return typeof value === "number" && Number.isFinite(value);
 }
@@ -524,20 +526,182 @@ ${jsonShape}`;
 		matrix: MatrixTable,
 		warnings: string[],
 	): void {
-		const phases: Array<ParsedMatrixFormula["type"][]> = [
-			["sum"],
-			["share", "ratio"],
-			["delta", "rate", "growth"],
-		];
+		const available = this.buildInitialMatrixAvailability(definition);
+		const producedByFormula = definition.formulas.map((formula) =>
+			this.getMatrixProducedRefs(formula, definition),
+		);
 
-		for (const phase of phases) {
-			for (const formula of definition.formulas) {
-				if (!phase.includes(formula.type)) {
-					continue;
-				}
-				this.applyMatrixFormula(formula, definition, matrix, warnings);
+		for (const [index, formula] of definition.formulas.entries()) {
+			const futureProduced = new Set<MatrixCellRef>(
+				producedByFormula.slice(index + 1).flatMap((refs) => [...refs]),
+			);
+			this.validateMatrixFormulaDependencies(
+				formula,
+				definition,
+				available,
+				futureProduced,
+			);
+			this.applyMatrixFormula(formula, definition, matrix, warnings);
+			for (const ref of producedByFormula[index]) {
+				available.add(ref);
 			}
 		}
+	}
+
+	private buildInitialMatrixAvailability(
+		definition: MatrixDefinition,
+	): Set<MatrixCellRef> {
+		const refs = new Set<MatrixCellRef>();
+		for (const row of definition.sourceRows) {
+			for (const column of definition.sourceColumns) {
+				refs.add(this.toMatrixCellRef(row, column));
+			}
+		}
+		return refs;
+	}
+
+	private getMatrixProducedRefs(
+		formula: ParsedMatrixFormula,
+		definition: MatrixDefinition,
+	): Set<MatrixCellRef> {
+		switch (formula.type) {
+			case "sum":
+				return new Set(
+					definition.sourceRows.map((row) =>
+						this.toMatrixCellRef(row, formula.target),
+					),
+				);
+			case "share": {
+				const [, baseColumn] = formula.args;
+				const baseIndex = definition.columns.indexOf(baseColumn);
+				if (baseIndex === -1) {
+					throw new Error(`Invalid share formula: ${formula.raw}`);
+				}
+				return new Set(
+					definition.columns
+						.filter(
+							(column, index) =>
+								index <= baseIndex &&
+								!definition.comparisonColumnTargets.has(column),
+						)
+						.map((column) => this.toMatrixCellRef(formula.target, column)),
+				);
+			}
+			case "ratio":
+				return new Set(
+					definition.columns
+						.filter((column) => !definition.comparisonColumnTargets.has(column))
+						.map((column) => this.toMatrixCellRef(formula.target, column)),
+				);
+			case "delta":
+			case "rate":
+			case "growth":
+				return new Set(
+					definition.rows.map((row) =>
+						this.toMatrixCellRef(row, formula.target),
+					),
+				);
+		}
+	}
+
+	private validateMatrixFormulaDependencies(
+		formula: ParsedMatrixFormula,
+		definition: MatrixDefinition,
+		available: Set<MatrixCellRef>,
+		futureProduced: Set<MatrixCellRef>,
+	): void {
+		switch (formula.type) {
+			case "sum":
+				this.assertMatrixRefsAvailable(
+					formula.raw,
+					definition.sourceRows.flatMap((row) =>
+						formula.args.map((column) => this.toMatrixCellRef(row, column)),
+					),
+					available,
+					futureProduced,
+				);
+				return;
+			case "share": {
+				const [sourceRow, baseColumn] = formula.args;
+				const baseIndex = definition.columns.indexOf(baseColumn);
+				if (baseIndex === -1 || !definition.rows.includes(sourceRow)) {
+					throw new Error(`Invalid share formula: ${formula.raw}`);
+				}
+				this.assertMatrixRefsAvailable(
+					formula.raw,
+					definition.columns
+						.filter(
+							(column, index) =>
+								index <= baseIndex &&
+								!definition.comparisonColumnTargets.has(column),
+						)
+						.map((column) => this.toMatrixCellRef(sourceRow, column)),
+					available,
+					futureProduced,
+				);
+				return;
+			}
+			case "ratio": {
+				const [numeratorRow, denominatorRow] = formula.args;
+				this.assertMatrixRefsAvailable(
+					formula.raw,
+					definition.columns
+						.filter((column) => !definition.comparisonColumnTargets.has(column))
+						.flatMap((column) => [
+							this.toMatrixCellRef(numeratorRow, column),
+							this.toMatrixCellRef(denominatorRow, column),
+						]),
+					available,
+					futureProduced,
+				);
+				return;
+			}
+			case "delta":
+			case "rate":
+			case "growth": {
+				const [leftColumn, rightColumn] = formula.args;
+				const blockingRefs = definition.rows.flatMap((row) =>
+					[leftColumn, rightColumn]
+						.map((column) => this.toMatrixCellRef(row, column))
+						.filter((ref) => !available.has(ref) && futureProduced.has(ref)),
+				);
+				if (blockingRefs.length > 0) {
+					throw new Error(
+						`Matrix formula "${formula.raw}" depends on values from later formulas: ${blockingRefs.join(", ")}`,
+					);
+				}
+				return;
+			}
+		}
+	}
+
+	private assertMatrixRefsAvailable(
+		formula: string,
+		refs: MatrixCellRef[],
+		available: Set<MatrixCellRef>,
+		futureProduced: Set<MatrixCellRef>,
+	): void {
+		const laterRefs = refs.filter(
+			(ref) => !available.has(ref) && futureProduced.has(ref),
+		);
+		if (laterRefs.length > 0) {
+			throw new Error(
+				`Matrix formula "${formula}" depends on values from later formulas: ${laterRefs.join(", ")}`,
+			);
+		}
+
+		const missingRefs = refs.filter(
+			(ref) => !available.has(ref) && !futureProduced.has(ref),
+		);
+		if (missingRefs.length > 0) {
+			throw new Error(
+				`Matrix formula "${formula}" references values that are never produced: ${missingRefs.join(", ")}`,
+			);
+		}
+	}
+
+	private toMatrixCellRef(row: string, column: string): MatrixCellRef {
+		return `${row}::${column}`;
 	}
 
 	private renderRecordTable(

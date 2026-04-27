@@ -124,7 +124,7 @@ describe("WorkflowTableService", () => {
 		]);
 	});
 
-	it("does not sum computed ratio rows into aggregate columns", () => {
+	it("rejects matrix formulas that depend on later formulas", () => {
 		const block: WorkflowTableBlock = {
 			blockId: "daily-sales-ordered-differently",
 			type: "table",
@@ -153,16 +153,8 @@ describe("WorkflowTableService", () => {
 			},
 		});
 
-		const rendered = service.renderTable(block, rawContent);
-		const aveCheckRow = rendered.data.table.rows.find(
-			(row) => row.kind === "data" && row.cells[0] === "AveCheck",
-		);
-
-		expect(aveCheckRow).toBeDefined();
-		expect(aveCheckRow?.cells[5]).toBeCloseTo(16381217 / 182, 6);
-		expect(aveCheckRow?.cells[5]).not.toBeCloseTo(
-			7941181 / 113 + 8440036 / 69,
-			6,
+		expect(() => service.renderTable(block, rawContent)).toThrow(
+			'Matrix formula "AveCheck = ratio(Rev, Cover)" depends on values from later formulas:',
 		);
 	});
 
