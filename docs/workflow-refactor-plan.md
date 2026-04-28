@@ -47,8 +47,6 @@ export interface WorkflowTask {
   title: string;
   prompt: string;
   agent?: WorkflowTaskAgent;
-  outputKey?: string;
-  dependsOn?: string[];
 }
 
 export interface WorkflowTaskAgent {
@@ -128,7 +126,7 @@ export interface UserWorkflow {
 }
 ```
 
-For v1, tasks should execute in list order. `dependsOn` can be accepted in the schema but only validated for simple forward references. A full DAG scheduler can come later.
+For v1, tasks should execute in list order. If parallel execution becomes necessary later, explicit dependency modeling can be introduced then.
 
 ## Execution Model
 

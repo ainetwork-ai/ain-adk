@@ -161,8 +161,6 @@ export interface WorkflowTask {
 	title: string;
 	prompt: string;
 	agent?: WorkflowTaskAgent;
-	outputKey?: string;
-	dependsOn?: string[];
 }
 
 export interface WorkflowHeadingBlock {
