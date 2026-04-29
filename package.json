@@ -41,6 +41,7 @@
 		"dist"
 	],
 	"scripts": {
+		"prebuild": "pnpm clean",
 		"build": "tsup",
 		"clean": "rm -rf dist",
 		"biome": "npx @biomejs/biome check",

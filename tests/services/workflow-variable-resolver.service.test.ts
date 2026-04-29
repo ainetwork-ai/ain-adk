@@ -1,6 +1,6 @@
-import { AinHttpError } from "../types/agent";
-import type { WorkflowDefinition } from "../types/memory";
-import { WorkflowVariableResolver } from "./workflow-variable-resolver.service";
+import { AinHttpError } from "@/types/agent";
+import type { WorkflowDefinition } from "@/types/memory";
+import { WorkflowVariableResolver } from "@/services/workflow-variable-resolver.service";
 
 describe("WorkflowVariableResolver", () => {
 	it("keeps current table DSL definitions unchanged", () => {

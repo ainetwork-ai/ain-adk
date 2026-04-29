@@ -1,8 +1,8 @@
-import type { MemoryModule } from "../modules";
-import type { IUserWorkflowMemory } from "../modules/memory/base.memory";
-import type { UserWorkflow, WorkflowVariable } from "../types/memory";
-import { UserWorkflowService } from "./user-workflow.service";
-import type { WorkflowVariableResolver } from "./workflow-variable-resolver.service";
+import type { MemoryModule } from "@/modules";
+import type { IUserWorkflowMemory } from "@/modules/memory/base.memory";
+import type { UserWorkflow, WorkflowVariable } from "@/types/memory";
+import { UserWorkflowService } from "@/services/user-workflow.service";
+import type { WorkflowVariableResolver } from "@/services/workflow-variable-resolver.service";
 
 describe("UserWorkflowService", () => {
 	it("defaults content to title when content is missing", async () => {

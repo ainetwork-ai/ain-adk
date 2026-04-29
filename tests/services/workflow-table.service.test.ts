@@ -1,5 +1,5 @@
-import type { WorkflowTableBlock } from "../types/memory";
-import { WorkflowTableService } from "./workflow-table.service";
+import type { WorkflowTableBlock } from "@/types/memory";
+import { WorkflowTableService } from "@/services/workflow-table.service";
 
 describe("WorkflowTableService", () => {
 	const service = new WorkflowTableService();
@@ -217,6 +217,22 @@ describe("WorkflowTableService", () => {
 		);
 		expect(rendered.content).toContain(
 			"| **Total** | **2,100,000** | **80,000** | **2,020,000** |",
+		);
+	});
+
+	it("rejects record formulas that depend on later formulas", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "record-formula-order",
+			type: "table",
+			layout: "records",
+			title: "Formula order",
+			columns: ["a", "b", "c", "d"],
+			formulas: ["d = c / b", "c = a + b"],
+		};
+		const rawContent = JSON.stringify([{ a: 10, b: 5 }]);
+
+		expect(() => service.renderTable(block, rawContent)).toThrow(
+			'Record formula "d = c / b" depends on values from later formulas: c',
 		);
 	});
 
