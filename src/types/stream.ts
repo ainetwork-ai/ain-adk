@@ -4,6 +4,25 @@ import type { CONNECTOR_PROTOCOL_TYPE } from "./connector";
 export type StreamEvent =
 	| { event: "text_chunk"; data: { delta: string } }
 	| {
+			event: "task_output";
+			data: {
+				taskId: string;
+				title: string;
+				delta: string;
+				agent?: string;
+			};
+	  }
+	| {
+			event: "task_result";
+			data: {
+				taskId: string;
+				title: string;
+				status: "completed" | "failed" | "skipped";
+				agent?: string;
+				error?: string;
+			};
+	  }
+	| {
 			event: "tool_start";
 			data: {
 				toolCallId: string;

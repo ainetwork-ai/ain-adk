@@ -45,12 +45,13 @@ export class WorkflowTaskRunner {
 			},
 		};
 
+		let taskResult: WorkflowTaskResult;
 		try {
 			const content = task.agent
 				? yield* this.executeA2ATask(task, thread, taskResults)
 				: yield* this.executeLocalTask(task, thread, taskResults);
 
-			return {
+			taskResult = {
 				taskId: task.taskId,
 				title: task.title,
 				agent: task.agent,
@@ -63,7 +64,7 @@ export class WorkflowTaskRunner {
 			const message =
 				error instanceof Error ? error.message : JSON.stringify(error);
 			loggers.agent.error(`Workflow task failed: ${task.taskId}`, { error });
-			return {
+			taskResult = {
 				taskId: task.taskId,
 				title: task.title,
 				agent: task.agent,
@@ -74,6 +75,18 @@ export class WorkflowTaskRunner {
 				completedAt: Date.now(),
 			};
 		}
+
+		yield {
+			event: "task_result",
+			data: {
+				taskId: task.taskId,
+				title: task.title,
+				status: taskResult.status,
+				agent: task.agent?.connectorName,
+				error: taskResult.error,
+			},
+		};
+		return taskResult;
 	}
 
 	private async *executeLocalTask(
@@ -106,8 +119,10 @@ export class WorkflowTaskRunner {
 		while (!result.done) {
 			if (result.value.event === "text_chunk") {
 				content += result.value.data.delta;
+				yield this.createTaskOutputEvent(task, result.value.data.delta);
+			} else {
+				yield result.value;
 			}
-			yield result.value;
 			result = await stream.next();
 		}
 		return content;
@@ -151,8 +166,10 @@ export class WorkflowTaskRunner {
 		while (!result.done) {
 			if (result.value.event === "text_chunk") {
 				content += result.value.data.delta;
+				yield this.createTaskOutputEvent(task, result.value.data.delta);
+			} else {
+				yield result.value;
 			}
-			yield result.value;
 			result = await stream.next();
 		}
 
@@ -172,5 +189,20 @@ export class WorkflowTaskRunner {
 
 		return `${previousResults ? `Previous task results:\n${previousResults}\n\n` : ""}Task:
 ${task.prompt}`;
+	}
+
+	private createTaskOutputEvent(
+		task: WorkflowTask,
+		delta: string,
+	): Extract<StreamEvent, { event: "task_output" }> {
+		return {
+			event: "task_output",
+			data: {
+				taskId: task.taskId,
+				title: task.title,
+				delta,
+				agent: task.agent?.connectorName,
+			},
+		};
 	}
 }

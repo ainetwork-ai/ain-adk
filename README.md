@@ -206,6 +206,8 @@ modelLogger.error('Model API error');
   - Request: `{ message: string, threadId?: string, type?: string, workflowId?: string, title?: string, displayMessage?: string }`
   - Response: Server-Sent Events stream with event types:
     - `text_chunk`: Incremental text response
+    - `task_output`: Workflow task output chunk
+    - `task_result`: Workflow task completion status
     - `thread_id`: Thread metadata
     - `thinking_process`: Thinking/reasoning steps
     - `collection_name`: Collection metadata emitted by integrations

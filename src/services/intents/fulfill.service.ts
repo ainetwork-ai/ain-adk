@@ -197,14 +197,10 @@ export class IntentFulfillService {
 			);
 			loggers.intent.info(`Action plan: ${actionPlan}`);
 
-			// Yield thinking_process for progress visibility
-			yield {
-				event: "thinking_process",
-				data: sanitizeThinkingData({
-					title: `[${getManifest().name}] ${intent?.name || "intent"}`,
-					description: actionPlan || "",
-				}),
-			};
+			const intentThinking = this.buildIntentThinkingData(triggeredIntent);
+			if (intentThinking) {
+				yield { event: "thinking_process", data: intentThinking };
+			}
 
 			// Get the stream for this intent
 			const stream = this.getIntentStream(triggeredIntent, thread);
@@ -231,14 +227,10 @@ export class IntentFulfillService {
 
 				const isLastIntent = i === intents.length - 1;
 
-				// Yield thinking_process for progress visibility
-				yield {
-					event: "thinking_process",
-					data: sanitizeThinkingData({
-						title: `[${getManifest().name}] ${intent?.name || "intent"}`,
-						description: actionPlan || "",
-					}),
-				};
+				const intentThinking = this.buildIntentThinkingData(triggeredIntent);
+				if (intentThinking) {
+					yield { event: "thinking_process", data: intentThinking };
+				}
 
 				// Get the stream for this intent
 				const stream = this.getIntentStream(triggeredIntent, thread);
@@ -301,14 +293,10 @@ export class IntentFulfillService {
 					});
 				}
 
-				// Yield thinking_process for progress visibility
-				yield {
-					event: "thinking_process",
-					data: sanitizeThinkingData({
-						title: `[${getManifest().name}] ${intent?.name || "intent"}`,
-						description: actionPlan || "",
-					}),
-				};
+				const intentThinking = this.buildIntentThinkingData(triggeredIntent);
+				if (intentThinking) {
+					yield { event: "thinking_process", data: intentThinking };
+				}
 
 				// Get the stream for this intent
 				const stream = this.getIntentStream(triggeredIntent, thread);
@@ -370,6 +358,19 @@ export class IntentFulfillService {
 			threadId: thread.threadId,
 			duration: `${streamDuration}ms`,
 			endTime: new Date(streamEndTime).toISOString(),
+		});
+	}
+
+	private buildIntentThinkingData(
+		triggeredIntent: TriggeredIntent,
+	): Extract<StreamEvent, { event: "thinking_process" }>["data"] | null {
+		const { intent, actionPlan } = triggeredIntent;
+		if (!intent && !actionPlan) {
+			return null;
+		}
+		return sanitizeThinkingData({
+			title: `[${getManifest().name}] ${intent?.name || "intent"}`,
+			description: actionPlan || "",
 		});
 	}
 }
