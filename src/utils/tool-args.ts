@@ -40,3 +40,33 @@ export function splitAdkToolArgs(args: Record<string, unknown> | undefined): {
 		protocolArgs,
 	};
 }
+
+const THINKING_TITLE_MAX_LENGTH = 150;
+const THINKING_DESCRIPTION_MAX_LENGTH = 300;
+
+function truncate(text: string, maxLength: number): string {
+	if (!text || text.length <= maxLength) {
+		return text;
+	}
+	return `${text.slice(0, maxLength).trimEnd()}...`;
+}
+
+export function truncateThinkingDescription(
+	text: string,
+	maxLength: number = THINKING_DESCRIPTION_MAX_LENGTH,
+): string {
+	return truncate(text, maxLength);
+}
+
+export function sanitizeThinkingData<
+	T extends { title?: string; description?: string },
+>(data: T): T {
+	return {
+		...data,
+		title: truncate(data.title ?? "", THINKING_TITLE_MAX_LENGTH),
+		description: truncate(
+			data.description ?? "",
+			THINKING_DESCRIPTION_MAX_LENGTH,
+		),
+	};
+}

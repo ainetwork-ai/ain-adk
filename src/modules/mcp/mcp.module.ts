@@ -163,8 +163,20 @@ export class MCPModule {
 	 * all MCP connections are properly closed.
 	 */
 	async cleanup() {
-		for (const conn of this.mcpConnectors.values()) {
-			await conn.client?.close();
+		const results = await Promise.allSettled(
+			Array.from(this.mcpConnectors.entries()).map(async ([name, conn]) => {
+				if (conn.client) {
+					await conn.client.close();
+				}
+				return name;
+			}),
+		);
+		for (const result of results) {
+			if (result.status === "rejected") {
+				loggers.mcp.error("Failed to close MCP connector", {
+					error: result.reason,
+				});
+			}
 		}
 	}
 }

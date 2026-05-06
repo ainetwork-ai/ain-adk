@@ -165,10 +165,10 @@ export class UserWorkflowApiController {
 			res.write(":keepalive\n\n");
 		}, 10000);
 
-		let aborted = false;
+		const abortController = new AbortController();
 		let currentThreadId: string | undefined;
 		req.on("close", () => {
-			aborted = true;
+			abortController.abort();
 			loggers.intentStream.info("Workflow stream client connection closed", {
 				workflowId: id,
 				threadId: currentThreadId,
@@ -184,10 +184,11 @@ export class UserWorkflowApiController {
 			const stream = this.workflowExecutionService.executeWorkflowStream(
 				id,
 				executionVariables,
+				abortController.signal,
 			);
 
 			for await (const event of stream) {
-				if (aborted) {
+				if (abortController.signal.aborted) {
 					break;
 				}
 

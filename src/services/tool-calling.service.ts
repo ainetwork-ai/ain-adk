@@ -4,7 +4,10 @@ import { CONNECTOR_PROTOCOL_TYPE, type ConnectorTool } from "@/types/connector";
 import type { ThreadObject } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
-import { splitAdkToolArgs } from "@/utils/tool-args";
+import {
+	splitAdkToolArgs,
+	truncateThinkingDescription,
+} from "@/utils/tool-args";
 
 export type ToolCallingMode = "all" | "mcp";
 
@@ -130,7 +133,7 @@ export class ToolCallingService {
 					event: "thinking_process",
 					data: {
 						title: `[${getManifest().name}] ${selectedTool.protocol} 실행: ${toolName}`,
-						description: thinkingText,
+						description: truncateThinkingDescription(thinkingText),
 					},
 				};
 

@@ -12,6 +12,7 @@ import {
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
+import { sanitizeThinkingData } from "@/utils/tool-args";
 import { PIIFilterMode, type PIIService } from "../pii.service";
 import fulfillPrompt from "../prompts/fulfill";
 import toolSelectPrompt from "../prompts/tool-select";
@@ -199,10 +200,10 @@ export class IntentFulfillService {
 			// Yield thinking_process for progress visibility
 			yield {
 				event: "thinking_process",
-				data: {
-					title: `[${getManifest().name}] ${subquery}`,
+				data: sanitizeThinkingData({
+					title: `[${getManifest().name}] ${intent?.name || "intent"}`,
 					description: actionPlan || "",
-				},
+				}),
 			};
 
 			// Get the stream for this intent
@@ -233,10 +234,10 @@ export class IntentFulfillService {
 				// Yield thinking_process for progress visibility
 				yield {
 					event: "thinking_process",
-					data: {
-						title: `[${getManifest().name}] ${subquery}`,
+					data: sanitizeThinkingData({
+						title: `[${getManifest().name}] ${intent?.name || "intent"}`,
 						description: actionPlan || "",
-					},
+					}),
 				};
 
 				// Get the stream for this intent
@@ -303,10 +304,10 @@ export class IntentFulfillService {
 				// Yield thinking_process for progress visibility
 				yield {
 					event: "thinking_process",
-					data: {
-						title: `[${getManifest().name}] ${subquery}`,
+					data: sanitizeThinkingData({
+						title: `[${getManifest().name}] ${intent?.name || "intent"}`,
 						description: actionPlan || "",
-					},
+					}),
 				};
 
 				// Get the stream for this intent

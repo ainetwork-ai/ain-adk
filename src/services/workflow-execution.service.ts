@@ -60,10 +60,15 @@ export class WorkflowExecutionService {
 	async executeWorkflow(
 		workflowId: string,
 		executionVariables?: Record<string, string>,
+		signal?: AbortSignal,
 	): Promise<WorkflowExecutionResult> {
 		let content = "";
 		let threadId: string | undefined;
-		const stream = this.executeWorkflowStream(workflowId, executionVariables);
+		const stream = this.executeWorkflowStream(
+			workflowId,
+			executionVariables,
+			signal,
+		);
 
 		for await (const event of stream) {
 			if (event.event === "thread_id") {
@@ -79,6 +84,7 @@ export class WorkflowExecutionService {
 	async *executeWorkflowStream(
 		workflowId: string,
 		executionVariables?: Record<string, string>,
+		signal?: AbortSignal,
 	): AsyncGenerator<StreamEvent> {
 		const workflow = await this.userWorkflowService.getWorkflow(workflowId);
 		if (!workflow) {
@@ -120,134 +126,218 @@ export class WorkflowExecutionService {
 			},
 		};
 
-		yield {
-			event: "thinking_process",
-			data: {
-				title: `[워크플로우] ${workflow.title}`,
-				description: "워크플로우 실행을 시작합니다.",
-				metadata: {
-					phase: "workflow_start",
-					workflowId,
-				},
-			},
-		};
-
 		const taskResults: Record<string, WorkflowTaskResult> = {};
-		for (let i = 0; i < definition.tasks.length; i++) {
-			const task = definition.tasks[i];
-			loggers.agent.debug(
-				`Workflow task starting (${i + 1}/${definition.tasks.length}): ${task.title}`,
-				{
-					workflowId,
-					threadId: thread.threadId,
-					taskId: task.taskId,
-					executionType: task.agent ? "a2a" : "local",
-					agent: task.agent,
-					promptPreview: task.prompt?.slice(0, 200),
-				},
-			);
-			const stream = this.workflowTaskRunner.executeTask(
-				task,
-				thread,
-				taskResults,
-			);
-			let result = await stream.next();
-			while (!result.done) {
-				yield result.value;
-				result = await stream.next();
-			}
-			taskResults[task.taskId] = result.value;
-			loggers.agent.debug(
-				`Workflow task finished (${i + 1}/${definition.tasks.length}): ${task.title}`,
-				{
-					workflowId,
-					threadId: thread.threadId,
-					taskId: task.taskId,
-					status: result.value.status,
-					durationMs: result.value.completedAt - result.value.startedAt,
-					contentLength: result.value.content?.length ?? 0,
-					contentPreview: result.value.content?.slice(0, 500),
-					error: result.value.error,
-				},
-			);
-		}
-
-		yield {
-			event: "thinking_process",
-			data: {
-				title: "[워크플로우] 응답 구성 중",
-				description: "작업 결과를 바탕으로 워크플로우 응답을 구성합니다.",
-				metadata: {
-					phase: "response_start",
-					workflowId,
-					blockCount: definition.response.blocks.length,
-				},
-			},
-		};
-
 		const renderedBlocks: WorkflowRenderedBlock[] = [];
 		let finalContent = "";
-		for (let i = 0; i < definition.response.blocks.length; i++) {
-			const block = definition.response.blocks[i];
-			loggers.agent.debug(
-				`Workflow response block rendering (${i + 1}/${definition.response.blocks.length})`,
-				{
-					workflowId,
-					threadId: thread.threadId,
-					blockId: block.blockId,
-					blockType: block.type,
-					sourceTaskIds:
-						block.type === "heading" ? undefined : block.sourceTaskIds,
+		let executionError: Error | undefined;
+		let firstFailedTaskId: string | undefined;
+
+		try {
+			yield {
+				event: "thinking_process",
+				data: {
+					title: `[워크플로우] ${workflow.title}`,
+					description: "워크플로우 실행을 시작합니다.",
+					metadata: {
+						phase: "workflow_start",
+						workflowId,
+					},
 				},
-			);
-			const stream = this.workflowResponseComposer.renderResponseBlock(
-				block,
-				taskResults,
-			);
-			let result = await stream.next();
-			while (!result.done) {
-				if (result.value.event === "text_chunk") {
-					finalContent += result.value.data.delta;
+			};
+
+			for (let i = 0; i < definition.tasks.length; i++) {
+				if (signal?.aborted) {
+					throw new Error("Workflow execution aborted by client");
 				}
-				yield result.value;
-				result = await stream.next();
+				const task = definition.tasks[i];
+
+				if (firstFailedTaskId) {
+					taskResults[task.taskId] = {
+						taskId: task.taskId,
+						title: task.title,
+						agent: task.agent,
+						status: "skipped",
+						content: "",
+						error: `Skipped due to failure of task ${firstFailedTaskId}`,
+						startedAt: Date.now(),
+						completedAt: Date.now(),
+					};
+					yield {
+						event: "thinking_process",
+						data: {
+							title: `[워크플로우] 작업 건너뜀: ${task.title}`,
+							description: `이전 작업(${firstFailedTaskId}) 실패로 인해 건너뜁니다.`,
+							metadata: {
+								phase: "task_skipped",
+								taskId: task.taskId,
+								reason: "previous_task_failed",
+								failedTaskId: firstFailedTaskId,
+							},
+						},
+					};
+					continue;
+				}
+
+				loggers.agent.debug(
+					`Workflow task starting (${i + 1}/${definition.tasks.length}): ${task.title}`,
+					{
+						workflowId,
+						threadId: thread.threadId,
+						taskId: task.taskId,
+						executionType: task.agent ? "a2a" : "local",
+						agent: task.agent,
+						promptPreview: task.prompt?.slice(0, 200),
+					},
+				);
+				const stream = this.workflowTaskRunner.executeTask(
+					task,
+					thread,
+					taskResults,
+				);
+				let result = await stream.next();
+				while (!result.done) {
+					yield result.value;
+					result = await stream.next();
+				}
+				taskResults[task.taskId] = result.value;
+				loggers.agent.debug(
+					`Workflow task finished (${i + 1}/${definition.tasks.length}): ${task.title}`,
+					{
+						workflowId,
+						threadId: thread.threadId,
+						taskId: task.taskId,
+						status: result.value.status,
+						durationMs: result.value.completedAt - result.value.startedAt,
+						contentLength: result.value.content?.length ?? 0,
+						contentPreview: result.value.content?.slice(0, 500),
+						error: result.value.error,
+					},
+				);
+
+				if (result.value.status === "failed") {
+					firstFailedTaskId = task.taskId;
+				}
 			}
-			renderedBlocks.push(result.value);
-			loggers.agent.debug(
-				`Workflow response block rendered (${i + 1}/${definition.response.blocks.length})`,
+
+			if (firstFailedTaskId) {
+				const failed = taskResults[firstFailedTaskId];
+				throw new Error(
+					`Workflow task failed: ${firstFailedTaskId} - ${failed?.error ?? "unknown error"}`,
+				);
+			}
+
+			yield {
+				event: "thinking_process",
+				data: {
+					title: "[워크플로우] 응답 구성 중",
+					description: "작업 결과를 바탕으로 워크플로우 응답을 구성합니다.",
+					metadata: {
+						phase: "response_start",
+						workflowId,
+						blockCount: definition.response.blocks.length,
+					},
+				},
+			};
+
+			for (let i = 0; i < definition.response.blocks.length; i++) {
+				if (signal?.aborted) {
+					throw new Error("Workflow execution aborted by client");
+				}
+				const block = definition.response.blocks[i];
+				loggers.agent.debug(
+					`Workflow response block rendering (${i + 1}/${definition.response.blocks.length})`,
+					{
+						workflowId,
+						threadId: thread.threadId,
+						blockId: block.blockId,
+						blockType: block.type,
+						sourceTaskIds:
+							block.type === "heading" ? undefined : block.sourceTaskIds,
+					},
+				);
+				const stream = this.workflowResponseComposer.renderResponseBlock(
+					block,
+					taskResults,
+				);
+				let result = await stream.next();
+				while (!result.done) {
+					if (result.value.event === "text_chunk") {
+						finalContent += result.value.data.delta;
+					}
+					yield result.value;
+					result = await stream.next();
+				}
+				renderedBlocks.push(result.value);
+				loggers.agent.debug(
+					`Workflow response block rendered (${i + 1}/${definition.response.blocks.length})`,
+					{
+						workflowId,
+						threadId: thread.threadId,
+						blockId: result.value.blockId,
+						blockType: result.value.type,
+						contentLength: result.value.content?.length ?? 0,
+						contentPreview: result.value.content?.slice(0, 500),
+					},
+				);
+			}
+
+			loggers.agent.info(
+				`Structured user workflow completed: ${workflow.title}`,
 				{
 					workflowId,
 					threadId: thread.threadId,
-					blockId: result.value.blockId,
-					blockType: result.value.type,
-					contentLength: result.value.content?.length ?? 0,
-					contentPreview: result.value.content?.slice(0, 500),
 				},
 			);
+		} catch (error) {
+			executionError =
+				error instanceof Error ? error : new Error(String(error));
+			loggers.agent.error(
+				`Structured user workflow failed: ${workflow.title}`,
+				{
+					workflowId,
+					threadId: thread.threadId,
+					error: executionError.message,
+				},
+			);
+		} finally {
+			const responseContent =
+				finalContent ||
+				(executionError ? `오류: ${executionError.message}` : "");
+			try {
+				await this.addMessageToThread(thread, {
+					role: MessageRole.MODEL,
+					content: responseContent,
+					metadata: {
+						workflowId,
+						workflowRun: true,
+						responseBlocks: renderedBlocks,
+						...(executionError ? { error: executionError.message } : {}),
+					},
+				});
+			} catch (saveError) {
+				loggers.agent.error("Failed to save workflow response message", {
+					workflowId,
+					threadId: thread.threadId,
+					error: saveError,
+				});
+			}
+
+			try {
+				await this.userWorkflowService.updateWorkflow(workflowId, {
+					lastRunAt: Date.now(),
+					lastThreadId: thread.threadId,
+				});
+			} catch (updateError) {
+				loggers.agent.error("Failed to update workflow lastRunAt", {
+					workflowId,
+					error: updateError,
+				});
+			}
 		}
 
-		await this.addMessageToThread(thread, {
-			role: MessageRole.MODEL,
-			content: finalContent,
-			metadata: {
-				workflowId,
-				workflowRun: true,
-				responseBlocks: renderedBlocks,
-			},
-		});
-
-		await this.userWorkflowService.updateWorkflow(workflowId, {
-			lastRunAt: Date.now(),
-			lastThreadId: thread.threadId,
-		});
-
-		loggers.agent.info(
-			`Structured user workflow completed: ${workflow.title}`,
-			{
-				workflowId,
-				threadId: thread.threadId,
-			},
-		);
+		if (executionError) {
+			throw executionError;
+		}
 	}
 
 	private async *executeLegacyWorkflowStream(

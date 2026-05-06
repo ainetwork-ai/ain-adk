@@ -90,7 +90,7 @@ export class WorkflowTaskRunner {
 
 		const tools = await this.toolCallingService.getTools({
 			toolPrompt:
-				"현재 워크플로우 작업에 이 MCP 도구가 필요한 이유와 기대하는 결과를 한국어로 구체적으로 작성하세요.",
+				"이 MCP 도구를 호출하는 이유와 기대하는 결과를 한두줄 분량의 한국어로 간단히 작성하세요. 이전 작업 결과나 입력 프롬프트 내용을 그대로 복사하지 마세요.",
 			mode: "mcp",
 		});
 		const stream = this.toolCallingService.run({
@@ -122,6 +122,10 @@ export class WorkflowTaskRunner {
 			throw new Error("A2A module is not configured for this workflow task.");
 		}
 
+		if (!this.a2aModule.hasConnector(task.agent.connectorName)) {
+			throw new Error(`A2A connector not found: ${task.agent.connectorName}`);
+		}
+
 		const message = this.buildTaskPrompt(task, taskResults);
 		loggers.agent.debug(`Delegating workflow task via A2A: ${task.taskId}`, {
 			taskId: task.taskId,
@@ -145,11 +149,10 @@ export class WorkflowTaskRunner {
 
 		let result = await stream.next();
 		while (!result.done) {
-			if (result.value.event === "thinking_process") {
-				yield result.value;
-			} else if (result.value.event === "text_chunk") {
+			if (result.value.event === "text_chunk") {
 				content += result.value.data.delta;
 			}
+			yield result.value;
 			result = await stream.next();
 		}
 

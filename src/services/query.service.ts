@@ -15,6 +15,7 @@ import {
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
+import { sanitizeThinkingData } from "@/utils/tool-args.js";
 import type { IntentFulfillService } from "./intents/fulfill.service";
 import type { IntentTriggerService } from "./intents/trigger.service";
 import { PIIFilterMode, type PIIService } from "./pii.service";
@@ -86,13 +87,15 @@ export class QueryService {
 	public async filterThinkingDataForStorage(
 		data: Extract<StreamEvent, { event: "thinking_process" }>["data"],
 	): Promise<Extract<StreamEvent, { event: "thinking_process" }>["data"]> {
+		const sanitized = sanitizeThinkingData(data);
 		if (this.piiService?.getMode() !== PIIFilterMode.MASK) {
-			return data;
+			return sanitized;
 		}
 
 		return {
-			title: await this.piiService.filterText(data.title),
-			description: await this.piiService.filterText(data.description),
+			...sanitized,
+			title: await this.piiService.filterText(sanitized.title),
+			description: await this.piiService.filterText(sanitized.description),
 		};
 	}
 

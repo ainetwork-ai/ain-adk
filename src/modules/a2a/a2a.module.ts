@@ -15,7 +15,7 @@ import {
 import { ThreadType } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream.js";
 import { loggers } from "@/utils/logger.js";
-import { withAdkThinkingArg } from "@/utils/tool-args.js";
+import { sanitizeThinkingData, withAdkThinkingArg } from "@/utils/tool-args.js";
 import { A2AConnector } from "./a2a.connector.js";
 
 /**
@@ -52,6 +52,10 @@ export class A2AModule {
 			connectors.push({ name, url: connector.url });
 		}
 		return connectors;
+	}
+
+	public hasConnector(connectorName: string): boolean {
+		return this.a2aConnectors.has(connectorName);
 	}
 
 	private async getOrCreateClient(connector: A2AConnector): Promise<A2AClient> {
@@ -164,9 +168,24 @@ export class A2AModule {
 						continue;
 					}
 
+					let thinkingData: {
+						title: string;
+						description: string;
+						metadata?: Record<string, unknown>;
+					};
+					try {
+						thinkingData = JSON.parse(text);
+					} catch (error) {
+						loggers.a2a.warn(
+							"Failed to parse A2A working status as JSON; using plain text fallback",
+							{ error, text },
+						);
+						thinkingData = { title: text, description: "" };
+					}
+
 					yield {
 						event: "thinking_process",
-						data: JSON.parse(text),
+						data: sanitizeThinkingData(thinkingData),
 					};
 				} else if (typedEvent.status.state === "completed") {
 					const texts = typedEvent.status.message?.parts
