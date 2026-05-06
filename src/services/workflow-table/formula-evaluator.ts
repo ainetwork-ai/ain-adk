@@ -242,13 +242,13 @@ export class WorkflowTableFormulaEvaluator {
 		definition: MatrixDefinition,
 	): Set<MatrixCellRef> {
 		switch (formula.type) {
-			case "sum":
+			case "col_sum":
 				return new Set(
 					definition.sourceRows.map((row) =>
 						this.toMatrixCellRef(row, formula.target),
 					),
 				);
-			case "share": {
+			case "row_share": {
 				const [, baseColumn] = formula.args;
 				const baseIndex = definition.columns.indexOf(baseColumn);
 				if (baseIndex === -1) {
@@ -264,15 +264,18 @@ export class WorkflowTableFormulaEvaluator {
 						.map((column) => this.toMatrixCellRef(formula.target, column)),
 				);
 			}
-			case "ratio":
+			case "row_ratio":
+			case "row_delta":
+			case "row_rate":
+			case "row_growth":
 				return new Set(
 					definition.columns
 						.filter((column) => !definition.comparisonColumnTargets.has(column))
 						.map((column) => this.toMatrixCellRef(formula.target, column)),
 				);
-			case "delta":
-			case "rate":
-			case "growth":
+			case "col_delta":
+			case "col_rate":
+			case "col_growth":
 				return new Set(
 					definition.rows.map((row) =>
 						this.toMatrixCellRef(row, formula.target),
@@ -288,7 +291,7 @@ export class WorkflowTableFormulaEvaluator {
 		futureProduced: Set<MatrixCellRef>,
 	): void {
 		switch (formula.type) {
-			case "sum":
+			case "col_sum":
 				this.assertMatrixRefsAvailable(
 					formula.raw,
 					definition.sourceRows.flatMap((row) =>
@@ -298,7 +301,7 @@ export class WorkflowTableFormulaEvaluator {
 					futureProduced,
 				);
 				return;
-			case "share": {
+			case "row_share": {
 				const [sourceRow, baseColumn] = formula.args;
 				const baseIndex = definition.columns.indexOf(baseColumn);
 				if (baseIndex === -1 || !definition.rows.includes(sourceRow)) {
@@ -318,24 +321,27 @@ export class WorkflowTableFormulaEvaluator {
 				);
 				return;
 			}
-			case "ratio": {
-				const [numeratorRow, denominatorRow] = formula.args;
+			case "row_ratio":
+			case "row_delta":
+			case "row_rate":
+			case "row_growth": {
+				const [leftRow, rightRow] = formula.args;
 				this.assertMatrixRefsAvailable(
 					formula.raw,
 					definition.columns
 						.filter((column) => !definition.comparisonColumnTargets.has(column))
 						.flatMap((column) => [
-							this.toMatrixCellRef(numeratorRow, column),
-							this.toMatrixCellRef(denominatorRow, column),
+							this.toMatrixCellRef(leftRow, column),
+							this.toMatrixCellRef(rightRow, column),
 						]),
 					available,
 					futureProduced,
 				);
 				return;
 			}
-			case "delta":
-			case "rate":
-			case "growth": {
+			case "col_delta":
+			case "col_rate":
+			case "col_growth": {
 				const [leftColumn, rightColumn] = formula.args;
 				const blockingRefs = definition.rows.flatMap((row) =>
 					[leftColumn, rightColumn]
@@ -388,7 +394,7 @@ export class WorkflowTableFormulaEvaluator {
 		warnings: string[],
 	): void {
 		switch (formula.type) {
-			case "sum":
+			case "col_sum":
 				for (const row of definition.sourceRows) {
 					const values = formula.args.map(
 						(column) => matrix[row]?.[column] ?? null,
@@ -398,16 +404,26 @@ export class WorkflowTableFormulaEvaluator {
 						: values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
 				}
 				return;
-			case "share":
+			case "row_share":
 				this.applyMatrixShareFormula(formula, definition, matrix, warnings);
 				return;
-			case "ratio":
+			case "row_ratio":
 				this.applyMatrixRatioFormula(formula, definition, matrix, warnings);
 				return;
-			case "delta":
-			case "rate":
-			case "growth":
-				this.applyMatrixComparisonFormula(
+			case "row_delta":
+			case "row_rate":
+			case "row_growth":
+				this.applyMatrixRowComparisonFormula(
+					formula,
+					definition,
+					matrix,
+					warnings,
+				);
+				return;
+			case "col_delta":
+			case "col_rate":
+			case "col_growth":
+				this.applyMatrixColumnComparisonFormula(
 					formula,
 					definition,
 					matrix,
@@ -418,7 +434,7 @@ export class WorkflowTableFormulaEvaluator {
 	}
 
 	private applyMatrixShareFormula(
-		formula: Extract<ParsedMatrixFormula, { type: "share" }>,
+		formula: Extract<ParsedMatrixFormula, { type: "row_share" }>,
 		definition: MatrixDefinition,
 		matrix: MatrixTable,
 		warnings: string[],
@@ -447,7 +463,7 @@ export class WorkflowTableFormulaEvaluator {
 	}
 
 	private applyMatrixRatioFormula(
-		formula: Extract<ParsedMatrixFormula, { type: "ratio" }>,
+		formula: Extract<ParsedMatrixFormula, { type: "row_ratio" }>,
 		definition: MatrixDefinition,
 		matrix: MatrixTable,
 		warnings: string[],
@@ -472,10 +488,66 @@ export class WorkflowTableFormulaEvaluator {
 		}
 	}
 
-	private applyMatrixComparisonFormula(
+	private applyMatrixRowComparisonFormula(
 		formula: Extract<
 			ParsedMatrixFormula,
-			{ type: "delta" | "rate" | "growth" }
+			{ type: "row_delta" | "row_rate" | "row_growth" }
+		>,
+		definition: MatrixDefinition,
+		matrix: MatrixTable,
+		warnings: string[],
+	): void {
+		const [leftRow, rightRow] = formula.args;
+		if (!matrix[leftRow] || !matrix[rightRow]) {
+			throw new Error(`Invalid ${formula.type} formula: ${formula.raw}`);
+		}
+
+		for (const column of definition.columns) {
+			if (definition.comparisonColumnTargets.has(column)) {
+				matrix[formula.target][column] = null;
+				continue;
+			}
+
+			const leftValue = matrix[leftRow][column];
+			const rightValue = matrix[rightRow][column];
+
+			switch (formula.type) {
+				case "row_delta":
+					matrix[formula.target][column] =
+						leftValue === null || rightValue === null
+							? null
+							: leftValue - rightValue;
+					break;
+				case "row_rate":
+					matrix[formula.target][column] = safeDivide(
+						leftValue,
+						rightValue,
+						warnings,
+						`${formula.target}.${column}`,
+						100,
+					);
+					break;
+				case "row_growth":
+					if (leftValue === null || rightValue === null) {
+						matrix[formula.target][column] = null;
+						break;
+					}
+					matrix[formula.target][column] = safeDivide(
+						leftValue - rightValue,
+						rightValue,
+						warnings,
+						`${formula.target}.${column}`,
+						100,
+					);
+					break;
+			}
+		}
+	}
+
+	private applyMatrixColumnComparisonFormula(
+		formula: Extract<
+			ParsedMatrixFormula,
+			{ type: "col_delta" | "col_rate" | "col_growth" }
 		>,
 		definition: MatrixDefinition,
 		matrix: MatrixTable,
@@ -487,13 +559,13 @@ export class WorkflowTableFormulaEvaluator {
 			const rightValue = matrix[row]?.[rightColumn] ?? null;
 
 			switch (formula.type) {
-				case "delta":
+				case "col_delta":
 					matrix[row][formula.target] =
 						leftValue === null || rightValue === null
 							? null
 							: leftValue - rightValue;
 					break;
-				case "rate":
+				case "col_rate":
 					matrix[row][formula.target] = safeDivide(
 						leftValue,
 						rightValue,
@@ -502,7 +574,7 @@ export class WorkflowTableFormulaEvaluator {
 						100,
 					);
 					break;
-				case "growth":
+				case "col_growth":
 					if (leftValue === null || rightValue === null) {
 						matrix[row][formula.target] = null;
 						break;

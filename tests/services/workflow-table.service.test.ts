@@ -22,12 +22,12 @@ describe("WorkflowTableService", () => {
 			"vsLYPct",
 		],
 		formulas: [
-			"Actual = sum(Breakfast, Lunch, Dinner, Midnight)",
-			"Rev(%) = share(Rev, Actual)",
-			"Cover(%) = share(Cover, Actual)",
-			"AveCheck = ratio(Rev, Cover)",
-			"vsPlanPct = rate(Actual, Plan)",
-			"vsLYPct = rate(Actual, LastYear)",
+			"Actual = col_sum(Breakfast, Lunch, Dinner, Midnight)",
+			"Rev(%) = row_share(Rev, Actual)",
+			"Cover(%) = row_share(Cover, Actual)",
+			"AveCheck = row_ratio(Rev, Cover)",
+			"vsPlanPct = col_rate(Actual, Plan)",
+			"vsLYPct = col_rate(Actual, LastYear)",
 		],
 	};
 	const recordBlock: WorkflowTableBlock = {
@@ -134,8 +134,8 @@ describe("WorkflowTableService", () => {
 			rows: ["Rev", "Cover", "AveCheck"],
 			columns: ["Breakfast", "Lunch", "Dinner", "Midnight", "Actual"],
 			formulas: [
-				"AveCheck = ratio(Rev, Cover)",
-				"Actual = sum(Breakfast, Lunch, Dinner, Midnight)",
+				"AveCheck = row_ratio(Rev, Cover)",
+				"Actual = col_sum(Breakfast, Lunch, Dinner, Midnight)",
 			],
 		};
 		const rawContent = JSON.stringify({
@@ -154,8 +154,91 @@ describe("WorkflowTableService", () => {
 		});
 
 		expect(() => service.renderTable(block, rawContent)).toThrow(
-			'Matrix formula "AveCheck = ratio(Rev, Cover)" depends on values from later formulas:',
+			'Matrix formula "AveCheck = row_ratio(Rev, Cover)" depends on values from later formulas:',
 		);
+	});
+
+	it("supports row-wise difference formulas across columns", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "row-delta",
+			type: "table",
+			layout: "matrix",
+			rowHeader: "구분",
+			title: "행 차이 계산",
+			rows: ["Actual", "Plan", "Gap"],
+			columns: ["Breakfast", "Lunch", "Dinner", "Total"],
+			formulas: [
+				"Total = col_sum(Breakfast, Lunch, Dinner)",
+				"Gap = row_delta(Actual, Plan)",
+			],
+		};
+		const rawContent = JSON.stringify({
+			Actual: {
+				Breakfast: 100,
+				Lunch: 200,
+				Dinner: 300,
+			},
+			Plan: {
+				Breakfast: 90,
+				Lunch: 180,
+				Dinner: 320,
+			},
+		});
+
+		const rendered = service.renderTable(block, rawContent);
+
+		expect(rendered.data.table.rows).toEqual([
+			{
+				key: "Actual",
+				kind: "data",
+				cells: ["Actual", 100, 200, 300, 600],
+			},
+			{
+				key: "Plan",
+				kind: "data",
+				cells: ["Plan", 90, 180, 320, 590],
+			},
+			{
+				key: "Gap",
+				kind: "data",
+				cells: ["Gap", 10, 20, -20, 10],
+			},
+		]);
+		expect(rendered.content).toContain(
+			"| Gap | 10 | 20 | -20 | 10 |",
+		);
+	});
+
+	it("keeps legacy matrix aliases working", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "legacy-aliases",
+			type: "table",
+			layout: "matrix",
+			rowHeader: "구분",
+			title: "Legacy aliases",
+			rows: ["Rev", "Rev(%)", "Cover", "AveCheck"],
+			columns: ["Breakfast", "Lunch", "Actual"],
+			formulas: [
+				"Actual = sum(Breakfast, Lunch)",
+				"Rev(%) = share(Rev, Actual)",
+				"AveCheck = ratio(Rev, Cover)",
+			],
+		};
+		const rawContent = JSON.stringify({
+			Rev: { Breakfast: 50, Lunch: 150 },
+			Cover: { Breakfast: 5, Lunch: 10 },
+		});
+
+		const rendered = service.renderTable(block, rawContent);
+
+		expect(rendered.data.table.rows[0].cells).toEqual(["Rev", 50, 150, 200]);
+		expect(rendered.data.table.rows[1].cells).toEqual(["Rev(%)", 25, 75, 100]);
+		expect(rendered.data.table.rows[3].cells).toEqual([
+			"AveCheck",
+			10,
+			15,
+			13.333333333333334,
+		]);
 	});
 
 	it("builds a matrix extraction prompt with only source rows and source columns", () => {

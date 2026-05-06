@@ -13,25 +13,31 @@ export type ParsedMatrixFormula =
 	| {
 			raw: string;
 			target: string;
-			type: "sum";
+			type: "col_sum";
 			args: string[];
 	  }
 	| {
 			raw: string;
 			target: string;
-			type: "share";
+			type: "row_share";
 			args: [string, string];
 	  }
 	| {
 			raw: string;
 			target: string;
-			type: "ratio";
+			type: "row_ratio";
 			args: [string, string];
 	  }
 	| {
 			raw: string;
 			target: string;
-			type: "delta" | "rate" | "growth";
+			type: "row_delta" | "row_rate" | "row_growth";
+			args: [string, string];
+	  }
+	| {
+			raw: string;
+			target: string;
+			type: "col_delta" | "col_rate" | "col_growth";
 			args: [string, string];
 	  };
 
