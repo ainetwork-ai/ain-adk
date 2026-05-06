@@ -196,7 +196,20 @@ export class WorkflowExecutionService {
 				);
 				let result = await stream.next();
 				while (!result.done) {
-					yield result.value;
+					if (result.value.event === "text_chunk") {
+						loggers.agent.warn(
+							"Suppressed unexpected workflow task text_chunk before response phase",
+							{
+								workflowId,
+								threadId: thread.threadId,
+								taskId: task.taskId,
+								taskTitle: task.title,
+								deltaPreview: result.value.data.delta.slice(0, 200),
+							},
+						);
+					} else {
+						yield result.value;
+					}
 					result = await stream.next();
 				}
 				taskResults[task.taskId] = result.value;
