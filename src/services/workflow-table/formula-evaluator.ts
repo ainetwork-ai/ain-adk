@@ -53,8 +53,12 @@ export class WorkflowTableFormulaEvaluator {
 		);
 
 		for (const formula of definition.formulas) {
-			if (formula.type === "binary") {
-				this.applyRecordBinaryFormula(formula, rows, warnings);
+			if (formula.type === "expression") {
+				this.applyRecordExpressionFormula(formula, rows, warnings);
+				continue;
+			}
+			if (formula.type === "sum") {
+				this.applyRecordSumFormula(formula, rows);
 			}
 		}
 
@@ -70,16 +74,18 @@ export class WorkflowTableFormulaEvaluator {
 	private validateRecordFormulaDependencies(
 		definition: RecordDefinition,
 	): void {
-		const binaryFormulas = definition.formulas.filter(
-			(formula): formula is Extract<ParsedRecordFormula, { type: "binary" }> =>
-				formula.type === "binary",
+		const computedFormulas = definition.formulas.filter(
+			(formula): formula is Exclude<ParsedRecordFormula, { type: "total" }> =>
+				formula.type !== "total",
 		);
 		const available = new Set(definition.sourceColumns);
-		const producedByFormula = binaryFormulas.map((formula) => formula.target);
+		const producedByFormula = computedFormulas.map((formula) => formula.target);
 
-		for (const [index, formula] of binaryFormulas.entries()) {
+		for (const [index, formula] of computedFormulas.entries()) {
 			const futureProduced = new Set(producedByFormula.slice(index + 1));
-			const laterColumns = [formula.left, formula.right].filter(
+			const referencedColumns =
+				formula.type === "expression" ? formula.operands : formula.columns;
+			const laterColumns = referencedColumns.filter(
 				(column) => !available.has(column) && futureProduced.has(column),
 			);
 			if (laterColumns.length > 0) {
@@ -88,7 +94,7 @@ export class WorkflowTableFormulaEvaluator {
 				);
 			}
 
-			const missingColumns = [formula.left, formula.right].filter(
+			const missingColumns = referencedColumns.filter(
 				(column) => !available.has(column) && !futureProduced.has(column),
 			);
 			if (missingColumns.length > 0) {
@@ -591,32 +597,103 @@ export class WorkflowTableFormulaEvaluator {
 		}
 	}
 
-	private applyRecordBinaryFormula(
-		formula: Extract<ParsedRecordFormula, { type: "binary" }>,
+	private applyRecordExpressionFormula(
+		formula: Extract<ParsedRecordFormula, { type: "expression" }>,
 		rows: RecordTableRow[],
 		warnings: string[],
 	): void {
 		for (const row of rows) {
-			const left = parseNumberish(row[formula.left]);
-			const right = parseNumberish(row[formula.right]);
-			let result = null;
+			const values = formula.operands.map((column) =>
+				parseNumberish(row[column]),
+			);
+			row[formula.target] = this.evaluateRecordExpression(
+				values,
+				formula.operators,
+				warnings,
+				formula.target,
+			);
+		}
+	}
 
-			switch (formula.operator) {
-				case "+":
-					result = left === null || right === null ? null : left + right;
-					break;
-				case "-":
-					result = left === null || right === null ? null : left - right;
-					break;
-				case "*":
-					result = left === null || right === null ? null : left * right;
-					break;
-				case "/":
-					result = safeDivide(left, right, warnings, `${formula.target}`);
-					break;
+	private evaluateRecordExpression(
+		values: Array<number | null>,
+		operators: Array<"+" | "-" | "*" | "/">,
+		warnings: string[],
+		context: string,
+	): number | null {
+		const valueStack: Array<number | null> = [values[0] ?? null];
+		const operatorStack: Array<"+" | "-" | "*" | "/"> = [];
+
+		for (const [index, operator] of operators.entries()) {
+			while (
+				operatorStack.length > 0 &&
+				this.getRecordOperatorPrecedence(
+					operatorStack[operatorStack.length - 1],
+				) >= this.getRecordOperatorPrecedence(operator)
+			) {
+				this.reduceRecordExpression(
+					valueStack,
+					operatorStack,
+					warnings,
+					context,
+				);
 			}
 
-			row[formula.target] = result;
+			operatorStack.push(operator);
+			valueStack.push(values[index + 1] ?? null);
+		}
+
+		while (operatorStack.length > 0) {
+			this.reduceRecordExpression(valueStack, operatorStack, warnings, context);
+		}
+
+		return valueStack[0] ?? null;
+	}
+
+	private reduceRecordExpression(
+		valueStack: Array<number | null>,
+		operatorStack: Array<"+" | "-" | "*" | "/">,
+		warnings: string[],
+		context: string,
+	): void {
+		const operator = operatorStack.pop();
+		const right = valueStack.pop();
+		const left = valueStack.pop();
+		if (operator === undefined || left === undefined || right === undefined) {
+			throw new Error("Invalid record formula evaluation state.");
+		}
+
+		switch (operator) {
+			case "+":
+				valueStack.push(left === null || right === null ? null : left + right);
+				return;
+			case "-":
+				valueStack.push(left === null || right === null ? null : left - right);
+				return;
+			case "*":
+				valueStack.push(left === null || right === null ? null : left * right);
+				return;
+			case "/":
+				valueStack.push(safeDivide(left, right, warnings, context));
+				return;
+		}
+	}
+
+	private getRecordOperatorPrecedence(operator: "+" | "-" | "*" | "/"): number {
+		return operator === "*" || operator === "/" ? 2 : 1;
+	}
+
+	private applyRecordSumFormula(
+		formula: Extract<ParsedRecordFormula, { type: "sum" }>,
+		rows: RecordTableRow[],
+	): void {
+		for (const row of rows) {
+			const values = formula.columns.map((column) =>
+				parseNumberish(row[column]),
+			);
+			row[formula.target] = values.every((value) => value === null)
+				? null
+				: values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
 		}
 	}
 

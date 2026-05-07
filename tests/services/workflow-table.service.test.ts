@@ -303,6 +303,99 @@ describe("WorkflowTableService", () => {
 		);
 	});
 
+	it("supports sum(*) for record computed columns", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "department-sales",
+			type: "table",
+			layout: "records",
+			title: "부서별 매출",
+			columns: ["store", "breakfast", "lunch", "dinner", "total"],
+			formulas: [
+				"total = sum(*)",
+				"@total = sum(breakfast, lunch, dinner, total)",
+			],
+		};
+		const rawContent = JSON.stringify([
+			{ store: "Gangnam", breakfast: 100, lunch: "200", dinner: 300 },
+			{ store: "Hongdae", breakfast: null, lunch: 150, dinner: 250 },
+		]);
+
+		const rendered = service.renderTable(block, rawContent);
+
+		expect(rendered.data.spec).toEqual({
+			layout: "records",
+			columns: ["store", "breakfast", "lunch", "dinner", "total"],
+			formulas: block.formulas,
+			columnFormats: {},
+		});
+		expect(rendered.data.table.rows).toEqual([
+			{
+				kind: "data",
+				cells: ["Gangnam", 100, 200, 300, 600],
+			},
+			{
+				kind: "data",
+				cells: ["Hongdae", null, 150, 250, 400],
+			},
+			{
+				kind: "total",
+				cells: ["Total", 100, 350, 550, 1000],
+			},
+		]);
+		expect(rendered.content).toContain(
+			"| Gangnam | 100 | 200 | 300 | 600 |",
+		);
+	});
+
+	it("supports chained record expressions with multiple operators", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "multi-operator-records",
+			type: "table",
+			layout: "records",
+			title: "복합 계산",
+			columns: ["store", "a", "b", "c", "d", "e", "total"],
+			formulas: ["total = a + b + c - d + e"],
+		};
+		const rawContent = JSON.stringify([
+			{ store: "Gangnam", a: 100, b: 50, c: 25, d: 10, e: 5 },
+		]);
+
+		const rendered = service.renderTable(block, rawContent);
+
+		expect(rendered.data.table.rows).toEqual([
+			{
+				kind: "data",
+				cells: ["Gangnam", 100, 50, 25, 10, 5, 170],
+			},
+		]);
+		expect(rendered.content).toContain(
+			"| Gangnam | 100 | 50 | 25 | 10 | 5 | 170 |",
+		);
+	});
+
+	it("applies standard operator precedence in record expressions", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "operator-precedence-records",
+			type: "table",
+			layout: "records",
+			title: "연산자 우선순위",
+			columns: ["store", "a", "b", "c", "d", "e", "result"],
+			formulas: ["result = a + b * c - d / e"],
+		};
+		const rawContent = JSON.stringify([
+			{ store: "Gangnam", a: 10, b: 5, c: 4, d: 18, e: 3 },
+		]);
+
+		const rendered = service.renderTable(block, rawContent);
+
+		expect(rendered.data.table.rows).toEqual([
+			{
+				kind: "data",
+				cells: ["Gangnam", 10, 5, 4, 18, 3, 24],
+			},
+		]);
+	});
+
 	it("rejects record formulas that depend on later formulas", () => {
 		const block: WorkflowTableBlock = {
 			blockId: "record-formula-order",
@@ -310,12 +403,12 @@ describe("WorkflowTableService", () => {
 			layout: "records",
 			title: "Formula order",
 			columns: ["a", "b", "c", "d"],
-			formulas: ["d = c / b", "c = a + b"],
+			formulas: ["d = c / b + a", "c = a + b"],
 		};
 		const rawContent = JSON.stringify([{ a: 10, b: 5 }]);
 
 		expect(() => service.renderTable(block, rawContent)).toThrow(
-			'Record formula "d = c / b" depends on values from later formulas: c',
+			'Record formula "d = c / b + a" depends on values from later formulas: c',
 		);
 	});
 
@@ -505,6 +598,30 @@ describe("WorkflowTableService", () => {
 		expect(prompt).toContain(
 			"Do not apply display formatting such as digit grouping commas, currency symbols, unit suffixes, or percent signs",
 		);
+	});
+
+	it("omits sum(*) targets from record extraction prompts", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "department-sales",
+			type: "table",
+			layout: "records",
+			title: "부서별 매출",
+			columns: ["store", "breakfast", "lunch", "dinner", "total"],
+			formulas: ["total = sum(*)"],
+		};
+
+		const prompt = service.buildExtractionPrompt(
+			block,
+			"[task-4] Department Sales\nStatus: completed\nResult:\n...",
+		);
+		const extractionSection = prompt.split(
+			"Formulas for later calculation:",
+		)[0];
+
+		expect(extractionSection).toContain(
+			"Columns to extract:\n- store\n- breakfast\n- lunch\n- dinner",
+		);
+		expect(extractionSection).not.toContain("- total");
 	});
 
 	it("builds text-column guidance for identifier fields", () => {

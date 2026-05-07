@@ -44,11 +44,16 @@ export type ParsedMatrixFormula =
 export type ParsedRecordFormula =
 	| {
 			raw: string;
-			type: "binary";
+			type: "expression";
 			target: string;
-			left: string;
-			operator: "+" | "-" | "*" | "/";
-			right: string;
+			operands: string[];
+			operators: Array<"+" | "-" | "*" | "/">;
+	  }
+	| {
+			raw: string;
+			type: "sum";
+			target: string;
+			columns: string[];
 	  }
 	| {
 			raw: string;

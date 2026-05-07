@@ -145,8 +145,8 @@ export class WorkflowTableDefinitionBuilder {
 				.filter(
 					(
 						formula,
-					): formula is Extract<ParsedRecordFormula, { type: "binary" }> =>
-						formula.type === "binary",
+					): formula is Exclude<ParsedRecordFormula, { type: "total" }> =>
+						formula.type !== "total",
 				)
 				.map((formula) => formula.target),
 		);
@@ -158,8 +158,8 @@ export class WorkflowTableDefinitionBuilder {
 						.filter(
 							(
 								formula,
-							): formula is Extract<ParsedRecordFormula, { type: "binary" }> =>
-								formula.type === "binary" && looksPercentLike(formula.target),
+							): formula is Exclude<ParsedRecordFormula, { type: "total" }> =>
+								formula.type !== "total" && looksPercentLike(formula.target),
 						)
 						.map((formula) => formula.target),
 				),
@@ -415,27 +415,119 @@ ${jsonShape}`;
 			};
 		}
 
-		const binaryMatch = formula.match(/^(.+?)\s*=\s*(.+?)\s*([+\-*/])\s*(.+)$/);
-		if (!binaryMatch) {
+		const sumMatch = formula.match(/^(.+?)\s*=\s*sum\((.*)\)$/);
+		if (sumMatch) {
+			const [, rawTarget, rawColumns] = sumMatch;
+			const target = rawTarget.trim();
+			if (!columns.includes(target)) {
+				throw new Error(
+					`Unknown column "${target}" in record formula: ${formula}`,
+				);
+			}
+
+			const requestedColumns = rawColumns
+				.split(",")
+				.map((value) => value.trim())
+				.filter(Boolean);
+			const resolvedColumns =
+				requestedColumns.length === 1 && requestedColumns[0] === "*"
+					? columns.filter((column) => column !== target)
+					: requestedColumns;
+
+			for (const column of resolvedColumns) {
+				if (!columns.includes(column)) {
+					throw new Error(
+						`Unknown column "${column}" in record formula: ${formula}`,
+					);
+				}
+			}
+
+			return {
+				raw: formula,
+				type: "sum",
+				target,
+				columns: resolvedColumns,
+			};
+		}
+
+		const assignmentMatch = formula.match(/^(.+?)\s*=\s*(.+)$/);
+		if (!assignmentMatch) {
 			throw new Error(`Unsupported record table formula: ${formula}`);
 		}
 
-		const [, target, left, operator, right] = binaryMatch;
-		for (const column of [target.trim(), left.trim(), right.trim()]) {
-			if (!columns.includes(column)) {
-				throw new Error(
-					`Unknown column "${column}" in record formula: ${formula}`,
-				);
-			}
+		const [, rawTarget, rawExpression] = assignmentMatch;
+		const target = rawTarget.trim();
+		if (!columns.includes(target)) {
+			throw new Error(
+				`Unknown column "${target}" in record formula: ${formula}`,
+			);
 		}
+
+		const { operands, operators } = this.parseRecordExpression(
+			rawExpression,
+			columns,
+			formula,
+		);
 
 		return {
 			raw: formula,
-			type: "binary",
-			target: target.trim(),
-			left: left.trim(),
-			operator: operator as "+" | "-" | "*" | "/",
-			right: right.trim(),
+			type: "expression",
+			target,
+			operands,
+			operators,
 		};
+	}
+
+	private parseRecordExpression(
+		expression: string,
+		columns: string[],
+		formula: string,
+	): {
+		operands: string[];
+		operators: Array<"+" | "-" | "*" | "/">;
+	} {
+		const operands: string[] = [];
+		const operators: Array<"+" | "-" | "*" | "/"> = [];
+		const sortedColumns = [...columns].sort(
+			(left, right) => right.length - left.length,
+		);
+		let index = 0;
+
+		while (index < expression.length) {
+			while (index < expression.length && /\s/.test(expression[index])) {
+				index += 1;
+			}
+
+			const matchedColumn = sortedColumns.find((column) =>
+				expression.startsWith(column, index),
+			);
+			if (!matchedColumn) {
+				throw new Error(`Unsupported record table formula: ${formula}`);
+			}
+
+			operands.push(matchedColumn);
+			index += matchedColumn.length;
+
+			while (index < expression.length && /\s/.test(expression[index])) {
+				index += 1;
+			}
+
+			if (index >= expression.length) {
+				break;
+			}
+
+			const operator = expression[index];
+			if (!["+", "-", "*", "/"].includes(operator)) {
+				throw new Error(`Unsupported record table formula: ${formula}`);
+			}
+			operators.push(operator as "+" | "-" | "*" | "/");
+			index += 1;
+		}
+
+		if (operands.length < 2 || operators.length !== operands.length - 1) {
+			throw new Error(`Unsupported record table formula: ${formula}`);
+		}
+
+		return { operands, operators };
 	}
 }
