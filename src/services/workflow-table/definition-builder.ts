@@ -45,7 +45,8 @@ export class WorkflowTableDefinitionBuilder {
 			formulas
 				.filter(
 					(formula) =>
-						(formula.type === "row_share" ||
+						(formula.type === "row_sum" ||
+							formula.type === "row_share" ||
 							formula.type === "row_ratio" ||
 							formula.type === "row_delta" ||
 							formula.type === "row_rate" ||
@@ -59,10 +60,23 @@ export class WorkflowTableDefinitionBuilder {
 				.filter(
 					(formula) =>
 						(formula.type === "col_sum" ||
+							formula.type === "col_share" ||
+							formula.type === "col_ratio" ||
 							formula.type === "col_delta" ||
 							formula.type === "col_rate" ||
 							formula.type === "col_growth") &&
 						columns.includes(formula.target),
+				)
+				.map((formula) => formula.target),
+		);
+		const comparisonRowTargets = new Set(
+			formulas
+				.filter(
+					(formula) =>
+						(formula.type === "row_delta" ||
+							formula.type === "row_rate" ||
+							formula.type === "row_growth") &&
+						rows.includes(formula.target),
 				)
 				.map((formula) => formula.target),
 		);
@@ -98,7 +112,9 @@ export class WorkflowTableDefinitionBuilder {
 					formulas
 						.filter(
 							(formula) =>
-								formula.type === "col_rate" || formula.type === "col_growth",
+								formula.type === "col_share" ||
+								formula.type === "col_rate" ||
+								formula.type === "col_growth",
 						)
 						.map((formula) => formula.target),
 				),
@@ -116,6 +132,7 @@ export class WorkflowTableDefinitionBuilder {
 			),
 			computedRowTargets,
 			computedColumnTargets,
+			comparisonRowTargets,
 			comparisonColumnTargets,
 			percentRows,
 			percentColumns,
@@ -318,6 +335,22 @@ ${jsonShape}`;
 			return { raw: formula, target, type: "col_sum", args };
 		}
 
+		if (fn === "row_sum") {
+			if (!targetIsRow) {
+				throw new Error(
+					`Matrix formula "${formula}" uses ${fn}, which requires a row target.`,
+				);
+			}
+			for (const arg of args) {
+				if (!rows.includes(arg)) {
+					throw new Error(
+						`Matrix formula "${formula}" references unknown row "${arg}".`,
+					);
+				}
+			}
+			return { raw: formula, target, type: "row_sum", args };
+		}
+
 		if (args.length !== 2) {
 			throw new Error(`Unsupported matrix table formula: ${formula}`);
 		}
@@ -328,6 +361,8 @@ ${jsonShape}`;
 			row_delta: "row_delta",
 			row_rate: "row_rate",
 			row_growth: "row_growth",
+			col_share: "col_share",
+			col_ratio: "col_ratio",
 			col_delta: "col_delta",
 			col_rate: "col_rate",
 			col_growth: "col_growth",
@@ -354,29 +389,7 @@ ${jsonShape}`;
 
 		switch (fn) {
 			case "share":
-				if (!targetIsRow) {
-					throw new Error(
-						`Matrix formula "${formula}" uses share, which requires a row target. Use row_share(...) or a col_* function instead.`,
-					);
-				}
-				return {
-					raw: formula,
-					target,
-					type: "row_share",
-					args: [args[0], args[1]],
-				};
 			case "ratio":
-				if (!targetIsRow) {
-					throw new Error(
-						`Matrix formula "${formula}" uses ratio, which requires a row target. Use row_ratio(...) instead.`,
-					);
-				}
-				return {
-					raw: formula,
-					target,
-					type: "row_ratio",
-					args: [args[0], args[1]],
-				};
 			case "delta":
 			case "rate":
 			case "growth":
@@ -395,7 +408,7 @@ ${jsonShape}`;
 		formula: string,
 		columns: string[],
 	): ParsedRecordFormula {
-		const totalMatch = formula.match(/^@total\s*=\s*sum\((.*)\)$/);
+		const totalMatch = formula.match(/^@total\s*=\s*sum\((.*)\)$/i);
 		if (totalMatch) {
 			const totalColumns = totalMatch[1]
 				.split(",")

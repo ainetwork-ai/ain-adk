@@ -254,6 +254,12 @@ export class WorkflowTableFormulaEvaluator {
 						this.toMatrixCellRef(row, formula.target),
 					),
 				);
+			case "row_sum":
+				return new Set(
+					definition.sourceColumns.map((column) =>
+						this.toMatrixCellRef(formula.target, column),
+					),
+				);
 			case "row_share": {
 				const [, baseColumn] = formula.args;
 				const baseIndex = definition.columns.indexOf(baseColumn);
@@ -279,6 +285,27 @@ export class WorkflowTableFormulaEvaluator {
 						.filter((column) => !definition.comparisonColumnTargets.has(column))
 						.map((column) => this.toMatrixCellRef(formula.target, column)),
 				);
+			case "col_share": {
+				const [, baseRow] = formula.args;
+				const baseIndex = definition.rows.indexOf(baseRow);
+				if (baseIndex === -1) {
+					throw new Error(`Invalid col_share formula: ${formula.raw}`);
+				}
+				return new Set(
+					definition.rows
+						.filter(
+							(row, index) =>
+								index <= baseIndex && !definition.comparisonRowTargets.has(row),
+						)
+						.map((row) => this.toMatrixCellRef(row, formula.target)),
+				);
+			}
+			case "col_ratio":
+				return new Set(
+					definition.rows
+						.filter((row) => !definition.comparisonRowTargets.has(row))
+						.map((row) => this.toMatrixCellRef(row, formula.target)),
+				);
 			case "col_delta":
 			case "col_rate":
 			case "col_growth":
@@ -302,6 +329,16 @@ export class WorkflowTableFormulaEvaluator {
 					formula.raw,
 					definition.sourceRows.flatMap((row) =>
 						formula.args.map((column) => this.toMatrixCellRef(row, column)),
+					),
+					available,
+					futureProduced,
+				);
+				return;
+			case "row_sum":
+				this.assertMatrixRefsAvailable(
+					formula.raw,
+					definition.sourceColumns.flatMap((column) =>
+						formula.args.map((row) => this.toMatrixCellRef(row, column)),
 					),
 					available,
 					futureProduced,
@@ -339,6 +376,40 @@ export class WorkflowTableFormulaEvaluator {
 						.flatMap((column) => [
 							this.toMatrixCellRef(leftRow, column),
 							this.toMatrixCellRef(rightRow, column),
+						]),
+					available,
+					futureProduced,
+				);
+				return;
+			}
+			case "col_share": {
+				const [sourceColumn, baseRow] = formula.args;
+				const baseIndex = definition.rows.indexOf(baseRow);
+				if (baseIndex === -1 || !definition.columns.includes(sourceColumn)) {
+					throw new Error(`Invalid col_share formula: ${formula.raw}`);
+				}
+				this.assertMatrixRefsAvailable(
+					formula.raw,
+					definition.rows
+						.filter(
+							(row, index) =>
+								index <= baseIndex && !definition.comparisonRowTargets.has(row),
+						)
+						.map((row) => this.toMatrixCellRef(row, sourceColumn)),
+					available,
+					futureProduced,
+				);
+				return;
+			}
+			case "col_ratio": {
+				const [numeratorColumn, denominatorColumn] = formula.args;
+				this.assertMatrixRefsAvailable(
+					formula.raw,
+					definition.rows
+						.filter((row) => !definition.comparisonRowTargets.has(row))
+						.flatMap((row) => [
+							this.toMatrixCellRef(row, numeratorColumn),
+							this.toMatrixCellRef(row, denominatorColumn),
 						]),
 					available,
 					futureProduced,
@@ -410,6 +481,14 @@ export class WorkflowTableFormulaEvaluator {
 						: values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
 				}
 				return;
+			case "row_sum":
+				for (const column of definition.sourceColumns) {
+					matrix[formula.target][column] = formula.args.reduce<number>(
+						(sum, row) => sum + (matrix[row]?.[column] ?? 0),
+						0,
+					);
+				}
+				return;
 			case "row_share":
 				this.applyMatrixShareFormula(formula, definition, matrix, warnings);
 				return;
@@ -425,6 +504,12 @@ export class WorkflowTableFormulaEvaluator {
 					matrix,
 					warnings,
 				);
+				return;
+			case "col_share":
+				this.applyMatrixColShareFormula(formula, definition, matrix, warnings);
+				return;
+			case "col_ratio":
+				this.applyMatrixColRatioFormula(formula, definition, matrix, warnings);
 				return;
 			case "col_delta":
 			case "col_rate":
@@ -490,6 +575,57 @@ export class WorkflowTableFormulaEvaluator {
 				matrix[denominatorRow][column],
 				warnings,
 				`${formula.target}.${column}`,
+			);
+		}
+	}
+
+	private applyMatrixColShareFormula(
+		formula: Extract<ParsedMatrixFormula, { type: "col_share" }>,
+		definition: MatrixDefinition,
+		matrix: MatrixTable,
+		warnings: string[],
+	): void {
+		const [sourceColumn, baseRow] = formula.args;
+		const baseIndex = definition.rows.indexOf(baseRow);
+		if (baseIndex === -1 || !matrix[baseRow]) {
+			throw new Error(`Invalid col_share formula: ${formula.raw}`);
+		}
+
+		const baseValue = matrix[baseRow][sourceColumn];
+		for (const [index, row] of definition.rows.entries()) {
+			if (index > baseIndex || definition.comparisonRowTargets.has(row)) {
+				matrix[row][formula.target] = null;
+				continue;
+			}
+
+			matrix[row][formula.target] = safeDivide(
+				matrix[row]?.[sourceColumn] ?? null,
+				baseValue,
+				warnings,
+				`${formula.target}.${row}`,
+				100,
+			);
+		}
+	}
+
+	private applyMatrixColRatioFormula(
+		formula: Extract<ParsedMatrixFormula, { type: "col_ratio" }>,
+		definition: MatrixDefinition,
+		matrix: MatrixTable,
+		warnings: string[],
+	): void {
+		const [numeratorColumn, denominatorColumn] = formula.args;
+		for (const row of definition.rows) {
+			if (definition.comparisonRowTargets.has(row)) {
+				matrix[row][formula.target] = null;
+				continue;
+			}
+
+			matrix[row][formula.target] = safeDivide(
+				matrix[row]?.[numeratorColumn] ?? null,
+				matrix[row]?.[denominatorColumn] ?? null,
+				warnings,
+				`${formula.target}.${row}`,
 			);
 		}
 	}

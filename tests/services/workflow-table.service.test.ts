@@ -209,6 +209,137 @@ describe("WorkflowTableService", () => {
 		);
 	});
 
+	it("supports row_sum to build a total row used by row_ratio", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "row-sum",
+			type: "table",
+			layout: "matrix",
+			rowHeader: "구분",
+			title: "행 합계 계산",
+			rows: ["a", "b", "c", "총합", "a_share"],
+			columns: ["Q1", "Q2"],
+			formulas: [
+				"총합 = row_sum(a, b, c)",
+				"a_share = row_ratio(a, 총합)",
+			],
+		};
+		const rawContent = JSON.stringify({
+			a: { Q1: 10, Q2: 20 },
+			b: { Q1: 30, Q2: null },
+			c: { Q1: null, Q2: 80 },
+		});
+
+		const rendered = service.renderTable(block, rawContent);
+
+		const totalRow = rendered.data.table.rows[3];
+		const shareRow = rendered.data.table.rows[4];
+		expect(totalRow.key).toBe("총합");
+		expect(totalRow.cells).toEqual(["총합", 40, 100]);
+		expect(shareRow.key).toBe("a_share");
+		expect(shareRow.cells[1]).toBeCloseTo(0.25, 6);
+		expect(shareRow.cells[2]).toBeCloseTo(0.2, 6);
+	});
+
+	it("rejects row_sum that targets a column or references unknown rows", () => {
+		expect(() =>
+			service.renderTable(
+				{
+					blockId: "row-sum-bad-target",
+					type: "table",
+					layout: "matrix",
+					rowHeader: "구분",
+					title: "잘못된 row_sum target",
+					rows: ["a", "b"],
+					columns: ["Q1", "총합"],
+					formulas: ["총합 = row_sum(a, b)"],
+				},
+				JSON.stringify({ a: { Q1: 1 }, b: { Q1: 2 } }),
+			),
+		).toThrow(/requires a row target/);
+
+		expect(() =>
+			service.renderTable(
+				{
+					blockId: "row-sum-unknown-row",
+					type: "table",
+					layout: "matrix",
+					rowHeader: "구분",
+					title: "알 수 없는 row 참조",
+					rows: ["a", "b", "총합"],
+					columns: ["Q1"],
+					formulas: ["총합 = row_sum(a, missing)"],
+				},
+				JSON.stringify({ a: { Q1: 1 }, b: { Q1: 2 } }),
+			),
+		).toThrow(/unknown row "missing"/);
+	});
+
+	it("supports col_share and col_ratio symmetric to row_share/row_ratio", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "col-share-ratio",
+			type: "table",
+			layout: "matrix",
+			rowHeader: "구분",
+			title: "Column-direction share & ratio",
+			rows: ["Rev", "Cover", "Total"],
+			columns: ["Q1", "Q2", "Q1Share", "Q1ToQ2"],
+			formulas: [
+				"Total = row_sum(Rev, Cover)",
+				"Q1Share = col_share(Q1, Total)",
+				"Q1ToQ2 = col_ratio(Q1, Q2)",
+			],
+		};
+		const rawContent = JSON.stringify({
+			Rev: { Q1: 100, Q2: 200 },
+			Cover: { Q1: 50, Q2: 25 },
+		});
+
+		const rendered = service.renderTable(block, rawContent);
+
+		const revRow = rendered.data.table.rows[0];
+		const coverRow = rendered.data.table.rows[1];
+		const totalRow = rendered.data.table.rows[2];
+
+		expect(totalRow.key).toBe("Total");
+		expect(totalRow.cells[1]).toBe(150);
+		expect(totalRow.cells[2]).toBe(225);
+		expect(totalRow.cells[3]).toBeCloseTo(100, 6);
+		expect(totalRow.cells[4]).toBeCloseTo(150 / 225, 6);
+
+		expect(revRow.cells[3]).toBeCloseTo((100 / 150) * 100, 6);
+		expect(coverRow.cells[3]).toBeCloseTo((50 / 150) * 100, 6);
+
+		expect(revRow.cells[4]).toBeCloseTo(100 / 200, 6);
+		expect(coverRow.cells[4]).toBeCloseTo(50 / 25, 6);
+	});
+
+	it("legacy share/ratio aliases auto-detect column targets", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "legacy-col-aliases",
+			type: "table",
+			layout: "matrix",
+			rowHeader: "구분",
+			title: "Legacy aliases auto-detect",
+			rows: ["Rev", "Cover", "Total"],
+			columns: ["Q1", "Q2", "Q1Share"],
+			formulas: [
+				"Total = row_sum(Rev, Cover)",
+				"Q1Share = share(Q1, Total)",
+			],
+		};
+		const rawContent = JSON.stringify({
+			Rev: { Q1: 100, Q2: 200 },
+			Cover: { Q1: 50, Q2: 25 },
+		});
+
+		const rendered = service.renderTable(block, rawContent);
+
+		expect(rendered.data.table.rows[0].cells[3]).toBeCloseTo(
+			(100 / 150) * 100,
+			6,
+		);
+	});
+
 	it("keeps legacy matrix aliases working", () => {
 		const block: WorkflowTableBlock = {
 			blockId: "legacy-aliases",
@@ -301,6 +432,31 @@ describe("WorkflowTableService", () => {
 		expect(rendered.content).toContain(
 			"| **Total** | **2,100,000** | **80,000** | **2,020,000** |",
 		);
+	});
+
+	it("treats @Total as the reserved total-row formula", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "store-sales-total-alias",
+			type: "table",
+			layout: "records",
+			title: "매장별 매출",
+			columns: ["store", "grossSales", "refunds", "netSales"],
+			formulas: [
+				"netSales = grossSales - refunds",
+				"@Total = sum(grossSales, refunds, netSales)",
+			],
+		};
+		const rawContent = JSON.stringify([
+			{ store: "Gangnam", grossSales: "1,200,000", refunds: "50,000" },
+			{ store: "Hongdae", grossSales: 900000, refunds: 30000 },
+		]);
+
+		const rendered = service.renderTable(block, rawContent);
+
+		expect(rendered.data.table.rows.at(-1)).toEqual({
+			kind: "total",
+			cells: ["Total", 2100000, 80000, 2020000],
+		});
 	});
 
 	it("supports sum(*) for record computed columns", () => {

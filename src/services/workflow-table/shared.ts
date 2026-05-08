@@ -19,6 +19,12 @@ export type ParsedMatrixFormula =
 	| {
 			raw: string;
 			target: string;
+			type: "row_sum";
+			args: string[];
+	  }
+	| {
+			raw: string;
+			target: string;
 			type: "row_share";
 			args: [string, string];
 	  }
@@ -32,6 +38,18 @@ export type ParsedMatrixFormula =
 			raw: string;
 			target: string;
 			type: "row_delta" | "row_rate" | "row_growth";
+			args: [string, string];
+	  }
+	| {
+			raw: string;
+			target: string;
+			type: "col_share";
+			args: [string, string];
+	  }
+	| {
+			raw: string;
+			target: string;
+			type: "col_ratio";
 			args: [string, string];
 	  }
 	| {
@@ -71,6 +89,7 @@ export type MatrixDefinition = {
 	sourceColumns: string[];
 	computedRowTargets: Set<string>;
 	computedColumnTargets: Set<string>;
+	comparisonRowTargets: Set<string>;
 	comparisonColumnTargets: Set<string>;
 	percentRows: Set<string>;
 	percentColumns: Set<string>;
