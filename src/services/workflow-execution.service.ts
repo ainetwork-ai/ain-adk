@@ -337,6 +337,7 @@ export class WorkflowExecutionService {
 
 			try {
 				await this.userWorkflowService.updateWorkflow(workflowId, {
+					userId: workflow.userId,
 					lastRunAt: Date.now(),
 					lastThreadId: thread.threadId,
 				});
@@ -382,6 +383,7 @@ export class WorkflowExecutionService {
 		}
 
 		await this.userWorkflowService.updateWorkflow(workflow.workflowId, {
+			userId: workflow.userId,
 			lastRunAt: Date.now(),
 			lastThreadId: threadId,
 		});
