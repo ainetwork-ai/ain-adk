@@ -274,6 +274,49 @@ describe("WorkflowTableService", () => {
 		).toThrow(/unknown row "missing"/);
 	});
 
+	it("computes grand-total cell when col_sum and row_sum intersect", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "grand-total",
+			type: "table",
+			layout: "matrix",
+			rowHeader: "구분",
+			title: "Category × meal period totals",
+			rows: [
+				"Food",
+				"Food(%)",
+				"Beverage",
+				"Beverage(%)",
+				"Other",
+				"Other(%)",
+				"Total",
+			],
+			columns: ["Breakfast", "Lunch", "Dinner", "Midnight", "Actual"],
+			formulas: [
+				"Actual = sum(Breakfast, Lunch, Dinner, Midnight)",
+				"Total = row_sum(Food, Beverage, Other)",
+				"Food(%) = row_rate(Food, Total)",
+				"Beverage(%) = row_rate(Beverage, Total)",
+				"Other(%) = row_rate(Other, Total)",
+			],
+		};
+		const rawContent = JSON.stringify({
+			Food: { Breakfast: 10, Lunch: 20, Dinner: 30, Midnight: 0 },
+			Beverage: { Breakfast: 5, Lunch: 10, Dinner: 15, Midnight: 0 },
+			Other: { Breakfast: 0, Lunch: 5, Dinner: 5, Midnight: 0 },
+		});
+
+		const rendered = service.renderTable(block, rawContent);
+
+		const foodPctRow = rendered.data.table.rows[1];
+		const totalRow = rendered.data.table.rows[6];
+
+		expect(totalRow.key).toBe("Total");
+		expect(totalRow.cells).toEqual(["Total", 15, 35, 50, 0, 100]);
+
+		expect(foodPctRow.key).toBe("Food(%)");
+		expect(foodPctRow.cells[5]).toBeCloseTo(60, 6);
+	});
+
 	it("supports col_share and col_ratio symmetric to row_share/row_ratio", () => {
 		const block: WorkflowTableBlock = {
 			blockId: "col-share-ratio",

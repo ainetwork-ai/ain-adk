@@ -209,11 +209,23 @@ export class WorkflowTableFormulaEvaluator {
 		matrix: MatrixTable,
 		warnings: string[],
 	): void {
-		const available = this.buildInitialMatrixAvailability(definition);
-		const producedByFormula = definition.formulas.map((formula) =>
-			this.getMatrixProducedRefs(formula, definition),
-		);
+		const initialAvailable = this.buildInitialMatrixAvailability(definition);
 
+		const producedByFormula: Set<MatrixCellRef>[] = [];
+		const projectedAvailable = new Set(initialAvailable);
+		for (const formula of definition.formulas) {
+			const refs = this.getMatrixProducedRefs(
+				formula,
+				definition,
+				projectedAvailable,
+			);
+			producedByFormula.push(refs);
+			for (const ref of refs) {
+				projectedAvailable.add(ref);
+			}
+		}
+
+		const available = new Set(initialAvailable);
 		for (const [index, formula] of definition.formulas.entries()) {
 			const futureProduced = new Set<MatrixCellRef>(
 				producedByFormula.slice(index + 1).flatMap((refs) => [...refs]),
@@ -246,19 +258,30 @@ export class WorkflowTableFormulaEvaluator {
 	private getMatrixProducedRefs(
 		formula: ParsedMatrixFormula,
 		definition: MatrixDefinition,
+		available: Set<MatrixCellRef>,
 	): Set<MatrixCellRef> {
 		switch (formula.type) {
 			case "col_sum":
 				return new Set(
-					definition.sourceRows.map((row) =>
-						this.toMatrixCellRef(row, formula.target),
-					),
+					definition.rows
+						.filter((row) =>
+							formula.args.every((column) =>
+								available.has(this.toMatrixCellRef(row, column)),
+							),
+						)
+						.map((row) => this.toMatrixCellRef(row, formula.target)),
 				);
 			case "row_sum":
 				return new Set(
-					definition.sourceColumns.map((column) =>
-						this.toMatrixCellRef(formula.target, column),
-					),
+					definition.columns
+						.filter(
+							(column) =>
+								!definition.comparisonColumnTargets.has(column) &&
+								formula.args.every((row) =>
+									available.has(this.toMatrixCellRef(row, column)),
+								),
+						)
+						.map((column) => this.toMatrixCellRef(formula.target, column)),
 				);
 			case "row_share": {
 				const [, baseColumn] = formula.args;
@@ -472,19 +495,33 @@ export class WorkflowTableFormulaEvaluator {
 	): void {
 		switch (formula.type) {
 			case "col_sum":
-				for (const row of definition.sourceRows) {
+				for (const row of definition.rows) {
 					const values = formula.args.map(
 						(column) => matrix[row]?.[column] ?? null,
 					);
-					matrix[row][formula.target] = values.every((value) => value === null)
-						? null
-						: values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+					if (values.every((value) => value === null)) {
+						continue;
+					}
+					matrix[row][formula.target] = values.reduce<number>(
+						(sum, value) => sum + (value ?? 0),
+						0,
+					);
 				}
 				return;
 			case "row_sum":
-				for (const column of definition.sourceColumns) {
-					matrix[formula.target][column] = formula.args.reduce<number>(
-						(sum, row) => sum + (matrix[row]?.[column] ?? 0),
+				for (const column of definition.columns) {
+					if (definition.comparisonColumnTargets.has(column)) {
+						continue;
+					}
+					const isSourceColumn = definition.sourceColumns.includes(column);
+					const values = formula.args.map(
+						(row) => matrix[row]?.[column] ?? null,
+					);
+					if (!isSourceColumn && values.every((value) => value === null)) {
+						continue;
+					}
+					matrix[formula.target][column] = values.reduce<number>(
+						(sum, value) => sum + (value ?? 0),
 						0,
 					);
 				}
