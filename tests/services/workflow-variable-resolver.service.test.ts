@@ -52,6 +52,59 @@ describe("WorkflowVariableResolver", () => {
 		);
 	});
 
+	it("keeps graph blocks with supported Mermaid graph types unchanged", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition: WorkflowDefinition = {
+			tasks: [],
+			response: {
+				blocks: [
+					{
+						blockId: "monthly-sales-graph",
+						type: "graph",
+						graphType: "xychart-beta",
+						title: "월별 매출 및 계획비 비교",
+						prompt: "월별 실적과 계획을 x축 월 기준으로 정리한다.",
+						sourceTaskIds: ["sales-task"],
+					},
+					{
+						blockId: "sales-share-graph",
+						type: "graph",
+						graphType: "pie",
+						title: "매출 비중",
+						showData: true,
+						prompt: "카테고리별 매출 비중을 정리한다.",
+					},
+				],
+			},
+		};
+
+		expect(resolver.normalizeDefinition(definition)).toEqual(definition);
+	});
+
+	it("rejects graph blocks with unsupported graph types", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [],
+			response: {
+				blocks: [
+					{
+						blockId: "bad-graph",
+						type: "graph",
+						graphType: "line",
+						prompt: "그래프를 만든다.",
+					},
+				],
+			},
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			AinHttpError,
+		);
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			'Graph block "bad-graph" must declare graphType as "xychart-beta" or "pie".',
+		);
+	});
+
 	it("rejects heading blocks without text", () => {
 		const resolver = new WorkflowVariableResolver();
 		const definition = {
@@ -169,6 +222,59 @@ describe("WorkflowVariableResolver", () => {
 		expect(result.displayQuery).toBe("2026년 04월 리포트");
 		expect(result.query).toBe("기간=2026-04");
 		expect(result.definition?.tasks[0].prompt).toBe("2026년 04월 데이터 조회");
+	});
+
+	it("replaces workflow variable offsets inside table rows and columns", () => {
+		const resolver = new WorkflowVariableResolver();
+
+		const result = resolver.resolveForExecution({
+			title: "{{년도}}년 비교 리포트",
+			content: "{{년도}} vs {{년도-1}}",
+			timezone: "Asia/Seoul",
+			variables: {
+				year: {
+					id: "년도",
+					label: "년도",
+					type: "text",
+					resolveAt: "execution",
+				},
+				month: {
+					id: "월",
+					label: "월",
+					type: "text",
+					resolveAt: "execution",
+				},
+			},
+			variableValues: {
+				year: "2026",
+				month: "04",
+			},
+			definition: {
+				tasks: [],
+				response: {
+					blocks: [
+						{
+							blockId: "sales-compare",
+							type: "table",
+							layout: "matrix",
+							rowHeader: "구분",
+							rows: ["{{년도}} 실적", "{{년도-1}} 실적", "{{월+1}}월 목표"],
+							columns: ["{{년도}}", "{{년도-1}}", "{{월-1}}월"],
+						},
+					],
+				},
+			},
+		});
+
+		const tableBlock = result.definition?.response.blocks[0];
+		if (!tableBlock || tableBlock.type !== "table") {
+			throw new Error("Expected a table block");
+		}
+
+		expect(result.displayQuery).toBe("2026년 비교 리포트");
+		expect(result.query).toBe("2026 vs 2025");
+		expect(tableBlock.rows).toEqual(["2026 실적", "2025 실적", "05월 목표"]);
+		expect(tableBlock.columns).toEqual(["2026", "2025", "03월"]);
 	});
 
 	it("expands date_parts variables through parts mappings", () => {

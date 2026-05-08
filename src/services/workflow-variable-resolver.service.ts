@@ -224,13 +224,60 @@ function applyReplacements(
 	replacements: VariableReplacement[],
 	resolveAt: "creation" | "execution",
 ): string {
-	return replacements
-		.filter((replacement) => replacement.resolveAt === resolveAt)
-		.reduce(
-			(result, replacement) =>
-				result.replaceAll(`{{${replacement.token}}}`, replacement.value),
-			input,
+	const scopedReplacements = replacements.filter(
+		(replacement) => replacement.resolveAt === resolveAt,
+	);
+
+	return scopedReplacements.reduce((result, replacement) => {
+		const withOffsets = replaceOffsetExpressions(result, replacement);
+		return withOffsets.replaceAll(
+			`{{${replacement.token}}}`,
+			replacement.value,
 		);
+	}, input);
+}
+
+function replaceOffsetExpressions(
+	input: string,
+	replacement: VariableReplacement,
+): string {
+	const pattern = new RegExp(
+		`\\{\\{(${escapeRegExp(replacement.token)})([+-]\\d+)\\}\\}`,
+		"g",
+	);
+
+	return input.replace(pattern, (match, _token, rawOffset: string) => {
+		const offset = Number.parseInt(rawOffset, 10);
+		const resolved = applyNumericOffset(replacement.value, offset);
+		return resolved ?? match;
+	});
+}
+
+function applyNumericOffset(value: string, offset: number): string | undefined {
+	const trimmed = value.trim();
+	if (!/^-?\d+$/.test(trimmed)) {
+		return undefined;
+	}
+
+	const nextValue = Number.parseInt(trimmed, 10) + offset;
+	if (!Number.isFinite(nextValue)) {
+		return undefined;
+	}
+
+	const isNegative = nextValue < 0;
+	const digits = trimmed.startsWith("-") ? trimmed.slice(1) : trimmed;
+	const preserveWidth = /^0\d+$/.test(digits);
+	if (!preserveWidth) {
+		return nextValue.toString();
+	}
+
+	return `${isNegative ? "-" : ""}${Math.abs(nextValue)
+		.toString()
+		.padStart(digits.length, "0")}`;
+}
+
+function escapeRegExp(input: string): string {
+	return input.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function replaceWorkflowVariablesInValue(
@@ -307,6 +354,54 @@ function validateWorkflowDefinition(
 				throw new AinHttpError(
 					StatusCodes.BAD_REQUEST,
 					`Heading block "${block.blockId}" level must be 1, 2, or 3.`,
+				);
+			}
+
+			continue;
+		}
+
+		if (block.type === "graph") {
+			const graphType = (block as { graphType?: unknown }).graphType;
+			if (graphType !== "xychart-beta" && graphType !== "pie") {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Graph block "${block.blockId}" must declare graphType as "xychart-beta" or "pie".`,
+				);
+			}
+
+			if (typeof block.prompt !== "string" || !block.prompt.trim()) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Graph block "${block.blockId}" must use a non-empty prompt string.`,
+				);
+			}
+
+			if (block.title !== undefined && typeof block.title !== "string") {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Graph block "${block.blockId}" title must be a string.`,
+				);
+			}
+
+			if (
+				block.sourceTaskIds &&
+				(!Array.isArray(block.sourceTaskIds) ||
+					block.sourceTaskIds.some((taskId) => typeof taskId !== "string"))
+			) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Graph block "${block.blockId}" must use sourceTaskIds: string[].`,
+				);
+			}
+
+			if (
+				block.graphType === "pie" &&
+				block.showData !== undefined &&
+				typeof block.showData !== "boolean"
+			) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Graph block "${block.blockId}" showData must be boolean.`,
 				);
 			}
 

@@ -1,6 +1,8 @@
 import type { ModelModule } from "@/modules";
+import { WorkflowGraphService } from "@/services/workflow-graph.service.js";
 import { WorkflowTableService } from "@/services/workflow-table.service.js";
 import type {
+	WorkflowGraphBlock,
 	WorkflowRenderedBlock,
 	WorkflowResponseBlock,
 	WorkflowTableBlock,
@@ -11,14 +13,17 @@ import type { StreamEvent } from "@/types/stream.js";
 
 export class WorkflowResponseComposer {
 	private modelModule: ModelModule;
+	private workflowGraphService: WorkflowGraphService;
 	private workflowTableService: WorkflowTableService;
 
 	constructor(
 		modelModule: ModelModule,
 		workflowTableService = new WorkflowTableService(),
+		workflowGraphService = new WorkflowGraphService(),
 	) {
 		this.modelModule = modelModule;
 		this.workflowTableService = workflowTableService;
+		this.workflowGraphService = workflowGraphService;
 	}
 
 	async *renderResponseBlock(
@@ -38,6 +43,19 @@ export class WorkflowResponseComposer {
 
 		if (block.type === "table") {
 			const rendered = yield* this.renderDeterministicTableBlock(
+				block,
+				taskResults,
+			);
+			return {
+				blockId: block.blockId,
+				type: block.type,
+				content: rendered.content,
+				data: rendered.data,
+			};
+		}
+
+		if (block.type === "graph") {
+			const rendered = yield* this.renderDeterministicGraphBlock(
 				block,
 				taskResults,
 			);
@@ -89,6 +107,32 @@ export class WorkflowResponseComposer {
 		const response = await model.fetch(messages, modelOptions);
 		const rawContent = response.content || "{}";
 		const rendered = this.workflowTableService.renderTable(block, rawContent);
+		yield { event: "text_chunk", data: { delta: rendered.content } };
+		return rendered;
+	}
+
+	private async *renderDeterministicGraphBlock(
+		block: WorkflowGraphBlock,
+		taskResults: Record<string, WorkflowTaskResult>,
+	): AsyncGenerator<
+		StreamEvent,
+		ReturnType<WorkflowGraphService["renderGraph"]>,
+		unknown
+	> {
+		const model = this.modelModule.getModel();
+		const modelOptions = this.modelModule.getModelOptions();
+		const sourceResults = this.getSourceTaskResults(block, taskResults);
+		const messages = model.generateMessages({
+			query: this.workflowGraphService.buildExtractionPrompt(
+				block,
+				this.serializeTaskResults(sourceResults),
+			),
+			systemPrompt:
+				"Extract only the requested graph source values as valid JSON. Return only JSON.",
+		});
+		const response = await model.fetch(messages, modelOptions);
+		const rawContent = response.content || "{}";
+		const rendered = this.workflowGraphService.renderGraph(block, rawContent);
 		yield { event: "text_chunk", data: { delta: rendered.content } };
 		return rendered;
 	}

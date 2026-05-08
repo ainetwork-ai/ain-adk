@@ -177,6 +177,39 @@ export interface WorkflowTextBlock {
 	sourceTaskIds?: string[];
 }
 
+export type WorkflowGraphType = "xychart-beta" | "pie";
+
+export interface WorkflowGraphBlockBase {
+	blockId: string;
+	type: "graph";
+	graphType: WorkflowGraphType;
+	title?: string;
+	prompt: string;
+	sourceTaskIds?: string[];
+}
+
+export interface WorkflowXYChartSeriesData {
+	kind: "bar" | "line";
+	label?: string;
+	data: number[];
+}
+
+export interface WorkflowXYChartBlock extends WorkflowGraphBlockBase {
+	graphType: "xychart-beta";
+}
+
+export interface WorkflowPieChartSlice {
+	label: string;
+	value: number;
+}
+
+export interface WorkflowPieChartBlock extends WorkflowGraphBlockBase {
+	graphType: "pie";
+	showData?: boolean;
+}
+
+export type WorkflowGraphBlock = WorkflowXYChartBlock | WorkflowPieChartBlock;
+
 export type WorkflowTableLayout = "records" | "matrix";
 
 export type WorkflowTableColumnFormatKind =
@@ -212,6 +245,7 @@ export interface WorkflowTableBlock {
 export type WorkflowResponseBlock =
 	| WorkflowHeadingBlock
 	| WorkflowTextBlock
+	| WorkflowGraphBlock
 	| WorkflowTableBlock;
 
 export interface WorkflowDefinition {
@@ -257,11 +291,44 @@ export interface WorkflowRenderedTableData {
 	warnings?: string[];
 }
 
+export interface WorkflowRenderedXYChartData {
+	graphType: "xychart-beta";
+	title?: string;
+	xAxis: string[];
+	yAxis?: {
+		label?: string;
+		min?: number;
+		max?: number;
+	};
+	series: WorkflowXYChartSeriesData[];
+}
+
+export interface WorkflowRenderedPieChartData {
+	graphType: "pie";
+	title?: string;
+	showData?: boolean;
+	slices: WorkflowPieChartSlice[];
+}
+
+export type WorkflowRenderedGraphSpec =
+	| WorkflowRenderedXYChartData
+	| WorkflowRenderedPieChartData;
+
+export interface WorkflowRenderedGraphData {
+	spec: WorkflowRenderedGraphSpec;
+	mermaid: string;
+	warnings?: string[];
+}
+
+export type WorkflowRenderedBlockData =
+	| WorkflowRenderedTableData
+	| WorkflowRenderedGraphData;
+
 export interface WorkflowRenderedBlock {
 	blockId: string;
 	type: WorkflowResponseBlock["type"];
 	content: string;
-	data?: WorkflowRenderedTableData;
+	data?: WorkflowRenderedBlockData;
 }
 
 export type WorkflowVariableType =
