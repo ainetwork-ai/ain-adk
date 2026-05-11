@@ -175,6 +175,7 @@ export interface WorkflowTextBlock {
 	type: "text";
 	prompt: string;
 	sourceTaskIds?: string[];
+	sourceBlockIds?: string[];
 }
 
 export type WorkflowGraphType = "xychart-beta" | "pie";
@@ -186,6 +187,7 @@ export interface WorkflowGraphBlockBase {
 	title?: string;
 	prompt: string;
 	sourceTaskIds?: string[];
+	sourceBlockIds?: string[];
 }
 
 export interface WorkflowXYChartSeriesData {

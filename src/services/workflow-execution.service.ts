@@ -271,6 +271,7 @@ export class WorkflowExecutionService {
 				const stream = this.workflowResponseComposer.renderResponseBlock(
 					block,
 					taskResults,
+					renderedBlocks,
 				);
 				let result = await stream.next();
 				while (!result.done) {

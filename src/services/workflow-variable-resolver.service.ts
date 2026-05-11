@@ -360,6 +360,18 @@ function validateWorkflowDefinition(
 			continue;
 		}
 
+		if (
+			block.type === "text" &&
+			block.sourceBlockIds &&
+			(!Array.isArray(block.sourceBlockIds) ||
+				block.sourceBlockIds.some((blockId) => typeof blockId !== "string"))
+		) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Text block "${block.blockId}" must use sourceBlockIds: string[].`,
+			);
+		}
+
 		if (block.type === "graph") {
 			const graphType = (block as { graphType?: unknown }).graphType;
 			if (graphType !== "xychart-beta" && graphType !== "pie") {
@@ -391,6 +403,17 @@ function validateWorkflowDefinition(
 				throw new AinHttpError(
 					StatusCodes.BAD_REQUEST,
 					`Graph block "${block.blockId}" must use sourceTaskIds: string[].`,
+				);
+			}
+
+			if (
+				block.sourceBlockIds &&
+				(!Array.isArray(block.sourceBlockIds) ||
+					block.sourceBlockIds.some((blockId) => typeof blockId !== "string"))
+			) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Graph block "${block.blockId}" must use sourceBlockIds: string[].`,
 				);
 			}
 

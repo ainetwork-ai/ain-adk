@@ -29,6 +29,7 @@ export class WorkflowResponseComposer {
 	async *renderResponseBlock(
 		block: WorkflowResponseBlock,
 		taskResults: Record<string, WorkflowTaskResult>,
+		renderedBlocks: WorkflowRenderedBlock[] = [],
 	): AsyncGenerator<StreamEvent, WorkflowRenderedBlock, unknown> {
 		if (block.type === "heading") {
 			const level = block.level ?? 2;
@@ -58,6 +59,7 @@ export class WorkflowResponseComposer {
 			const rendered = yield* this.renderDeterministicGraphBlock(
 				block,
 				taskResults,
+				renderedBlocks,
 			);
 			return {
 				blockId: block.blockId,
@@ -70,6 +72,7 @@ export class WorkflowResponseComposer {
 		const content = yield* this.renderGeneratedTextBlock(
 			block,
 			taskResults,
+			renderedBlocks,
 			"Generate this workflow response text from the task results. Return only the response block content.",
 		);
 
@@ -114,6 +117,7 @@ export class WorkflowResponseComposer {
 	private async *renderDeterministicGraphBlock(
 		block: WorkflowGraphBlock,
 		taskResults: Record<string, WorkflowTaskResult>,
+		renderedBlocks: WorkflowRenderedBlock[],
 	): AsyncGenerator<
 		StreamEvent,
 		ReturnType<WorkflowGraphService["renderGraph"]>,
@@ -122,10 +126,12 @@ export class WorkflowResponseComposer {
 		const model = this.modelModule.getModel();
 		const modelOptions = this.modelModule.getModelOptions();
 		const sourceResults = this.getSourceTaskResults(block, taskResults);
+		const sourceBlocks = this.getSourceRenderedBlocks(block, renderedBlocks);
 		const messages = model.generateMessages({
 			query: this.workflowGraphService.buildExtractionPrompt(
 				block,
 				this.serializeTaskResults(sourceResults),
+				this.serializeRenderedBlocks(sourceBlocks),
 			),
 			systemPrompt:
 				"Extract only the requested graph source values as valid JSON. Return only JSON.",
@@ -140,13 +146,15 @@ export class WorkflowResponseComposer {
 	private async *renderGeneratedTextBlock(
 		block: WorkflowTextBlock,
 		taskResults: Record<string, WorkflowTaskResult>,
+		renderedBlocks: WorkflowRenderedBlock[],
 		systemPrompt: string,
 	): AsyncGenerator<StreamEvent, string, unknown> {
 		const model = this.modelModule.getModel();
 		const modelOptions = this.modelModule.getModelOptions();
 		const sourceResults = this.getSourceTaskResults(block, taskResults);
+		const sourceBlocks = this.getSourceRenderedBlocks(block, renderedBlocks);
 		const messages = model.generateMessages({
-			query: this.buildBlockPrompt(block, sourceResults),
+			query: this.buildBlockPrompt(block, sourceResults, sourceBlocks),
 			systemPrompt,
 		});
 		const stream = await model.fetchStreamWithContextMessage(
@@ -185,13 +193,32 @@ export class WorkflowResponseComposer {
 	private buildBlockPrompt(
 		block: WorkflowTextBlock,
 		taskResults: WorkflowTaskResult[],
+		renderedBlocks: WorkflowRenderedBlock[],
 	): string {
 		const resultsText = this.serializeTaskResults(taskResults);
+		const blocksText = this.serializeRenderedBlocks(renderedBlocks);
 		return `Task results:
 ${resultsText}
 
+Rendered response blocks:
+${blocksText || "(none)"}
+
 Instructions:
 ${block.prompt}`;
+	}
+
+	private getSourceRenderedBlocks(
+		block: WorkflowTextBlock | WorkflowGraphBlock,
+		renderedBlocks: WorkflowRenderedBlock[],
+	): WorkflowRenderedBlock[] {
+		if (!block.sourceBlockIds || block.sourceBlockIds.length === 0) {
+			return renderedBlocks;
+		}
+
+		const sourceBlockIds = new Set(block.sourceBlockIds);
+		return renderedBlocks.filter((renderedBlock) =>
+			sourceBlockIds.has(renderedBlock.blockId),
+		);
 	}
 
 	private serializeTaskResults(taskResults: WorkflowTaskResult[]): string {
@@ -200,6 +227,20 @@ ${block.prompt}`;
 				(result) =>
 					`[${result.taskId}] ${result.title}\nStatus: ${result.status}\nResult:\n${result.content || result.error || ""}`,
 			)
+			.join("\n\n---\n\n");
+	}
+
+	private serializeRenderedBlocks(
+		renderedBlocks: WorkflowRenderedBlock[],
+	): string {
+		return renderedBlocks
+			.filter((block) => block.type === "table" || block.type === "graph")
+			.map((block) => {
+				const dataText = block.data
+					? `\nStructured data:\n${JSON.stringify(block.data, null, 2)}`
+					: "";
+				return `[${block.blockId}] ${block.type}\nContent:\n${block.content.trim()}${dataText}`;
+			})
 			.join("\n\n---\n\n");
 	}
 }

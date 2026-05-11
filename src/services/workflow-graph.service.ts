@@ -17,10 +17,19 @@ export class WorkflowGraphService {
 	buildExtractionPrompt(
 		block: WorkflowGraphBlock,
 		resultsText: string,
+		renderedBlocksText = "",
 	): string {
 		return block.graphType === "xychart-beta"
-			? this.buildXYChartExtractionPrompt(block, resultsText)
-			: this.buildPieChartExtractionPrompt(block, resultsText);
+			? this.buildXYChartExtractionPrompt(
+					block,
+					resultsText,
+					renderedBlocksText,
+				)
+			: this.buildPieChartExtractionPrompt(
+					block,
+					resultsText,
+					renderedBlocksText,
+				);
 	}
 
 	renderGraph(
@@ -53,9 +62,13 @@ export class WorkflowGraphService {
 	private buildXYChartExtractionPrompt(
 		block: WorkflowXYChartBlock,
 		resultsText: string,
+		renderedBlocksText: string,
 	): string {
 		return `Task results:
 ${resultsText}
+
+Rendered response blocks:
+${renderedBlocksText || "(none)"}
 
 Extract only the data needed to render a Mermaid xychart-beta graph.
 Return only a valid JSON object with this shape:
@@ -95,9 +108,13 @@ ${block.prompt}`;
 	private buildPieChartExtractionPrompt(
 		block: WorkflowPieChartBlock,
 		resultsText: string,
+		renderedBlocksText: string,
 	): string {
 		return `Task results:
 ${resultsText}
+
+Rendered response blocks:
+${renderedBlocksText || "(none)"}
 
 Extract only the data needed to render a Mermaid pie graph.
 Return only a valid JSON object with this shape:
