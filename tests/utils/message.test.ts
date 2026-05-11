@@ -9,6 +9,8 @@ import {
 	createToolMessage,
 	createToolResultPart,
 	normalizeMessageObject,
+	normalizeThreadMessages,
+	normalizeThreadObject,
 	serializeMessageForModelFallback,
 	serializeMessageForIntent,
 	serializeThreadForModelFallback,
@@ -36,6 +38,49 @@ describe("message utilities", () => {
 			parts: [
 				{ kind: "text", text: "hello" },
 				{ kind: "text", text: "world" },
+			],
+			});
+		});
+
+	it("normalizes legacy thread messages into canonical thread views", () => {
+		const legacyMessage: MessageObject = {
+			messageId: "msg-thread-1",
+			role: MessageRole.USER,
+			timestamp: 100,
+			content: {
+				type: "text",
+				parts: ["hello from storage"],
+			},
+		};
+		const thread = {
+			userId: "user-1",
+			threadId: "thread-1",
+			type: ThreadType.CHAT,
+			title: "Thread",
+			messages: [legacyMessage],
+		};
+
+		expect(normalizeThreadMessages(thread.messages)).toEqual([
+			{
+				messageId: "msg-thread-1",
+				role: MessageRole.USER,
+				timestamp: 100,
+				schemaVersion: 2,
+				metadata: undefined,
+				parts: [{ kind: "text", text: "hello from storage" }],
+			},
+		]);
+		expect(normalizeThreadObject(thread)).toEqual({
+			...thread,
+			messages: [
+				{
+					messageId: "msg-thread-1",
+					role: MessageRole.USER,
+					timestamp: 100,
+					schemaVersion: 2,
+					metadata: undefined,
+					parts: [{ kind: "text", text: "hello from storage" }],
+				},
 			],
 		});
 	});

@@ -5,6 +5,7 @@ import type {
 	ThreadObject,
 	ThreadType,
 } from "@/types/memory";
+import { normalizeMessageObject, normalizeThreadObject } from "@/utils/message";
 
 export class ThreadService {
 	private memoryModule: MemoryModule;
@@ -22,7 +23,8 @@ export class ThreadService {
 			return;
 		}
 
-		return await threadMemory.getThread(userId, threadId);
+		const thread = await threadMemory.getThread(userId, threadId);
+		return thread ? normalizeThreadObject(thread) : undefined;
 	}
 
 	public async createThread(
@@ -61,6 +63,10 @@ export class ThreadService {
 			return;
 		}
 
-		await threadMemory.addMessagesToThread(userId, threadId, messages);
+		await threadMemory.addMessagesToThread(
+			userId,
+			threadId,
+			messages.map(normalizeMessageObject),
+		);
 	}
 }

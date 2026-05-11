@@ -21,6 +21,7 @@ import {
 	createMessageFromQueryInput,
 	createModelInputMessage,
 	createModelInputMessageFromQueryInput,
+	normalizeThreadObject,
 } from "@/utils/message";
 import type { IntentFulfillService } from "./intents/fulfill.service";
 import type { IntentTriggerService } from "./intents/trigger.service";
@@ -189,7 +190,8 @@ export class QueryService {
 		let threadId = threadMetadata.threadId;
 		let thread: ThreadObject | undefined;
 		if (threadId) {
-			thread = await threadMemory?.getThread(userId, threadId);
+			const storedThread = await threadMemory?.getThread(userId, threadId);
+			thread = storedThread ? normalizeThreadObject(storedThread) : undefined;
 			if (!thread && !isA2A) {
 				throw new AinHttpError(StatusCodes.NOT_FOUND, "Thread not found");
 			}

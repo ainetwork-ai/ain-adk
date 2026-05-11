@@ -200,6 +200,105 @@ describe("QueryService", () => {
 					}),
 				],
 			}),
+			);
+		});
+
+	it("normalizes legacy stored thread messages before intent processing", async () => {
+		const intentTriggering = jest.fn(async () => ({
+			intents: [{ subquery: "next question" }],
+			needsAggregation: false,
+		}));
+		const intentFulfill = jest.fn(async function* () {
+			return createTextMessage({
+				messageId: "model-msg-3",
+				role: MessageRole.MODEL,
+				timestamp: 900,
+				text: "done",
+			});
+		});
+
+		const queryService = new QueryService(
+			{
+				getModel: () => ({
+					generateMessages: () => [],
+					fetch: async () => ({ content: "New Chat" }),
+				}),
+				getModelOptions: () => undefined,
+			} as any,
+			{
+				getThreadMemory: () => ({
+					getThread: jest.fn(async () => ({
+						type: ThreadType.CHAT,
+						userId: "user-1",
+						threadId: "thread-1",
+						title: "Thread",
+						messages: [
+							{
+								messageId: "legacy-msg-1",
+								role: MessageRole.USER,
+								timestamp: 100,
+								content: {
+									type: "text",
+									parts: ["legacy hello"],
+								},
+							},
+						],
+					})),
+					addMessagesToThread: jest.fn(async () => {}),
+				}),
+			} as any,
+			{
+				intentTriggering,
+			} as any,
+			{
+				intentFulfill,
+			} as any,
+		);
+
+		const stream = queryService.handleQuery(
+			{
+				type: ThreadType.CHAT,
+				userId: "user-1",
+				threadId: "thread-1",
+			},
+			{
+				query: "next question",
+			},
+		);
+
+		await expect(stream.next()).resolves.toMatchObject({
+			done: true,
+		});
+		expect(intentTriggering).toHaveBeenCalledWith(
+			"next question",
+			expect.objectContaining({
+				messages: [
+					{
+						messageId: "legacy-msg-1",
+						role: MessageRole.USER,
+						timestamp: 100,
+						metadata: undefined,
+						schemaVersion: 2,
+						parts: [{ kind: "text", text: "legacy hello" }],
+					},
+				],
+			}),
+		);
+		expect(intentFulfill).toHaveBeenCalledWith(
+			[{ subquery: "next question" }],
+			expect.objectContaining({
+				messages: [
+					expect.objectContaining({
+						schemaVersion: 2,
+						parts: [{ kind: "text", text: "legacy hello" }],
+					}),
+				],
+			}),
+			"next question",
+			false,
+			expect.objectContaining({
+				schemaVersion: 2,
+			}),
 		);
 	});
 });
