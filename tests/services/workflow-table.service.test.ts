@@ -9,6 +9,7 @@ describe("WorkflowTableService", () => {
 		layout: "matrix",
 		rowHeader: "구분",
 		title: "일일 매출 분석",
+		unit: "원",
 		rows: ["Rev", "Rev(%)", "Cover", "Cover(%)", "AveCheck"],
 		columns: [
 			"Breakfast",
@@ -82,6 +83,7 @@ describe("WorkflowTableService", () => {
 			formulas: matrixBlock.formulas,
 			columnFormats: {},
 		});
+		expect(rendered.data.metadata).toEqual({ unit: "원" });
 		expect(rendered.data.table.headers).toEqual([
 			"구분",
 			"Breakfast",
@@ -513,7 +515,13 @@ describe("WorkflowTableService", () => {
 			{ store: "Hongdae", grossSales: 900000, refunds: 30000 },
 		]);
 
-		const rendered = service.renderTable(recordBlock, rawContent);
+		const rendered = service.renderTable(
+			{
+				...recordBlock,
+				unit: "KRW",
+			},
+			rawContent,
+		);
 
 		expect(rendered.data.spec).toEqual({
 			layout: "records",
@@ -521,6 +529,7 @@ describe("WorkflowTableService", () => {
 			formulas: recordBlock.formulas,
 			columnFormats: {},
 		});
+		expect(rendered.data.metadata).toEqual({ unit: "KRW" });
 		expect(rendered.data.table.headers).toEqual([
 			"store",
 			"grossSales",

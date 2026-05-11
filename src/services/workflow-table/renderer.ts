@@ -67,6 +67,7 @@ export class WorkflowTableRenderer {
 				formulas: block.formulas,
 				columnFormats: definition.columnFormats,
 			},
+			...(block.unit ? { metadata: { unit: block.unit } } : {}),
 			table: {
 				headers: [definition.rowHeader, ...definition.visibleColumns],
 				rows: definition.visibleRows.map((row) => ({
@@ -101,6 +102,7 @@ export class WorkflowTableRenderer {
 				formulas: block.formulas,
 				columnFormats: definition.columnFormats,
 			},
+			...(block.unit ? { metadata: { unit: block.unit } } : {}),
 			table: {
 				headers: definition.visibleColumns,
 				rows: [

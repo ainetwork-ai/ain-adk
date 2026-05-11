@@ -465,6 +465,13 @@ function validateWorkflowDefinition(
 			);
 		}
 
+		if (block.unit !== undefined && typeof block.unit !== "string") {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Table block "${block.blockId}" unit must be a string.`,
+			);
+		}
+
 		if (
 			block.formulas &&
 			(!Array.isArray(block.formulas) ||

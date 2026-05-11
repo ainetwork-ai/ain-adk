@@ -235,6 +235,7 @@ export interface WorkflowTableBlock {
 	type: "table";
 	layout: WorkflowTableLayout;
 	title?: string;
+	unit?: string;
 	rowHeader?: string;
 	rows?: string[];
 	columns: string[];
@@ -288,8 +289,13 @@ export interface WorkflowRenderedTableGridRow {
 	kind?: "data" | "total";
 }
 
+export interface WorkflowRenderedTableMetadata {
+	unit?: string;
+}
+
 export interface WorkflowRenderedTableData {
 	spec: WorkflowRenderedTableSpec;
+	metadata?: WorkflowRenderedTableMetadata;
 	table: {
 		headers: string[];
 		rows: WorkflowRenderedTableGridRow[];
