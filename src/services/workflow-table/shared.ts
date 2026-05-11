@@ -59,12 +59,16 @@ export type ParsedMatrixFormula =
 			args: [string, string];
 	  };
 
+export type RecordExpressionOperand =
+	| { kind: "column"; name: string }
+	| { kind: "number"; value: number };
+
 export type ParsedRecordFormula =
 	| {
 			raw: string;
 			type: "expression";
 			target: string;
-			operands: string[];
+			operands: RecordExpressionOperand[];
 			operators: Array<"+" | "-" | "*" | "/">;
 	  }
 	| {

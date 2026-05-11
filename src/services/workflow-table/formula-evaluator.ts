@@ -84,7 +84,14 @@ export class WorkflowTableFormulaEvaluator {
 		for (const [index, formula] of computedFormulas.entries()) {
 			const futureProduced = new Set(producedByFormula.slice(index + 1));
 			const referencedColumns =
-				formula.type === "expression" ? formula.operands : formula.columns;
+				formula.type === "expression"
+					? formula.operands
+							.filter(
+								(operand): operand is { kind: "column"; name: string } =>
+									operand.kind === "column",
+							)
+							.map((operand) => operand.name)
+					: formula.columns;
 			const laterColumns = referencedColumns.filter(
 				(column) => !available.has(column) && futureProduced.has(column),
 			);
@@ -776,8 +783,10 @@ export class WorkflowTableFormulaEvaluator {
 		warnings: string[],
 	): void {
 		for (const row of rows) {
-			const values = formula.operands.map((column) =>
-				parseNumberish(row[column]),
+			const values = formula.operands.map((operand) =>
+				operand.kind === "column"
+					? parseNumberish(row[operand.name])
+					: operand.value,
 			);
 			row[formula.target] = this.evaluateRecordExpression(
 				values,
