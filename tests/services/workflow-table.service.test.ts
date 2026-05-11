@@ -715,6 +715,63 @@ describe("WorkflowTableService", () => {
 		]);
 	});
 
+	it("supports numeric literals in record expressions", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "var-pct-records",
+			type: "table",
+			layout: "records",
+			title: "고객수 변동",
+			columns: [
+				"구분",
+				"2026 고객수",
+				"2025 고객수",
+				"Var.(명)",
+				"Var.(명%)",
+			],
+			formulas: [
+				"Var.(명) = 2026 고객수 - 2025 고객수",
+				"Var.(명%) = 2026 고객수 / 2025 고객수 * 100",
+			],
+		};
+		const rawContent = JSON.stringify([
+			{
+				구분: "A",
+				"2026 고객수": 1300,
+				"2025 고객수": 1000,
+			},
+		]);
+
+		const rendered = service.renderTable(block, rawContent);
+
+		expect(rendered.data.table.rows).toEqual([
+			{
+				kind: "data",
+				cells: ["A", 1300, 1000, 300, 130],
+			},
+		]);
+	});
+
+	it("prefers column references when a numeric-shaped column collides with a literal", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "numeric-column-name",
+			type: "table",
+			layout: "records",
+			title: "숫자 이름 컬럼",
+			columns: ["store", "100", "result"],
+			formulas: ["result = 100 + store"],
+		};
+		const rawContent = JSON.stringify([{ store: 5, "100": 42 }]);
+
+		const rendered = service.renderTable(block, rawContent);
+
+		expect(rendered.data.table.rows).toEqual([
+			{
+				kind: "data",
+				cells: [5, 42, 47],
+			},
+		]);
+	});
+
 	it("rejects record formulas that depend on later formulas", () => {
 		const block: WorkflowTableBlock = {
 			blockId: "record-formula-order",

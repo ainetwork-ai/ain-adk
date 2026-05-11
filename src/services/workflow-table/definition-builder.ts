@@ -4,6 +4,7 @@ import {
 	type ParsedMatrixFormula,
 	type ParsedRecordFormula,
 	type RecordDefinition,
+	type RecordExpressionOperand,
 } from "@/services/workflow-table/shared.js";
 import type { WorkflowTableBlock } from "@/types/memory.js";
 
@@ -539,14 +540,15 @@ ${jsonShape}`;
 		columns: string[],
 		formula: string,
 	): {
-		operands: string[];
+		operands: RecordExpressionOperand[];
 		operators: Array<"+" | "-" | "*" | "/">;
 	} {
-		const operands: string[] = [];
+		const operands: RecordExpressionOperand[] = [];
 		const operators: Array<"+" | "-" | "*" | "/"> = [];
 		const sortedColumns = [...columns].sort(
 			(left, right) => right.length - left.length,
 		);
+		const numberPattern = /\d+(?:\.\d+)?/y;
 		let index = 0;
 
 		while (index < expression.length) {
@@ -557,12 +559,22 @@ ${jsonShape}`;
 			const matchedColumn = sortedColumns.find((column) =>
 				expression.startsWith(column, index),
 			);
-			if (!matchedColumn) {
-				throw new Error(`Unsupported record table formula: ${formula}`);
+			if (matchedColumn) {
+				operands.push({ kind: "column", name: matchedColumn });
+				index += matchedColumn.length;
+			} else {
+				numberPattern.lastIndex = index;
+				const numericMatch = numberPattern.exec(expression);
+				if (!numericMatch || numericMatch.index !== index) {
+					throw new Error(`Unsupported record table formula: ${formula}`);
+				}
+				const value = Number(numericMatch[0]);
+				if (!Number.isFinite(value)) {
+					throw new Error(`Unsupported record table formula: ${formula}`);
+				}
+				operands.push({ kind: "number", value });
+				index += numericMatch[0].length;
 			}
-
-			operands.push(matchedColumn);
-			index += matchedColumn.length;
 
 			while (index < expression.length && /\s/.test(expression[index])) {
 				index += 1;
