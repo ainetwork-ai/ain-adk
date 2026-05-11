@@ -58,19 +58,23 @@ export class WorkflowTableRenderer {
 			spec: {
 				layout: "matrix",
 				rowHeader: definition.rowHeader,
-				rows: definition.rows,
-				columns: definition.columns,
+				rows: definition.visibleRows,
+				columns: definition.visibleColumns,
+				...(block.hiddenRows?.length ? { hiddenRows: block.hiddenRows } : {}),
+				...(block.hiddenColumns?.length
+					? { hiddenColumns: block.hiddenColumns }
+					: {}),
 				formulas: block.formulas,
 				columnFormats: definition.columnFormats,
 			},
 			table: {
-				headers: [definition.rowHeader, ...definition.columns],
-				rows: definition.rows.map((row) => ({
+				headers: [definition.rowHeader, ...definition.visibleColumns],
+				rows: definition.visibleRows.map((row) => ({
 					key: row,
 					kind: "data",
 					cells: [
 						row,
-						...definition.columns.map(
+						...definition.visibleColumns.map(
 							(column) => matrix[row]?.[column] ?? null,
 						),
 					],
@@ -90,22 +94,27 @@ export class WorkflowTableRenderer {
 		return {
 			spec: {
 				layout: "records",
-				columns: definition.columns,
+				columns: definition.visibleColumns,
+				...(block.hiddenColumns?.length
+					? { hiddenColumns: block.hiddenColumns }
+					: {}),
 				formulas: block.formulas,
 				columnFormats: definition.columnFormats,
 			},
 			table: {
-				headers: definition.columns,
+				headers: definition.visibleColumns,
 				rows: [
 					...rows.map((row) => ({
 						kind: "data" as const,
-						cells: definition.columns.map((column) => row[column] ?? null),
+						cells: definition.visibleColumns.map(
+							(column) => row[column] ?? null,
+						),
 					})),
 					...(totalRow
 						? [
 								{
 									kind: "total" as const,
-									cells: definition.columns.map(
+									cells: definition.visibleColumns.map(
 										(column) => totalRow[column] ?? null,
 									),
 								},
@@ -122,12 +131,12 @@ export class WorkflowTableRenderer {
 		matrix: MatrixTable,
 	): string {
 		const lines = [
-			`| ${[definition.rowHeader, ...definition.columns].join(" | ")} |`,
-			`| ${["---", ...definition.columns.map(() => "---:")].join(" | ")} |`,
+			`| ${[definition.rowHeader, ...definition.visibleColumns].join(" | ")} |`,
+			`| ${["---", ...definition.visibleColumns.map(() => "---:")].join(" | ")} |`,
 		];
 
-		for (const row of definition.rows) {
-			const values = definition.columns.map((column) =>
+		for (const row of definition.visibleRows) {
+			const values = definition.visibleColumns.map((column) =>
 				this.formatNumericCell(
 					matrix[row]?.[column] ?? null,
 					definition.columnFormats[column],
@@ -147,7 +156,7 @@ export class WorkflowTableRenderer {
 		totalRow?: RecordTableRow,
 	): string {
 		const numericColumns = new Set(
-			definition.columns.filter((column) => {
+			definition.visibleColumns.filter((column) => {
 				if (definition.columnFormats[column]?.kind === "text") {
 					return false;
 				}
@@ -155,8 +164,8 @@ export class WorkflowTableRenderer {
 			}),
 		);
 		const lines = [
-			`| ${definition.columns.join(" | ")} |`,
-			`| ${definition.columns
+			`| ${definition.visibleColumns.join(" | ")} |`,
+			`| ${definition.visibleColumns
 				.map((column, index) =>
 					index === 0 && !numericColumns.has(column) ? "---" : "---:",
 				)
@@ -165,7 +174,7 @@ export class WorkflowTableRenderer {
 
 		for (const row of rows) {
 			lines.push(
-				`| ${definition.columns
+				`| ${definition.visibleColumns
 					.map((column) =>
 						this.formatRecordCell(
 							row[column] ?? null,
@@ -179,7 +188,7 @@ export class WorkflowTableRenderer {
 
 		if (totalRow) {
 			lines.push(
-				`| ${definition.columns
+				`| ${definition.visibleColumns
 					.map(
 						(column) =>
 							`**${this.formatRecordCell(

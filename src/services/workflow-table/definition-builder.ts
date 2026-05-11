@@ -38,6 +38,18 @@ export class WorkflowTableDefinitionBuilder {
 
 		const rows = [...block.rows];
 		const columns = [...block.columns];
+		const hiddenRows = this.resolveHiddenItems(
+			block.hiddenRows,
+			rows,
+			"row",
+			block.blockId,
+		);
+		const hiddenColumns = this.resolveHiddenItems(
+			block.hiddenColumns,
+			columns,
+			"column",
+			block.blockId,
+		);
 		const formulas = (block.formulas || []).map((formula) =>
 			this.parseMatrixFormula(formula, rows, columns),
 		);
@@ -124,7 +136,9 @@ export class WorkflowTableDefinitionBuilder {
 			layout: "matrix",
 			rowHeader: block.rowHeader || "구분",
 			rows,
+			visibleRows: rows.filter((row) => !hiddenRows.has(row)),
 			columns,
+			visibleColumns: columns.filter((column) => !hiddenColumns.has(column)),
 			columnFormats: block.columnFormats || {},
 			sourceRows: rows.filter((row) => !computedRowTargets.has(row)),
 			sourceColumns: columns.filter(
@@ -146,6 +160,17 @@ export class WorkflowTableDefinitionBuilder {
 		}
 
 		const columns = [...block.columns];
+		const hiddenColumns = this.resolveHiddenItems(
+			block.hiddenColumns,
+			columns,
+			"column",
+			block.blockId,
+		);
+		if (block.hiddenRows?.length) {
+			throw new Error(
+				`Record table block "${block.blockId}" does not support hiddenRows because record rows are extracted data.`,
+			);
+		}
 		const formulas = (block.formulas || []).map((formula) =>
 			this.parseRecordFormula(formula, columns),
 		);
@@ -185,6 +210,7 @@ export class WorkflowTableDefinitionBuilder {
 		return {
 			layout: "records",
 			columns,
+			visibleColumns: columns.filter((column) => !hiddenColumns.has(column)),
 			columnFormats: block.columnFormats || {},
 			sourceColumns: columns.filter((column) => !computedColumns.has(column)),
 			computedColumns,
@@ -192,6 +218,23 @@ export class WorkflowTableDefinitionBuilder {
 			formulas,
 			totalFormula: totalFormulas[0],
 		};
+	}
+
+	private resolveHiddenItems(
+		hiddenItems: string[] | undefined,
+		allowedItems: string[],
+		itemKind: "column" | "row",
+		blockId: string,
+	): Set<string> {
+		const hiddenSet = new Set(hiddenItems || []);
+		for (const item of hiddenSet) {
+			if (!allowedItems.includes(item)) {
+				throw new Error(
+					`Table block "${blockId}" hidden ${itemKind} "${item}" must be listed in ${itemKind === "row" ? "rows" : "columns"}.`,
+				);
+			}
+		}
+		return hiddenSet;
 	}
 
 	private buildMatrixExtractionPrompt(

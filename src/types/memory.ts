@@ -238,6 +238,8 @@ export interface WorkflowTableBlock {
 	rowHeader?: string;
 	rows?: string[];
 	columns: string[];
+	hiddenRows?: string[];
+	hiddenColumns?: string[];
 	formulas?: string[];
 	sourceTaskIds?: string[];
 	prompt?: string;
@@ -274,6 +276,8 @@ export interface WorkflowRenderedTableSpec {
 	rowHeader?: string;
 	rows?: string[];
 	columns: string[];
+	hiddenRows?: string[];
+	hiddenColumns?: string[];
 	formulas?: string[];
 	columnFormats?: Record<string, WorkflowTableColumnFormat>;
 }

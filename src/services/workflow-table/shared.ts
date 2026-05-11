@@ -83,7 +83,9 @@ export type MatrixDefinition = {
 	layout: "matrix";
 	rowHeader: string;
 	rows: string[];
+	visibleRows: string[];
 	columns: string[];
+	visibleColumns: string[];
 	columnFormats: Record<string, WorkflowTableColumnFormat>;
 	sourceRows: string[];
 	sourceColumns: string[];
@@ -99,6 +101,7 @@ export type MatrixDefinition = {
 export type RecordDefinition = {
 	layout: "records";
 	columns: string[];
+	visibleColumns: string[];
 	columnFormats: Record<string, WorkflowTableColumnFormat>;
 	sourceColumns: string[];
 	computedColumns: Set<string>;

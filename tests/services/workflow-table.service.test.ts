@@ -124,6 +124,79 @@ describe("WorkflowTableService", () => {
 		]);
 	});
 
+	it("hides matrix rows and columns from output after formulas are evaluated", () => {
+		const block: WorkflowTableBlock = {
+			...matrixBlock,
+			blockId: "daily-sales-hidden",
+			hiddenRows: ["Rev(%)", "Cover(%)"],
+			hiddenColumns: ["Plan", "LastYear"],
+		};
+		const rawContent = JSON.stringify({
+			Rev: {
+				Breakfast: 100,
+				Lunch: 200,
+				Dinner: 300,
+				Midnight: 0,
+				Plan: 1000,
+				LastYear: 800,
+			},
+			Cover: {
+				Breakfast: 10,
+				Lunch: 20,
+				Dinner: 30,
+				Midnight: 0,
+				Plan: 100,
+				LastYear: 80,
+			},
+		});
+
+		const rendered = service.renderTable(block, rawContent);
+
+		expect(rendered.data.spec).toMatchObject({
+			layout: "matrix",
+			rows: ["Rev", "Cover", "AveCheck"],
+			columns: [
+				"Breakfast",
+				"Lunch",
+				"Dinner",
+				"Midnight",
+				"Actual",
+				"vsPlanPct",
+				"vsLYPct",
+			],
+			hiddenRows: ["Rev(%)", "Cover(%)"],
+			hiddenColumns: ["Plan", "LastYear"],
+		});
+		expect(rendered.data.table.headers).toEqual([
+			"구분",
+			"Breakfast",
+			"Lunch",
+			"Dinner",
+			"Midnight",
+			"Actual",
+			"vsPlanPct",
+			"vsLYPct",
+		]);
+		expect(rendered.data.table.rows.map((row) => row.key)).toEqual([
+			"Rev",
+			"Cover",
+			"AveCheck",
+		]);
+		expect(rendered.data.table.rows[0].cells).toEqual([
+			"Rev",
+			100,
+			200,
+			300,
+			0,
+			600,
+			60,
+			75,
+		]);
+		expect(rendered.content).not.toContain("| Plan |");
+		expect(rendered.content).not.toContain("Rev(%)");
+		expect(rendered.content).toContain("| Rev | 100 | 200 | 300 | 0 | 600 | 60% | 75% |");
+	});
+
 	it("rejects matrix formulas that depend on later formulas", () => {
 		const block: WorkflowTableBlock = {
 			blockId: "daily-sales-ordered-differently",
@@ -475,6 +548,44 @@ describe("WorkflowTableService", () => {
 		expect(rendered.content).toContain(
 			"| **Total** | **2,100,000** | **80,000** | **2,020,000** |",
 		);
+	});
+
+	it("hides record columns from output after formulas and totals are evaluated", () => {
+		const block: WorkflowTableBlock = {
+			...recordBlock,
+			blockId: "store-sales-hidden",
+			hiddenColumns: ["grossSales", "refunds"],
+		};
+		const rawContent = JSON.stringify([
+			{ store: "Gangnam", grossSales: "1,200,000", refunds: "50,000" },
+			{ store: "Hongdae", grossSales: 900000, refunds: 30000 },
+		]);
+
+		const rendered = service.renderTable(block, rawContent);
+
+		expect(rendered.data.spec).toMatchObject({
+			layout: "records",
+			columns: ["store", "netSales"],
+			hiddenColumns: ["grossSales", "refunds"],
+		});
+		expect(rendered.data.table.headers).toEqual(["store", "netSales"]);
+		expect(rendered.data.table.rows).toEqual([
+			{
+				kind: "data",
+				cells: ["Gangnam", 1150000],
+			},
+			{
+				kind: "data",
+				cells: ["Hongdae", 870000],
+			},
+			{
+				kind: "total",
+				cells: ["Total", 2020000],
+			},
+		]);
+		expect(rendered.content).not.toContain("grossSales");
+		expect(rendered.content).not.toContain("refunds");
+		expect(rendered.content).toContain("| Gangnam | 1,150,000 |");
 	});
 
 	it("treats @Total as the reserved total-row formula", () => {

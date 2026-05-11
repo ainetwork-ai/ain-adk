@@ -476,6 +476,20 @@ function validateWorkflowDefinition(
 			);
 		}
 
+		for (const key of ["hiddenRows", "hiddenColumns"] as const) {
+			const value = block[key];
+			if (
+				value &&
+				(!Array.isArray(value) ||
+					value.some((item) => typeof item !== "string"))
+			) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Table block "${block.blockId}" must use ${key}: string[].`,
+				);
+			}
+		}
+
 		if (
 			block.columnFormats &&
 			(typeof block.columnFormats !== "object" ||
