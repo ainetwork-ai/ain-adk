@@ -9,6 +9,7 @@ import {
 } from "@/types/connector.js";
 import type { MCPConfig } from "@/types/mcp.js";
 import { loggers } from "@/utils/logger.js";
+import { withAdkThinkingArg } from "@/utils/tool-args.js";
 import { MCPConnector } from "./mcp.connector.js";
 
 /**
@@ -101,26 +102,17 @@ export class MCPModule {
 	getTools(prompt: string): Array<ConnectorTool> {
 		const allTools: Array<ConnectorTool> = [];
 		for (const conn of this.mcpConnectors.values()) {
+			if (!conn.enabled) {
+				continue;
+			}
+
 			for (const tool of conn.tools) {
-				// add thinking_text inputSchema for each tool
-				const finalInputSchema: any = {
-					type: "object",
-					properties: { ...(tool.inputSchema?.properties || {}) },
-					required: [...(tool.inputSchema?.required || [])],
-				};
-
-				finalInputSchema.properties["thinking_text"] = {
-					type: "string",
-					description: prompt,
-				};
-				finalInputSchema.required.push("thinking_text");
-
 				allTools.push({
 					toolName: tool.toolName,
 					connectorName: tool.connectorName,
 					protocol: tool.protocol,
 					description: tool.description,
-					inputSchema: finalInputSchema,
+					inputSchema: withAdkThinkingArg(tool.inputSchema, prompt),
 				});
 			}
 		}
@@ -135,7 +127,10 @@ export class MCPModule {
 	 * @returns Promise resolving to the tool's execution result
 	 * @throws Error if the MCP server for the tool is not found
 	 */
-	async useTool(tool: ConnectorTool, _args?: any): Promise<string> {
+	async useTool(
+		tool: ConnectorTool,
+		_args?: Record<string, unknown>,
+	): Promise<string> {
 		const { connectorName, toolName } = tool;
 		const client = this.mcpConnectors.get(connectorName)?.client;
 
@@ -168,8 +163,20 @@ export class MCPModule {
 	 * all MCP connections are properly closed.
 	 */
 	async cleanup() {
-		for (const conn of this.mcpConnectors.values()) {
-			await conn.client?.close();
+		const results = await Promise.allSettled(
+			Array.from(this.mcpConnectors.entries()).map(async ([name, conn]) => {
+				if (conn.client) {
+					await conn.client.close();
+				}
+				return name;
+			}),
+		);
+		for (const result of results) {
+			if (result.status === "rejected") {
+				loggers.mcp.error("Failed to close MCP connector", {
+					error: result.reason,
+				});
+			}
 		}
 	}
 }

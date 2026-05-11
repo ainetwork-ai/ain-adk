@@ -35,6 +35,16 @@ export const createUserWorkflowApiRouter = (): Router => {
 	router.get("/:id", checkUserWorkflowMemory, controller.handleGetWorkflow);
 	router.post("/", checkUserWorkflowMemory, controller.handleCreateWorkflow);
 	router.post(
+		"/:id/execute",
+		checkUserWorkflowMemory,
+		controller.handleExecuteWorkflow,
+	);
+	router.post(
+		"/:id/execute/stream",
+		checkUserWorkflowMemory,
+		controller.handleExecuteWorkflowStream,
+	);
+	router.post(
 		"/update/:id",
 		checkUserWorkflowMemory,
 		controller.handleUpdateWorkflow,

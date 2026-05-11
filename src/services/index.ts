@@ -3,6 +3,7 @@ export { IntentFulfillService } from "./intents/fulfill.service.js";
 export { IntentTriggerService } from "./intents/trigger.service.js";
 export { QueryService } from "./query.service.js";
 export { SchedulerService } from "./scheduler.service.js";
+export { ToolCallingService } from "./tool-calling.service.js";
 export { UserWorkflowService } from "./user-workflow.service.js";
 export { UserWorkflowCoordinatorService } from "./user-workflow-coordinator.service.js";
 export { WorkflowExecutionService } from "./workflow-execution.service.js";

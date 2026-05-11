@@ -1,77 +1,45 @@
 import { randomUUID } from "node:crypto";
 import { getManifest } from "@/config/manifest";
-import type {
-	A2AModule,
-	MCPModule,
-	MemoryModule,
-	ModelModule,
-} from "@/modules";
+import type { MemoryModule, ModelModule } from "@/modules";
 import type { OnIntentFallback } from "@/types/agent";
-import { CONNECTOR_PROTOCOL_TYPE, type ConnectorTool } from "@/types/connector";
 import {
 	type FulfillmentResult,
 	type Intent,
-	type MessageObject,
 	MessageRole,
 	type ThreadObject,
 	type TriggeredIntent,
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
+import { appendTextMessageToThread } from "@/utils/thread-messages";
+import { sanitizeThinkingData } from "@/utils/tool-args";
 import { PIIFilterMode, type PIIService } from "../pii.service";
 import fulfillPrompt from "../prompts/fulfill";
 import toolSelectPrompt from "../prompts/tool-select";
+import type { ToolCallingService } from "../tool-calling.service";
 import { AggregateService } from "./aggregate.service";
 
 export class IntentFulfillService {
 	private modelModule: ModelModule;
 	private memoryModule: MemoryModule;
-	private a2aModule?: A2AModule;
-	private mcpModule?: MCPModule;
 	private onIntentFallback?: OnIntentFallback;
 	private aggregateService: AggregateService;
 	private piiService?: PIIService;
+	private toolCallingService: ToolCallingService;
 
 	constructor(
 		modelModule: ModelModule,
 		memoryModule: MemoryModule,
-		a2aModule?: A2AModule,
-		mcpModule?: MCPModule,
+		toolCallingService: ToolCallingService,
 		onIntentFallback?: OnIntentFallback,
 		piiService?: PIIService,
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
-		this.a2aModule = a2aModule;
-		this.mcpModule = mcpModule;
+		this.toolCallingService = toolCallingService;
 		this.onIntentFallback = onIntentFallback;
 		this.aggregateService = new AggregateService(modelModule, memoryModule);
 		this.piiService = piiService;
-	}
-
-	private async addToThreadMessages(
-		thread: ThreadObject,
-		params: {
-			role: MessageRole;
-			content: string;
-			metadata?: Record<string, unknown>;
-		},
-	) {
-		try {
-			const threadMemory = this.memoryModule.getThreadMemory();
-			const { userId, threadId } = thread;
-			const newMessage: MessageObject = {
-				messageId: randomUUID(),
-				role: params.role,
-				timestamp: Date.now(),
-				content: { type: "text", parts: [params.content] },
-				metadata: params.metadata,
-			};
-			thread.messages.push(newMessage);
-			await threadMemory?.addMessagesToThread(userId, threadId, [newMessage]);
-		} catch (error) {
-			loggers.intentStream.error("Error adding message to thread", error);
-		}
 	}
 
 	/**
@@ -98,7 +66,6 @@ export class IntentFulfillService {
 		const prompt = await fulfillPrompt(this.memoryModule, intent);
 
 		const modelInstance = this.modelModule.getModel();
-		const modelOptions = this.modelModule.getModelOptions();
 		const messages = modelInstance.generateMessages({
 			query,
 			thread,
@@ -110,140 +77,28 @@ export class IntentFulfillService {
 			messages,
 		});
 
-		const tools: ConnectorTool[] = [];
 		const toolPrompt = await toolSelectPrompt(this.memoryModule);
-		this.mcpModule && tools.push(...this.mcpModule.getTools(toolPrompt));
-		this.a2aModule &&
-			tools.push(...(await this.a2aModule.getTools(toolPrompt)));
+		const tools = await this.toolCallingService.getTools({
+			toolPrompt,
+			mode: "all",
+		});
+		const stream = this.toolCallingService.run({
+			messages,
+			tools,
+			query,
+			thread,
+			toolChoice: intent?.toolChoice === "required" ? "required" : "auto",
+		});
 
-		const processList: string[] = [];
-		let isFirstCall = true;
-
-		while (true) {
-			const functions = modelInstance.convertToolsToFunctions(tools);
-			const toolChoice =
-				isFirstCall && intent?.toolChoice === "required" && functions.length > 0
-					? ("required" as const)
-					: ("auto" as const);
-			const options = { ...modelOptions, toolChoice };
-			const responseStream = await modelInstance.fetchStreamWithContextMessage(
-				messages,
-				functions,
-				options,
-			);
-			isFirstCall = false;
-
-			const assembledToolCalls: {
-				id: string;
-				type: "function";
-				function: { name: string; arguments: string };
-			}[] = [];
-
-			for await (const chunk of responseStream) {
-				const delta = chunk.delta;
-				if (delta?.tool_calls) {
-					for (const { index, id, function: func } of delta.tool_calls) {
-						assembledToolCalls[index] ??= {
-							id: "",
-							type: "function",
-							function: { name: "", arguments: "" },
-						};
-
-						if (id) assembledToolCalls[index].id = id;
-						if (func?.name) assembledToolCalls[index].function.name = func.name;
-						if (func?.arguments)
-							assembledToolCalls[index].function.arguments += func.arguments;
-					}
-				} else if (chunk.delta?.content) {
-					yield {
-						event: "text_chunk",
-						data: { delta: chunk.delta.content },
-					};
-				}
-			}
-
-			loggers.intentStream.debug("assembledToolCalls", {
-				threadId: thread.threadId,
-				assembledToolCalls,
-			});
-
-			if (assembledToolCalls.length > 0) {
-				for (const toolCall of assembledToolCalls) {
-					const toolName = toolCall.function.name;
-					let selectedTool: ConnectorTool | undefined;
-					for (const [index, toolTmp] of tools.entries()) {
-						if (toolTmp.toolName === toolName) {
-							if (toolTmp.protocol === CONNECTOR_PROTOCOL_TYPE.A2A) {
-								// remove used tool to prevent infinite loop
-								selectedTool = tools.splice(index, 1)[0];
-								break;
-							}
-							selectedTool = toolTmp;
-						}
-					}
-
-					if (!selectedTool) {
-						// it cannot be happened...
-						continue;
-					}
-
-					const toolArgs = JSON.parse(toolCall.function.arguments);
-					const thinkData = {
-						title: `[${getManifest().name}] ${selectedTool.protocol} 실행: ${toolName}`,
-						description: `${toolArgs.thinking_text || ""}`,
-					};
-					yield {
-						event: "thinking_process",
-						data: thinkData,
-					};
-
-					let toolResult = "";
-					if (
-						this.mcpModule &&
-						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.MCP
-					) {
-						loggers.intent.info("MCP tool call", { toolName, toolArgs });
-						toolResult = await this.mcpModule.useTool(selectedTool, toolArgs);
-					} else if (
-						this.a2aModule &&
-						selectedTool.protocol === CONNECTOR_PROTOCOL_TYPE.A2A
-					) {
-						loggers.intent.info("A2A tool call", { toolName });
-						const a2aStream = this.a2aModule.useTool(
-							selectedTool,
-							query,
-							thread.threadId,
-						);
-						// yield intermediate events and get final result
-						let result = await a2aStream.next();
-						while (!result.done) {
-							if (result.value.event === "thinking_process") {
-								yield result.value;
-							}
-							result = await a2aStream.next();
-						}
-						toolResult = result.value;
-					} else {
-						// Unrecognized tool type. It cannot be happened...
-						loggers.intent.warn(
-							`Unrecognized tool type: ${selectedTool.protocol}`,
-						);
-						continue;
-					}
-
-					loggers.intent.debug("Tool Result", { toolResult });
-
-					processList.push(toolResult);
-					modelInstance.appendMessages(messages, toolResult);
-				}
-			} else {
-				break;
-			}
+		let result = await stream.next();
+		while (!result.done) {
+			yield result.value;
+			result = await stream.next();
 		}
 
 		loggers.intent.debug("Intent fulfillment completed", {
 			threadId: thread.threadId,
-			toolCallsExecuted: processList.length,
+			toolCallsExecuted: result.value.toolCallsExecuted,
 			intentName: intent?.name,
 		});
 	}
@@ -317,14 +172,10 @@ export class IntentFulfillService {
 			);
 			loggers.intent.info(`Action plan: ${actionPlan}`);
 
-			// Yield thinking_process for progress visibility
-			yield {
-				event: "thinking_process",
-				data: {
-					title: `[${getManifest().name}] ${subquery}`,
-					description: actionPlan || "",
-				},
-			};
+			const intentThinking = this.buildIntentThinkingData(triggeredIntent);
+			if (intentThinking) {
+				yield { event: "thinking_process", data: intentThinking };
+			}
 
 			// Get the stream for this intent
 			const stream = this.getIntentStream(triggeredIntent, thread);
@@ -351,14 +202,10 @@ export class IntentFulfillService {
 
 				const isLastIntent = i === intents.length - 1;
 
-				// Yield thinking_process for progress visibility
-				yield {
-					event: "thinking_process",
-					data: {
-						title: `[${getManifest().name}] ${subquery}`,
-						description: actionPlan || "",
-					},
-				};
+				const intentThinking = this.buildIntentThinkingData(triggeredIntent);
+				if (intentThinking) {
+					yield { event: "thinking_process", data: intentThinking };
+				}
 
 				// Get the stream for this intent
 				const stream = this.getIntentStream(triggeredIntent, thread);
@@ -421,14 +268,10 @@ export class IntentFulfillService {
 					});
 				}
 
-				// Yield thinking_process for progress visibility
-				yield {
-					event: "thinking_process",
-					data: {
-						title: `[${getManifest().name}] ${subquery}`,
-						description: actionPlan || "",
-					},
-				};
+				const intentThinking = this.buildIntentThinkingData(triggeredIntent);
+				if (intentThinking) {
+					yield { event: "thinking_process", data: intentThinking };
+				}
 
 				// Get the stream for this intent
 				const stream = this.getIntentStream(triggeredIntent, thread);
@@ -477,11 +320,17 @@ export class IntentFulfillService {
 		}
 
 		// Save final response to memory
-		await this.addToThreadMessages(thread, {
-			role: MessageRole.MODEL,
-			content: finalResponseText,
-			metadata: collectionName ? { collectionName } : undefined,
-		});
+		try {
+			await appendTextMessageToThread(
+				this.memoryModule,
+				thread,
+				MessageRole.MODEL,
+				finalResponseText,
+				collectionName ? { collectionName } : undefined,
+			);
+		} catch (error) {
+			loggers.intentStream.error("Error adding message to thread", error);
+		}
 
 		const streamEndTime = Date.now();
 		const streamDuration = streamEndTime - streamStartTime;
@@ -490,6 +339,19 @@ export class IntentFulfillService {
 			threadId: thread.threadId,
 			duration: `${streamDuration}ms`,
 			endTime: new Date(streamEndTime).toISOString(),
+		});
+	}
+
+	private buildIntentThinkingData(
+		triggeredIntent: TriggeredIntent,
+	): Extract<StreamEvent, { event: "thinking_process" }>["data"] | null {
+		const { intent, actionPlan } = triggeredIntent;
+		if (!intent && !actionPlan) {
+			return null;
+		}
+		return sanitizeThinkingData({
+			title: `[${getManifest().name}] ${intent?.name || "intent"}`,
+			description: actionPlan || "",
 		});
 	}
 }

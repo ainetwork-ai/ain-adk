@@ -1,18 +1,20 @@
 import { defineConfig } from "tsup";
 
+const entry = ["src/**/*.ts", "!src/**/*.test.ts"];
+
 export default defineConfig([
   {
-    entry: ["src/**/*.ts"],
+    entry,
     format: "esm",
     outDir: "dist/esm",
     dts: true, // Generate .d.ts files only for the ESM build
     sourcemap: true,
-    clean: true, // Clean the dist folder before building
+    clean: ["dist/esm", "dist/cjs"], // Clean both output folders before building
     splitting: true,
     shims: true,
   },
   {
-    entry: ["src/**/*.ts"],
+    entry,
     format: "cjs",
     outDir: "dist/cjs",
     sourcemap: true,
