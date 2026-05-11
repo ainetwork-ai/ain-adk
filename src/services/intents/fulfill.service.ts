@@ -5,13 +5,13 @@ import type { OnIntentFallback } from "@/types/agent";
 import {
 	type FulfillmentResult,
 	type Intent,
-	type MessageObject,
 	MessageRole,
 	type ThreadObject,
 	type TriggeredIntent,
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
+import { appendTextMessageToThread } from "@/utils/thread-messages";
 import { sanitizeThinkingData } from "@/utils/tool-args";
 import { PIIFilterMode, type PIIService } from "../pii.service";
 import fulfillPrompt from "../prompts/fulfill";
@@ -40,31 +40,6 @@ export class IntentFulfillService {
 		this.onIntentFallback = onIntentFallback;
 		this.aggregateService = new AggregateService(modelModule, memoryModule);
 		this.piiService = piiService;
-	}
-
-	private async addToThreadMessages(
-		thread: ThreadObject,
-		params: {
-			role: MessageRole;
-			content: string;
-			metadata?: Record<string, unknown>;
-		},
-	) {
-		try {
-			const threadMemory = this.memoryModule.getThreadMemory();
-			const { userId, threadId } = thread;
-			const newMessage: MessageObject = {
-				messageId: randomUUID(),
-				role: params.role,
-				timestamp: Date.now(),
-				content: { type: "text", parts: [params.content] },
-				metadata: params.metadata,
-			};
-			thread.messages.push(newMessage);
-			await threadMemory?.addMessagesToThread(userId, threadId, [newMessage]);
-		} catch (error) {
-			loggers.intentStream.error("Error adding message to thread", error);
-		}
 	}
 
 	/**
@@ -345,11 +320,17 @@ export class IntentFulfillService {
 		}
 
 		// Save final response to memory
-		await this.addToThreadMessages(thread, {
-			role: MessageRole.MODEL,
-			content: finalResponseText,
-			metadata: collectionName ? { collectionName } : undefined,
-		});
+		try {
+			await appendTextMessageToThread(
+				this.memoryModule,
+				thread,
+				MessageRole.MODEL,
+				finalResponseText,
+				collectionName ? { collectionName } : undefined,
+			);
+		} catch (error) {
+			loggers.intentStream.error("Error adding message to thread", error);
+		}
 
 		const streamEndTime = Date.now();
 		const streamDuration = streamEndTime - streamStartTime;

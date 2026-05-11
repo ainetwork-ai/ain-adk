@@ -7,7 +7,6 @@ import type {
 } from "@/modules/index.js";
 import { AinHttpError } from "@/types/agent.js";
 import {
-	type MessageObject,
 	MessageRole,
 	type ThreadMetadata,
 	type ThreadObject,
@@ -15,6 +14,7 @@ import {
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger.js";
+import { persistTextMessage } from "@/utils/thread-messages.js";
 import { sanitizeThinkingData } from "@/utils/tool-args.js";
 import type { IntentFulfillService } from "./intents/fulfill.service";
 import type { IntentTriggerService } from "./intents/trigger.service";
@@ -49,13 +49,21 @@ export class QueryService {
 		this.piiService = piiService;
 	}
 
-	public async addToThreadMessages(
+	public async addTextMessage(
 		userId: string,
 		threadId: string,
-		messages: Array<MessageObject>,
-	) {
-		const threadMemory = this.memoryModule.getThreadMemory();
-		await threadMemory?.addMessagesToThread(userId, threadId, messages);
+		role: MessageRole,
+		content: string,
+		metadata?: Record<string, unknown>,
+	): Promise<void> {
+		await persistTextMessage(
+			this.memoryModule,
+			userId,
+			threadId,
+			role,
+			content,
+			metadata,
+		);
 	}
 
 	public async generateTitle(
@@ -199,24 +207,22 @@ export class QueryService {
 		});
 
 		// only add for storage, not for inference
-		await this.addToThreadMessages(userId, threadId, [
+		// use displayQuery for better UX in enterprise application
+		await this.addTextMessage(
+			userId,
+			threadId,
+			MessageRole.USER,
+			displayQuery || query,
 			{
-				messageId: randomUUID(),
-				role: MessageRole.USER,
-				timestamp: Date.now(),
-				// use displayQuery for better UX in enterprise application
-				content: { type: "text", parts: [displayQuery || query] },
-				metadata: {
-					intents: triggeredIntents
-						.filter((intent) => !!intent.intent)
-						.map((intent) => ({
-							id: intent.intent?.id,
-							subquery: intent.subquery,
-						})),
-					query: !displayQuery ? undefined : query,
-				},
+				intents: triggeredIntents
+					.filter((intent) => !!intent.intent)
+					.map((intent) => ({
+						id: intent.intent?.id,
+						subquery: intent.subquery,
+					})),
+				query: !displayQuery ? undefined : query,
 			},
-		]);
+		);
 
 		// 3. intent fulfillment (with rewrite step)
 		const stream = this.intentFulfillService.intentFulfill(

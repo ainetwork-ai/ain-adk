@@ -7,6 +7,7 @@ import {
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream.js";
 import { loggers } from "@/utils/logger.js";
+import { serializeTaskResults } from "@/utils/workflow-task-results.js";
 import type { ToolCallingService } from "./tool-calling.service.js";
 
 export class WorkflowTaskRunner {
@@ -180,12 +181,7 @@ export class WorkflowTaskRunner {
 		task: WorkflowTask,
 		taskResults: Record<string, WorkflowTaskResult>,
 	): string {
-		const previousResults = Object.values(taskResults)
-			.map(
-				(result) =>
-					`[${result.taskId}] ${result.title}\nStatus: ${result.status}\nResult:\n${result.content || result.error || ""}`,
-			)
-			.join("\n\n---\n\n");
+		const previousResults = serializeTaskResults(Object.values(taskResults));
 
 		return `${previousResults ? `Previous task results:\n${previousResults}\n\n` : ""}Task:
 ${task.prompt}`;

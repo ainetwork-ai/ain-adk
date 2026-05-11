@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { A2AModule, MemoryModule, ModelModule } from "@/modules";
 import {
-	type MessageObject,
 	MessageRole,
 	type ThreadMetadata,
 	type ThreadObject,
@@ -12,6 +11,7 @@ import {
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream.js";
 import { loggers } from "@/utils/logger.js";
+import { appendTextMessageToThread } from "@/utils/thread-messages.js";
 import type { QueryService } from "./query.service.js";
 import type { ToolCallingService } from "./tool-calling.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
@@ -318,16 +318,18 @@ export class WorkflowExecutionService {
 				finalContent ||
 				(executionError ? `오류: ${executionError.message}` : "");
 			try {
-				await this.addMessageToThread(thread, {
-					role: MessageRole.MODEL,
-					content: responseContent,
-					metadata: {
+				await appendTextMessageToThread(
+					this.memoryModule,
+					thread,
+					MessageRole.MODEL,
+					responseContent,
+					{
 						workflowId,
 						workflowRun: true,
 						responseBlocks: renderedBlocks,
 						...(executionError ? { error: executionError.message } : {}),
 					},
-				});
+				);
 			} catch (saveError) {
 				loggers.agent.error("Failed to save workflow response message", {
 					workflowId,
@@ -413,37 +415,18 @@ export class WorkflowExecutionService {
 		};
 
 		const thread: ThreadObject = { ...metadata, messages: [] };
-		await this.addMessageToThread(thread, {
-			role: MessageRole.USER,
-			content: title,
-			metadata: {
+		await appendTextMessageToThread(
+			this.memoryModule,
+			thread,
+			MessageRole.USER,
+			title,
+			{
 				workflowId: workflow.workflowId,
 				workflowRun: true,
 				query: resolvedQuery,
 			},
-		});
+		);
 
 		return thread;
-	}
-
-	private async addMessageToThread(
-		thread: ThreadObject,
-		params: {
-			role: MessageRole;
-			content: string;
-			metadata?: Record<string, unknown>;
-		},
-	): Promise<void> {
-		const message: MessageObject = {
-			messageId: randomUUID(),
-			role: params.role,
-			timestamp: Date.now(),
-			content: { type: "text", parts: [params.content] },
-			metadata: params.metadata,
-		};
-		thread.messages.push(message);
-		await this.memoryModule
-			.getThreadMemory()
-			?.addMessagesToThread(thread.userId, thread.threadId, [message]);
 	}
 }

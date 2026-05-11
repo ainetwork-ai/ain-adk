@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { QueryService } from "@/services/query.service.js";
@@ -7,7 +6,7 @@ import type { UserWorkflowCoordinatorService } from "@/services/user-workflow-co
 import type { WorkflowExecutionService } from "@/services/workflow-execution.service.js";
 import { AinHttpError } from "@/types/agent.js";
 import { MessageRole, type UserWorkflow } from "@/types/memory.js";
-import { loggers } from "@/utils/logger.js";
+import { streamEventsToSSE } from "@/utils/sse-stream.js";
 
 export class UserWorkflowApiController {
 	private userWorkflowService: UserWorkflowService;
@@ -152,78 +151,35 @@ export class UserWorkflowApiController {
 		const userId = res.locals.userId || "";
 		const { id } = req.params as { id: string };
 
-		res.writeHead(200, {
-			"Content-Type": "text/event-stream",
-			"Cache-Control": "no-cache",
-			Connection: "keep-alive",
-			"X-Accel-Buffering": "no",
-		});
-		res.flushHeaders();
-		res.write(":ok\n\n");
-
-		const keepaliveInterval = setInterval(() => {
-			res.write(":keepalive\n\n");
-		}, 10000);
-
-		const abortController = new AbortController();
-		let currentThreadId: string | undefined;
-		req.on("close", () => {
-			abortController.abort();
-			loggers.intentStream.info("Workflow stream client connection closed", {
-				workflowId: id,
-				threadId: currentThreadId,
-				userId,
-			});
-		});
-
-		try {
-			await this.getAuthorizedWorkflow(userId, id);
-			const { executionVariables } = req.body as {
-				executionVariables?: Record<string, string>;
-			};
-			const stream = this.workflowExecutionService.executeWorkflowStream(
-				id,
-				executionVariables,
-				abortController.signal,
-			);
-
-			for await (const event of stream) {
-				if (abortController.signal.aborted) {
-					break;
-				}
-
-				if (event.event === "thread_id") {
-					currentThreadId = event.data.threadId;
-				} else if (event.event === "thinking_process" && currentThreadId) {
-					const thinkData =
-						await this.queryService.filterThinkingDataForStorage(event.data);
-					await this.queryService.addToThreadMessages(userId, currentThreadId, [
-						{
-							messageId: randomUUID(),
-							role: MessageRole.MODEL,
-							timestamp: Date.now(),
-							content: { type: "text", parts: [thinkData.title] },
-							metadata: {
-								isThinking: true,
-								thinkData,
-							},
-						},
-					]);
-				}
-
-				res.write(
-					`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`,
+		await streamEventsToSSE(req, res, {
+			logLabel: "Workflow stream",
+			userId,
+			logContext: { workflowId: id },
+			setup: async (signal) => {
+				await this.getAuthorizedWorkflow(userId, id);
+				const { executionVariables } = req.body as {
+					executionVariables?: Record<string, string>;
+				};
+				return this.workflowExecutionService.executeWorkflowStream(
+					id,
+					executionVariables,
+					signal,
 				);
-			}
-		} catch (error: unknown) {
-			const errMsg =
-				(error as Error)?.message || "Failed to execute workflow stream";
-			res.write(
-				`event: error\ndata: ${JSON.stringify({ message: errMsg })}\n\n`,
-			);
-		} finally {
-			clearInterval(keepaliveInterval);
-			res.end();
-		}
+			},
+			onThinkingProcess: async (currentThreadId, data) => {
+				const thinkData =
+					await this.queryService.filterThinkingDataForStorage(data);
+				await this.queryService.addTextMessage(
+					userId,
+					currentThreadId,
+					MessageRole.MODEL,
+					thinkData.title,
+					{
+						isThinking: true,
+						thinkData,
+					},
+				);
+			},
+		});
 	};
 }

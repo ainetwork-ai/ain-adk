@@ -10,6 +10,7 @@ import type {
 	WorkflowTextBlock,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream.js";
+import { serializeTaskResults } from "@/utils/workflow-task-results.js";
 
 export class WorkflowResponseComposer {
 	private modelModule: ModelModule;
@@ -102,7 +103,7 @@ export class WorkflowResponseComposer {
 		const messages = model.generateMessages({
 			query: this.workflowTableService.buildExtractionPrompt(
 				block,
-				this.serializeTaskResults(sourceResults),
+				serializeTaskResults(sourceResults),
 			),
 			systemPrompt:
 				"Extract only the requested table source values as valid JSON. Return only JSON.",
@@ -130,7 +131,7 @@ export class WorkflowResponseComposer {
 		const messages = model.generateMessages({
 			query: this.workflowGraphService.buildExtractionPrompt(
 				block,
-				this.serializeTaskResults(sourceResults),
+				serializeTaskResults(sourceResults),
 				this.serializeRenderedBlocks(sourceBlocks),
 			),
 			systemPrompt:
@@ -195,7 +196,7 @@ export class WorkflowResponseComposer {
 		taskResults: WorkflowTaskResult[],
 		renderedBlocks: WorkflowRenderedBlock[],
 	): string {
-		const resultsText = this.serializeTaskResults(taskResults);
+		const resultsText = serializeTaskResults(taskResults);
 		const blocksText = this.serializeRenderedBlocks(renderedBlocks);
 		return `Task results:
 ${resultsText}
@@ -219,15 +220,6 @@ ${block.prompt}`;
 		return renderedBlocks.filter((renderedBlock) =>
 			sourceBlockIds.has(renderedBlock.blockId),
 		);
-	}
-
-	private serializeTaskResults(taskResults: WorkflowTaskResult[]): string {
-		return taskResults
-			.map(
-				(result) =>
-					`[${result.taskId}] ${result.title}\nStatus: ${result.status}\nResult:\n${result.content || result.error || ""}`,
-			)
-			.join("\n\n---\n\n");
 	}
 
 	private serializeRenderedBlocks(
