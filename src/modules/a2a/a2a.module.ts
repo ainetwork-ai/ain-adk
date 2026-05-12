@@ -24,6 +24,7 @@ import {
 } from "@/utils/a2a.js";
 import { loggers } from "@/utils/logger.js";
 import { serializePartForModelFallback } from "@/utils/message.js";
+import { sanitizeThinkingData, withAdkThinkingArg } from "@/utils/tool-args.js";
 import { A2AConnector } from "./a2a.connector.js";
 
 /**
@@ -105,6 +106,10 @@ export class A2AModule {
 		return connectors;
 	}
 
+	public hasConnector(connectorName: string): boolean {
+		return this.a2aConnectors.has(connectorName);
+	}
+
 	private async getOrCreateClient(connector: A2AConnector): Promise<A2AClient> {
 		if (!connector.client) {
 			connector.client = await new ClientFactory().createFromUrl(connector.url);
@@ -136,21 +141,11 @@ export class A2AModule {
 					connectorName: name,
 					protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
 					description: card.description,
-					// add thinking_text inputSchema
-					inputSchema: {
-						type: "object",
-						properties: {
-							thinking_text: {
-								type: "string",
-								description: prompt,
-							},
-						},
-						required: ["thinking_text"],
-					},
+					inputSchema: withAdkThinkingArg(undefined, prompt),
 				};
 
 				tools.push(tool);
-			} catch (_error: any) {
+			} catch (_error: unknown) {
 				// Agent not responded, just skip
 			}
 		}
@@ -167,7 +162,11 @@ export class A2AModule {
 	 * @param threadId - The session identifier
 	 * @returns Formatted Message object for A2A protocol
 	 */
-	public getMessagePayload(query: string, threadId: string): Message {
+	public getMessagePayload(
+		query: string,
+		threadId: string,
+		metadata?: Record<string, unknown>,
+	): Message {
 		const messagePayload: Message = {
 			messageId: randomUUID(),
 			kind: "message",
@@ -176,6 +175,7 @@ export class A2AModule {
 				agentId: this.getAgentId(),
 				agentName: this.getAgentName(),
 				type: ThreadType.CHAT,
+				...metadata,
 			},
 			parts: [
 				{
@@ -220,6 +220,132 @@ export class A2AModule {
 		}
 	}
 
+	private async *sendMessageToConnector(
+		connector: A2AConnector,
+		toolName: string,
+		query: string,
+		threadId: string,
+		metadata?: Record<string, unknown>,
+	): AsyncGenerator<StreamEvent, string, unknown> {
+		const finalText: string[] = [];
+		const seenArtifactIds = new Set<string>();
+		const appendFinalText = (value: string) => {
+			if (value && !finalText.includes(value)) {
+				finalText.push(value);
+			}
+		};
+		const messagePayload = this.getMessagePayload(query, threadId, metadata);
+		const params: MessageSendParams = {
+			message: messagePayload,
+		};
+
+		const client = await this.getOrCreateClient(connector);
+		const stream = client.sendMessageStream(params);
+		for await (const event of stream) {
+			if (event.kind === "status-update") {
+				const typedEvent = event as TaskStatusUpdateEvent;
+				if (typedEvent.final && typedEvent.status.state !== "input-required") {
+					this.a2aTasks.delete(threadId);
+				}
+
+				if (typedEvent.status.state === "working") {
+					const text = (typedEvent.status.message?.parts[0] as TextPart)?.text;
+					if (!text) {
+						continue;
+					}
+
+					let thinkingData: {
+						title: string;
+						description: string;
+						metadata?: Record<string, unknown>;
+					};
+					try {
+						thinkingData = JSON.parse(text);
+					} catch (error) {
+						loggers.a2a.warn(
+							"Failed to parse A2A working status as JSON; using plain text fallback",
+							{ error, text },
+						);
+						thinkingData = { title: text, description: "" };
+					}
+
+					yield {
+						event: "thinking_process",
+						data: sanitizeThinkingData(thinkingData),
+					};
+				} else if (typedEvent.status.state === "completed") {
+					if (typedEvent.status.message?.parts.length) {
+						yield* this.emitMessageContent(
+							typedEvent.status.message,
+							seenArtifactIds,
+							appendFinalText,
+						);
+					}
+				}
+			} else if (event.kind === "artifact-update") {
+				const artifact = artifactContentPartFromA2AArtifact(
+					(event as TaskArtifactUpdateEvent).artifact as A2AArtifact,
+				);
+				if (!seenArtifactIds.has(artifact.artifactId)) {
+					seenArtifactIds.add(artifact.artifactId);
+					yield {
+						event: "artifact_ready",
+						data: artifact,
+					};
+				}
+				appendFinalText(serializePartForModelFallback(artifact));
+			} else if (event.kind === "message") {
+				const msg = event as Message;
+				const taskId = this.a2aTasks.get(threadId);
+				if (msg.taskId && msg.taskId !== taskId) {
+					this.a2aTasks.set(threadId, msg.taskId);
+				}
+				if (msg.parts.length > 0) {
+					yield* this.emitMessageContent(msg, seenArtifactIds, appendFinalText);
+				}
+			} else if (event.kind === "task") {
+				const task = event as Task;
+				if (task.id !== this.a2aTasks.get(threadId)) {
+					this.a2aTasks.set(threadId, task.id);
+				}
+			} else {
+				loggers.a2a.warn("Received unknown event structure from stream:", {
+					event,
+				});
+			}
+		}
+
+		return `[Bot Called A2A Tool ${toolName}]\n${finalText.join("\n")}`;
+	}
+
+	public async *sendTask(params: {
+		connectorName: string;
+		message: string;
+		threadId: string;
+		metadata?: Record<string, unknown>;
+	}): AsyncGenerator<StreamEvent, string, unknown> {
+		const connector = this.a2aConnectors.get(params.connectorName);
+		if (!connector) {
+			loggers.a2a.error("Unknown agent connector:", {
+				connectorName: params.connectorName,
+			});
+			return `[Bot Called A2A Tool ${params.connectorName}]\n"Unknown agent connector"`;
+		}
+
+		try {
+			return yield* this.sendMessageToConnector(
+				connector,
+				params.connectorName,
+				params.message,
+				params.threadId,
+				params.metadata,
+			);
+		} catch (error) {
+			loggers.a2a.error("Error communicating with agent:", { error });
+			return `[Bot Called A2A Tool ${params.connectorName}]\n${typeof error === "string" ? error : JSON.stringify(error, null, 2)}`;
+		}
+	}
+
 	/**
 	 * Executes an A2A tool by sending a message to the remote agent.
 	 *
@@ -237,13 +363,6 @@ export class A2AModule {
 		query: string,
 		threadId: string,
 	): AsyncGenerator<StreamEvent, string, unknown> {
-		const finalText: string[] = [];
-		const seenArtifactIds = new Set<string>();
-		const appendFinalText = (value: string) => {
-			if (value && !finalText.includes(value)) {
-				finalText.push(value);
-			}
-		};
 		const connector = this.a2aConnectors.get(tool.connectorName);
 		if (!connector) {
 			loggers.a2a.error("Unknown agent:", { tool });
@@ -251,97 +370,17 @@ export class A2AModule {
 			return toolResult;
 		}
 
-		const messagePayload = this.getMessagePayload(query, threadId);
-		const params: MessageSendParams = {
-			message: messagePayload,
-		};
-
 		try {
-			const client = await this.getOrCreateClient(connector);
-			const stream = client.sendMessageStream(params);
-			for await (const event of stream) {
-				if (event.kind === "status-update") {
-					const typedEvent = event as TaskStatusUpdateEvent;
-					if (
-						typedEvent.final &&
-						typedEvent.status.state !== "input-required"
-					) {
-						this.a2aTasks.delete(threadId);
-					}
-
-					if (typedEvent.status.state === "working") {
-						// thinking process event
-						const workingText = (
-							typedEvent.status.message?.parts[0] as TextPart | undefined
-						)?.text;
-						if (workingText) {
-							try {
-								const eventData = JSON.parse(workingText);
-								yield {
-									event: "thinking_process",
-									data: eventData,
-								};
-							} catch {
-								finalText.push(workingText);
-							}
-						}
-					} else if (typedEvent.status.state === "completed") {
-						if (typedEvent.status.message?.parts.length) {
-							yield* this.emitMessageContent(
-								typedEvent.status.message,
-								seenArtifactIds,
-								appendFinalText,
-							);
-						}
-					} else {
-						// ignore other status updates
-					}
-				} else if (event.kind === "artifact-update") {
-					const artifact = artifactContentPartFromA2AArtifact(
-						(event as TaskArtifactUpdateEvent).artifact as A2AArtifact,
-					);
-					if (!seenArtifactIds.has(artifact.artifactId)) {
-						seenArtifactIds.add(artifact.artifactId);
-						yield {
-							event: "artifact_ready",
-							data: artifact,
-						};
-					}
-					const artifactText = serializePartForModelFallback(artifact);
-					if (artifactText) {
-						appendFinalText(artifactText);
-					}
-				} else if (event.kind === "message") {
-					const msg = event as Message;
-					const taskId = this.a2aTasks.get(threadId);
-					if (msg.taskId && msg.taskId !== taskId) {
-						this.a2aTasks.set(threadId, msg.taskId);
-					}
-					if (msg.parts.length > 0) {
-						yield* this.emitMessageContent(
-							msg,
-							seenArtifactIds,
-							appendFinalText,
-						);
-					}
-				} else if (event.kind === "task") {
-					// establishing the Task ID
-					const task = event as Task;
-					if (task.id !== this.a2aTasks.get(threadId)) {
-						this.a2aTasks.set(threadId, task.id);
-					}
-				} else {
-					loggers.a2a.warn("Received unknown event structure from stream:", {
-						event,
-					});
-				}
-			}
+			return yield* this.sendMessageToConnector(
+				connector,
+				tool.toolName,
+				query,
+				threadId,
+			);
 		} catch (error) {
 			loggers.a2a.error("Error communicating with agent:", { error });
 			const toolResult = `[Bot Called A2A Tool ${tool.toolName}]\n${typeof error === "string" ? error : JSON.stringify(error, null, 2)}`;
 			return toolResult;
 		}
-
-		return `[Bot Called A2A Tool ${tool.toolName}]\n${finalText.join("\n")}`;
 	}
 }

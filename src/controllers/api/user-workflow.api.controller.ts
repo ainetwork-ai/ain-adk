@@ -1,20 +1,29 @@
 import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
+import type { QueryService } from "@/services/query.service.js";
 import type { UserWorkflowService } from "@/services/user-workflow.service.js";
 import type { UserWorkflowCoordinatorService } from "@/services/user-workflow-coordinator.service.js";
+import type { WorkflowExecutionService } from "@/services/workflow-execution.service.js";
 import { AinHttpError } from "@/types/agent.js";
-import type { UserWorkflow } from "@/types/memory.js";
+import { MessageRole, type UserWorkflow } from "@/types/memory.js";
+import { streamEventsToSSE } from "@/utils/sse-stream.js";
 
 export class UserWorkflowApiController {
 	private userWorkflowService: UserWorkflowService;
 	private userWorkflowCoordinatorService: UserWorkflowCoordinatorService;
+	private workflowExecutionService: WorkflowExecutionService;
+	private queryService: QueryService;
 
 	constructor(
 		userWorkflowService: UserWorkflowService,
 		userWorkflowCoordinatorService: UserWorkflowCoordinatorService,
+		workflowExecutionService: WorkflowExecutionService,
+		queryService: QueryService,
 	) {
 		this.userWorkflowService = userWorkflowService;
 		this.userWorkflowCoordinatorService = userWorkflowCoordinatorService;
+		this.workflowExecutionService = workflowExecutionService;
+		this.queryService = queryService;
 	}
 
 	private async getAuthorizedWorkflow(
@@ -112,5 +121,65 @@ export class UserWorkflowApiController {
 		} catch (error) {
 			next(error);
 		}
+	};
+
+	public handleExecuteWorkflow = async (
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	) => {
+		try {
+			const userId = res.locals.userId || "";
+			const { id } = req.params as { id: string };
+			await this.getAuthorizedWorkflow(userId, id);
+
+			const { executionVariables } = req.body as {
+				executionVariables?: Record<string, string>;
+			};
+			const result = await this.workflowExecutionService.executeWorkflow(
+				id,
+				executionVariables,
+			);
+
+			res.status(StatusCodes.OK).json(result);
+		} catch (error) {
+			next(error);
+		}
+	};
+
+	public handleExecuteWorkflowStream = async (req: Request, res: Response) => {
+		const userId = res.locals.userId || "";
+		const { id } = req.params as { id: string };
+
+		await streamEventsToSSE(req, res, {
+			logLabel: "Workflow stream",
+			userId,
+			logContext: { workflowId: id },
+			setup: async (signal) => {
+				await this.getAuthorizedWorkflow(userId, id);
+				const { executionVariables } = req.body as {
+					executionVariables?: Record<string, string>;
+				};
+				return this.workflowExecutionService.executeWorkflowStream(
+					id,
+					executionVariables,
+					signal,
+				);
+			},
+			onThinkingProcess: async (currentThreadId, data) => {
+				const thinkData =
+					await this.queryService.filterThinkingDataForStorage(data);
+				await this.queryService.addTextMessage(
+					userId,
+					currentThreadId,
+					MessageRole.MODEL,
+					thinkData.title,
+					{
+						isThinking: true,
+						thinkData,
+					},
+				);
+			},
+		});
 	};
 }

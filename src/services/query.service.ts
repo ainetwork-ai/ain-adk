@@ -23,6 +23,8 @@ import {
 	createModelInputMessageFromQueryInput,
 	normalizeThreadObject,
 } from "@/utils/message";
+import { persistTextMessage } from "@/utils/thread-messages.js";
+import { sanitizeThinkingData } from "@/utils/tool-args.js";
 import type { IntentFulfillService } from "./intents/fulfill.service";
 import type { IntentTriggerService } from "./intents/trigger.service";
 import { PIIFilterMode, type PIIService } from "./pii.service";
@@ -56,13 +58,31 @@ export class QueryService {
 		this.piiService = piiService;
 	}
 
+	public async addTextMessage(
+		userId: string,
+		threadId: string,
+		role: MessageRole,
+		content: string,
+		metadata?: Record<string, unknown>,
+	): Promise<void> {
+		await persistTextMessage(
+			this.memoryModule,
+			userId,
+			threadId,
+			role,
+			content,
+			metadata,
+		);
+	}
+
 	public async addToThreadMessages(
 		userId: string,
 		threadId: string,
-		messages: Array<MessageObject>,
-	) {
-		const threadMemory = this.memoryModule.getThreadMemory();
-		await threadMemory?.addMessagesToThread(userId, threadId, messages);
+		messages: MessageObject[],
+	): Promise<void> {
+		await this.memoryModule
+			.getThreadMemory()
+			?.addMessagesToThread(userId, threadId, messages);
 	}
 
 	public async generateTitle(
@@ -90,6 +110,21 @@ export class QueryService {
 			});
 			return DEFAULT_TITLE;
 		}
+	}
+
+	public async filterThinkingDataForStorage(
+		data: Extract<StreamEvent, { event: "thinking_process" }>["data"],
+	): Promise<Extract<StreamEvent, { event: "thinking_process" }>["data"]> {
+		const sanitized = sanitizeThinkingData(data);
+		if (this.piiService?.getMode() !== PIIFilterMode.MASK) {
+			return sanitized;
+		}
+
+		return {
+			...sanitized,
+			title: await this.piiService.filterText(sanitized.title),
+			description: await this.piiService.filterText(sanitized.description),
+		};
 	}
 
 	/**

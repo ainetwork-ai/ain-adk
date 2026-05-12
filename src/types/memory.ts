@@ -19,7 +19,7 @@ export type LegacyMessageContentObject = {
 	/** Content type (e.g., "text", "image", "tool_use") */
 	type: string;
 	/** Array of content parts, structure depends on content type */
-	parts: any[];
+	parts: unknown[];
 };
 
 export type TextContentPart = {
@@ -221,8 +221,201 @@ export type FulfillmentResult = {
 	response: string;
 };
 
+export interface WorkflowTaskAgent {
+	protocol: "A2A";
+	connectorName: string;
+}
+
+export interface WorkflowTask {
+	taskId: string;
+	title: string;
+	prompt: string;
+	agent?: WorkflowTaskAgent;
+}
+
+export interface WorkflowHeadingBlock {
+	blockId: string;
+	type: "heading";
+	level?: 1 | 2 | 3;
+	text: string;
+}
+
+export interface WorkflowTextBlock {
+	blockId: string;
+	type: "text";
+	prompt: string;
+	sourceTaskIds?: string[];
+	sourceBlockIds?: string[];
+}
+
+export type WorkflowGraphType = "xychart-beta" | "pie";
+
+export interface WorkflowGraphBlockBase {
+	blockId: string;
+	type: "graph";
+	graphType: WorkflowGraphType;
+	title?: string;
+	prompt: string;
+	sourceTaskIds?: string[];
+	sourceBlockIds?: string[];
+}
+
+export interface WorkflowXYChartSeriesData {
+	kind: "bar" | "line";
+	label?: string;
+	data: number[];
+}
+
+export interface WorkflowXYChartBlock extends WorkflowGraphBlockBase {
+	graphType: "xychart-beta";
+}
+
+export interface WorkflowPieChartSlice {
+	label: string;
+	value: number;
+}
+
+export interface WorkflowPieChartBlock extends WorkflowGraphBlockBase {
+	graphType: "pie";
+	showData?: boolean;
+}
+
+export type WorkflowGraphBlock = WorkflowXYChartBlock | WorkflowPieChartBlock;
+
+export type WorkflowTableLayout = "records" | "matrix";
+
+export type WorkflowTableColumnFormatKind =
+	| "auto"
+	| "text"
+	| "number"
+	| "currency"
+	| "percent";
+
+export interface WorkflowTableColumnFormat {
+	kind?: WorkflowTableColumnFormatKind;
+	grouping?: boolean;
+	decimals?: number;
+	prefix?: string;
+	suffix?: string;
+	nullDisplay?: string;
+}
+
+export interface WorkflowTableBlock {
+	blockId: string;
+	type: "table";
+	layout: WorkflowTableLayout;
+	title?: string;
+	unit?: string;
+	rowHeader?: string;
+	rows?: string[];
+	columns: string[];
+	hiddenRows?: string[];
+	hiddenColumns?: string[];
+	formulas?: string[];
+	sourceTaskIds?: string[];
+	prompt?: string;
+	columnFormats?: Record<string, WorkflowTableColumnFormat>;
+}
+
+export type WorkflowResponseBlock =
+	| WorkflowHeadingBlock
+	| WorkflowTextBlock
+	| WorkflowGraphBlock
+	| WorkflowTableBlock;
+
+export interface WorkflowDefinition {
+	tasks: WorkflowTask[];
+	response: {
+		blocks: WorkflowResponseBlock[];
+	};
+}
+
+export interface WorkflowTaskResult {
+	taskId: string;
+	title: string;
+	agent?: WorkflowTaskAgent;
+	status: "completed" | "failed" | "skipped";
+	content: string;
+	raw?: unknown;
+	error?: string;
+	startedAt: number;
+	completedAt: number;
+}
+
+export interface WorkflowRenderedTableSpec {
+	layout: WorkflowTableLayout;
+	rowHeader?: string;
+	rows?: string[];
+	columns: string[];
+	hiddenRows?: string[];
+	hiddenColumns?: string[];
+	formulas?: string[];
+	columnFormats?: Record<string, WorkflowTableColumnFormat>;
+}
+
+export interface WorkflowRenderedTableGridRow {
+	key?: string;
+	cells: Array<string | number | null>;
+	kind?: "data" | "total";
+}
+
+export interface WorkflowRenderedTableMetadata {
+	unit?: string;
+}
+
+export interface WorkflowRenderedTableData {
+	spec: WorkflowRenderedTableSpec;
+	metadata?: WorkflowRenderedTableMetadata;
+	table: {
+		headers: string[];
+		rows: WorkflowRenderedTableGridRow[];
+	};
+	warnings?: string[];
+}
+
+export interface WorkflowRenderedXYChartData {
+	graphType: "xychart-beta";
+	title?: string;
+	xAxis: string[];
+	yAxis?: {
+		label?: string;
+		min?: number;
+		max?: number;
+	};
+	series: WorkflowXYChartSeriesData[];
+}
+
+export interface WorkflowRenderedPieChartData {
+	graphType: "pie";
+	title?: string;
+	showData?: boolean;
+	slices: WorkflowPieChartSlice[];
+}
+
+export type WorkflowRenderedGraphSpec =
+	| WorkflowRenderedXYChartData
+	| WorkflowRenderedPieChartData;
+
+export interface WorkflowRenderedGraphData {
+	spec: WorkflowRenderedGraphSpec;
+	mermaid: string;
+	warnings?: string[];
+}
+
+export type WorkflowRenderedBlockData =
+	| WorkflowRenderedTableData
+	| WorkflowRenderedGraphData;
+
+export interface WorkflowRenderedBlock {
+	blockId: string;
+	type: WorkflowResponseBlock["type"];
+	content: string;
+	data?: WorkflowRenderedBlockData;
+}
+
 export type WorkflowVariableType =
 	| "select"
+	| "dropdown"
 	| "date_range"
 	| "date_parts"
 	| "text"
@@ -230,11 +423,23 @@ export type WorkflowVariableType =
 
 export type WorkflowVariableResolveAt = "creation" | "execution";
 
+export interface WorkflowVariablePartSpec {
+	token?: string;
+	id?: string;
+	key?: string;
+	label?: string;
+	name?: string;
+	placeholder?: string;
+	format?: string;
+	source?: "value" | "start" | "end";
+}
+
 export interface WorkflowVariable {
 	id: string; // e.g. "workplace_id"
 	label: string; // e.g. "분석할 업장을 선택해주세요"
 	type: WorkflowVariableType;
-	options?: Array<string>; // for "select" type
+	options?: Array<string>; // for "select" or "dropdown" type
+	parts?: Record<string, string> | WorkflowVariablePartSpec[];
 	/** When to resolve this variable:
 	 * - "creation": resolved when copying template → my workflow (e.g., store selection)
 	 * - "execution": resolved each time the workflow runs (e.g., date range)
@@ -254,6 +459,8 @@ export interface WorkflowTemplate {
 	active: boolean;
 	/** The prompt/instruction template with {{variable}} placeholders */
 	content: string;
+	/** Structured workflow definition. If omitted, legacy content execution is used. */
+	definition?: WorkflowDefinition;
 	/** Variable schema definitions (type, label, options) for UI rendering */
 	variables?: Record<string, WorkflowVariable>;
 }
@@ -278,6 +485,8 @@ export interface UserWorkflow {
 	templateId?: string;
 	/** The prompt/instruction content with {{variable}} placeholders */
 	content: string;
+	/** Structured workflow definition. If omitted, legacy content execution is used. */
+	definition?: WorkflowDefinition;
 	/** Variable schema definitions (copied from template, used for UI rendering) */
 	variables?: Record<string, WorkflowVariable>;
 	/** User-provided variable values (can contain template variables like {{today}}) */

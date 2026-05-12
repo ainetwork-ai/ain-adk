@@ -31,6 +31,25 @@ export type StreamEvent =
 			data: { message: CanonicalMessageObject };
 	  }
 	| {
+			event: "task_output";
+			data: {
+				taskId: string;
+				title: string;
+				delta: string;
+				agent?: string;
+			};
+	  }
+	| {
+			event: "task_result";
+			data: {
+				taskId: string;
+				title: string;
+				status: "completed" | "failed" | "skipped";
+				agent?: string;
+				error?: string;
+			};
+	  }
+	| {
 			event: "tool_start";
 			data: {
 				toolCallId: string;
@@ -52,7 +71,14 @@ export type StreamEvent =
 	| { event: "thread_id"; data: ThreadMetadata }
 	| { event: "intent_process"; data: { subquery: string; actionPlan: string } }
 	| { event: "collection_name"; data: { name: string } }
-	| { event: "thinking_process"; data: { title: string; description: string } };
+	| {
+			event: "thinking_process";
+			data: {
+				title: string;
+				description: string;
+				metadata?: Record<string, unknown>;
+			};
+	  };
 
 /**
  * Tool call delta for streaming tool invocations

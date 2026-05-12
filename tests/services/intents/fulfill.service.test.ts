@@ -1,5 +1,6 @@
 import { setManifest } from "@/config/manifest";
 import { IntentFulfillService } from "@/services/intents/fulfill.service";
+import { ToolCallingService } from "@/services/tool-calling.service";
 import { CONNECTOR_PROTOCOL_TYPE } from "@/types/connector";
 import { MessageRole, ThreadType } from "@/types/memory";
 
@@ -14,24 +15,25 @@ describe("IntentFulfillService", () => {
 	it("emits canonical message stream events alongside compatibility text chunks", async () => {
 		const addMessagesToThread = jest.fn(async () => {});
 		const generateMessages = jest.fn(() => []);
-		const service = new IntentFulfillService(
-			{
-				getModel: () => ({
-					generateMessages,
-					convertToolsToFunctions: () => [],
-					appendMessages: jest.fn(),
-					fetchStreamWithContextMessage: async () => ({
-						async *[Symbol.asyncIterator]() {
-							yield {
-								delta: {
-									content: "streamed reply",
-								},
-							};
-						},
-					}),
+		const modelModule = {
+			getModel: () => ({
+				generateMessages,
+				convertToolsToFunctions: () => [],
+				appendMessages: jest.fn(),
+				fetchStreamWithContextMessage: async () => ({
+					async *[Symbol.asyncIterator]() {
+						yield {
+							delta: {
+								content: "streamed reply",
+							},
+						};
+					},
 				}),
-				getModelOptions: () => undefined,
-			} as any,
+			}),
+			getModelOptions: () => undefined,
+		};
+		const service = new IntentFulfillService(
+			modelModule as any,
 			{
 				getAgentMemory: () => ({
 					getAgentPrompt: async () => "",
@@ -40,6 +42,7 @@ describe("IntentFulfillService", () => {
 					addMessagesToThread,
 				}),
 			} as any,
+			new ToolCallingService(modelModule as any),
 		);
 
 		const stream = service.intentFulfill(
@@ -72,7 +75,6 @@ describe("IntentFulfillService", () => {
 		}
 
 		expect(events).toEqual([
-			"thinking_process",
 			"message_start",
 			"part_delta",
 			"text_chunk",
@@ -108,24 +110,25 @@ describe("IntentFulfillService", () => {
 
 	it("uses provided canonical model input for single-intent fulfillment", async () => {
 		const generateMessages = jest.fn(() => []);
-		const service = new IntentFulfillService(
-			{
-				getModel: () => ({
-					generateMessages,
-					convertToolsToFunctions: () => [],
-					appendMessages: jest.fn(),
-					fetchStreamWithContextMessage: async () => ({
-						async *[Symbol.asyncIterator]() {
-							yield {
-								delta: {
-									content: "structured reply",
-								},
-							};
-						},
-					}),
+		const modelModule = {
+			getModel: () => ({
+				generateMessages,
+				convertToolsToFunctions: () => [],
+				appendMessages: jest.fn(),
+				fetchStreamWithContextMessage: async () => ({
+					async *[Symbol.asyncIterator]() {
+						yield {
+							delta: {
+								content: "structured reply",
+							},
+						};
+					},
 				}),
-				getModelOptions: () => undefined,
-			} as any,
+			}),
+			getModelOptions: () => undefined,
+		};
+		const service = new IntentFulfillService(
+			modelModule as any,
 			{
 				getAgentMemory: () => ({
 					getAgentPrompt: async () => "",
@@ -134,6 +137,7 @@ describe("IntentFulfillService", () => {
 					addMessagesToThread: jest.fn(async () => {}),
 				}),
 			} as any,
+			new ToolCallingService(modelModule as any),
 		);
 
 		const modelInput = {
@@ -184,41 +188,42 @@ describe("IntentFulfillService", () => {
 		let streamCallCount = 0;
 		const generatedMessageInputs: Array<unknown[]> = [];
 		const addMessagesToThread = jest.fn(async () => {});
+		const modelModule = {
+			getModel: () => ({
+				generateMessages: ({ thread }: any) => {
+					generatedMessageInputs.push(
+						thread.messages.map((message: any) => ({
+							role: message.role,
+							schemaVersion: message.schemaVersion,
+							parts: message.parts,
+							metadata: message.metadata,
+						})),
+					);
+					return [];
+				},
+				convertToolsToFunctions: () => [],
+				appendMessages: jest.fn(),
+				fetchStreamWithContextMessage: async () => {
+					const response =
+						streamCallCount === 0 ? "first reply" : "second reply";
+					streamCallCount += 1;
+
+					return {
+						async *[Symbol.asyncIterator]() {
+							yield {
+								delta: {
+									content: response,
+								},
+							};
+						},
+					};
+				},
+			}),
+			getModelOptions: () => undefined,
+		};
 
 		const service = new IntentFulfillService(
-			{
-				getModel: () => ({
-					generateMessages: ({ thread }: any) => {
-						generatedMessageInputs.push(
-							thread.messages.map((message: any) => ({
-								role: message.role,
-								schemaVersion: message.schemaVersion,
-								parts: message.parts,
-								metadata: message.metadata,
-							})),
-						);
-						return [];
-					},
-					convertToolsToFunctions: () => [],
-					appendMessages: jest.fn(),
-					fetchStreamWithContextMessage: async () => {
-						const response =
-							streamCallCount === 0 ? "first reply" : "second reply";
-						streamCallCount += 1;
-
-						return {
-							async *[Symbol.asyncIterator]() {
-								yield {
-									delta: {
-										content: response,
-									},
-								};
-							},
-						};
-					},
-				}),
-				getModelOptions: () => undefined,
-			} as any,
+			modelModule as any,
 			{
 				getAgentMemory: () => ({
 					getAgentPrompt: async () => "",
@@ -227,6 +232,7 @@ describe("IntentFulfillService", () => {
 					addMessagesToThread,
 				}),
 			} as any,
+			new ToolCallingService(modelModule as any),
 		);
 
 		const stream = service.intentFulfill(
@@ -271,57 +277,49 @@ describe("IntentFulfillService", () => {
 		let streamCallCount = 0;
 		const appendMessages = jest.fn();
 		const useTool = jest.fn(async () => "tool result text");
+		const modelModule = {
+			getModel: () => ({
+				generateMessages: () => [],
+				convertToolsToFunctions: () => [],
+				appendMessages,
+				fetchStreamWithContextMessage: async () => {
+					const isToolRequest = streamCallCount === 0;
+					streamCallCount += 1;
 
-		const service = new IntentFulfillService(
-			{
-				getModel: () => ({
-					generateMessages: () => [],
-					convertToolsToFunctions: () => [],
-					appendMessages,
-					fetchStreamWithContextMessage: async () => {
-						const isToolRequest = streamCallCount === 0;
-						streamCallCount += 1;
-
-						return {
-							async *[Symbol.asyncIterator]() {
-								if (isToolRequest) {
-									yield {
-										delta: {
-											tool_calls: [
-												{
-													index: 0,
-													id: "tool-call-1",
-													function: {
-														name: "search",
-														arguments:
-															'{"query":"hello","thinking_text":"checking sources"}',
-													},
-												},
-											],
-										},
-									};
-									return;
-								}
-
+					return {
+						async *[Symbol.asyncIterator]() {
+							if (isToolRequest) {
 								yield {
 									delta: {
-										content: "final answer",
+										tool_calls: [
+											{
+												index: 0,
+												id: "tool-call-1",
+												function: {
+													name: "search",
+													arguments:
+														'{"query":"hello","__adk_thinking_text":"checking sources"}',
+												},
+											},
+										],
 									},
 								};
-							},
-						};
-					},
-				}),
-				getModelOptions: () => undefined,
-			} as any,
-			{
-				getAgentMemory: () => ({
-					getAgentPrompt: async () => "",
-				}),
-				getThreadMemory: () => ({
-					addMessagesToThread: jest.fn(async () => {}),
-				}),
-			} as any,
+								return;
+							}
+
+							yield {
+								delta: {
+									content: "final answer",
+								},
+							};
+						},
+					};
+				},
+			}),
+			getModelOptions: () => undefined,
+		};
+		const toolCallingService = new ToolCallingService(
+			modelModule as any,
 			undefined,
 			{
 				getTools: () => [
@@ -333,6 +331,19 @@ describe("IntentFulfillService", () => {
 				],
 				useTool,
 			} as any,
+		);
+
+		const service = new IntentFulfillService(
+			modelModule as any,
+			{
+				getAgentMemory: () => ({
+					getAgentPrompt: async () => "",
+				}),
+				getThreadMemory: () => ({
+					addMessagesToThread: jest.fn(async () => {}),
+				}),
+			} as any,
+			toolCallingService,
 		);
 
 		const stream = service.intentFulfill(
@@ -361,7 +372,6 @@ describe("IntentFulfillService", () => {
 
 		expect(events.map((event) => event.event)).toEqual([
 			"thinking_process",
-			"thinking_process",
 			"tool_start",
 			"tool_output",
 			"message_start",
@@ -369,14 +379,14 @@ describe("IntentFulfillService", () => {
 			"text_chunk",
 			"message_complete",
 		]);
-		expect(events[1]).toMatchObject({
+		expect(events[0]).toMatchObject({
 			event: "thinking_process",
 			data: {
 				title: "[Test Agent] MCP 실행: search",
 				description: "checking sources",
 			},
 		});
-		expect(events[2]).toEqual({
+		expect(events[1]).toEqual({
 			event: "tool_start",
 			data: {
 				toolCallId: "tool-call-1",
@@ -384,11 +394,10 @@ describe("IntentFulfillService", () => {
 				toolName: "search",
 				toolArgs: {
 					query: "hello",
-					thinking_text: "checking sources",
 				},
 			},
 		});
-		expect(events[3]).toEqual({
+		expect(events[2]).toEqual({
 			event: "tool_output",
 			data: {
 				toolCallId: "tool-call-1",
@@ -399,38 +408,9 @@ describe("IntentFulfillService", () => {
 		});
 		expect(useTool).toHaveBeenCalledWith(
 			expect.objectContaining({ toolName: "search" }),
-			{ query: "hello", thinking_text: "checking sources" },
+			{ query: "hello" },
 		);
-		expect(appendMessages).toHaveBeenCalledWith(
-			[],
-			"tool result text",
-			expect.objectContaining({
-				role: MessageRole.TOOL,
-				schemaVersion: 2,
-				parts: [
-					{
-						kind: "thought",
-						title: "[Test Agent] MCP 실행: search",
-						description: "checking sources",
-					},
-					{
-						kind: "tool-call",
-						toolCallId: "tool-call-1",
-						toolName: "search",
-						args: {
-							query: "hello",
-							thinking_text: "checking sources",
-						},
-					},
-					{
-						kind: "tool-result",
-						toolCallId: "tool-call-1",
-						toolName: "search",
-						result: "tool result text",
-					},
-				],
-			}),
-		);
+		expect(appendMessages).toHaveBeenCalledWith([], "tool result text");
 		expect(finalMessage).toMatchObject({
 			role: MessageRole.MODEL,
 			schemaVersion: 2,
@@ -441,49 +421,70 @@ describe("IntentFulfillService", () => {
 	it("emits canonical tool events for A2A tool execution", async () => {
 		let streamCallCount = 0;
 		const appendMessages = jest.fn();
+		const modelModule = {
+			getModel: () => ({
+				generateMessages: () => [],
+				convertToolsToFunctions: () => [],
+				appendMessages,
+				fetchStreamWithContextMessage: async () => {
+					const isToolRequest = streamCallCount === 0;
+					streamCallCount += 1;
 
-		const service = new IntentFulfillService(
-			{
-				getModel: () => ({
-					generateMessages: () => [],
-					convertToolsToFunctions: () => [],
-					appendMessages,
-					fetchStreamWithContextMessage: async () => {
-						const isToolRequest = streamCallCount === 0;
-						streamCallCount += 1;
-
-						return {
-							async *[Symbol.asyncIterator]() {
-								if (isToolRequest) {
-									yield {
-										delta: {
-											tool_calls: [
-												{
-													index: 0,
-													id: "a2a-call-1",
-													function: {
-														name: "remote_agent",
-														arguments:
-															'{"thinking_text":"asking remote agent"}',
-													},
-												},
-											],
-										},
-									};
-									return;
-								}
-
+					return {
+						async *[Symbol.asyncIterator]() {
+							if (isToolRequest) {
 								yield {
 									delta: {
-										content: "answer after remote result",
+										tool_calls: [
+											{
+												index: 0,
+												id: "a2a-call-1",
+												function: {
+													name: "remote_agent",
+													arguments:
+														'{"__adk_thinking_text":"asking remote agent"}',
+												},
+											},
+										],
 									},
 								};
-							},
-						};
-					},
-				}),
-				getModelOptions: () => undefined,
-			} as any,
+								return;
+							}
+
+							yield {
+								delta: {
+									content: "answer after remote result",
+								},
+							};
+						},
+					};
+				},
+			}),
+			getModelOptions: () => undefined,
+		};
+		const toolCallingService = new ToolCallingService(modelModule as any, {
+			getTools: async () => [
+				{
+					toolName: "remote_agent",
+					connectorName: "remote",
+					protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
+				},
+			],
+			useTool: () =>
+				(async function* () {
+					yield {
+						event: "thinking_process" as const,
+						data: {
+							title: "Remote agent",
+							description: "working",
+						},
+					};
+					return "remote result text";
+				})(),
+		} as any);
+
+		const service = new IntentFulfillService(
+			modelModule as any,
 			{
 				getAgentMemory: () => ({
 					getAgentPrompt: async () => "",
@@ -492,26 +493,7 @@ describe("IntentFulfillService", () => {
 					addMessagesToThread: jest.fn(async () => {}),
 				}),
 			} as any,
-			{
-				getTools: async () => [
-					{
-						toolName: "remote_agent",
-						connectorName: "remote",
-						protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
-					},
-				],
-				useTool: () =>
-					(async function* () {
-						yield {
-							event: "thinking_process" as const,
-							data: {
-								title: "Remote agent",
-								description: "working",
-							},
-						};
-						return "remote result text";
-					})(),
-			} as any,
+			toolCallingService,
 		);
 
 		const stream = service.intentFulfill(
@@ -536,15 +518,13 @@ describe("IntentFulfillService", () => {
 			expect.arrayContaining([
 				{
 					event: "tool_start",
-					data: {
-						toolCallId: "a2a-call-1",
-						protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
-						toolName: "remote_agent",
-						toolArgs: {
-							thinking_text: "asking remote agent",
-						},
-					},
+				data: {
+					toolCallId: "a2a-call-1",
+					protocol: CONNECTOR_PROTOCOL_TYPE.A2A,
+					toolName: "remote_agent",
+					toolArgs: {},
 				},
+			},
 				{
 					event: "tool_output",
 					data: {
@@ -573,34 +553,6 @@ describe("IntentFulfillService", () => {
 				},
 			},
 		});
-		expect(appendMessages).toHaveBeenCalledWith(
-			[],
-			"remote result text",
-			expect.objectContaining({
-				role: MessageRole.TOOL,
-				schemaVersion: 2,
-				parts: [
-					{
-						kind: "thought",
-						title: "[Test Agent] A2A 실행: remote_agent",
-						description: "asking remote agent",
-					},
-					{
-						kind: "tool-call",
-						toolCallId: "a2a-call-1",
-						toolName: "remote_agent",
-						args: {
-							thinking_text: "asking remote agent",
-						},
-					},
-					{
-						kind: "tool-result",
-						toolCallId: "a2a-call-1",
-						toolName: "remote_agent",
-						result: "remote result text",
-					},
-				],
-			}),
-		);
+		expect(appendMessages).toHaveBeenCalledWith([], "remote result text");
 	});
 });

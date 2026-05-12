@@ -1,23 +1,38 @@
+import type { MemoryModule, ModelModule } from "@/modules";
+import type { QueryService } from "@/services/query.service";
+import type { ToolCallingService } from "@/services/tool-calling.service";
+import type { UserWorkflowService } from "@/services/user-workflow.service";
 import { WorkflowExecutionService } from "@/services/workflow-execution.service";
-import { ThreadType } from "@/types/memory";
+import type { WorkflowVariableResolver } from "@/services/workflow-variable-resolver.service";
+import { ThreadType, type WorkflowTaskResult } from "@/types/memory";
+import type { StreamEvent } from "@/types/stream";
+
+async function collectEvents<T>(
+	stream: AsyncGenerator<T, unknown, unknown>,
+): Promise<T[]> {
+	const events: T[] = [];
+	for await (const event of stream) {
+		events.push(event);
+	}
+	return events;
+}
 
 describe("WorkflowExecutionService", () => {
-	it("executes workflows through the text-first query boundary", async () => {
-		const getWorkflow = jest.fn(async () => ({
+	it("executes legacy workflows through the text-first query boundary", async () => {
+		const workflow = {
 			workflowId: "workflow-1",
 			userId: "user-1",
 			title: "Daily report",
 			content: "Summarize performance",
 			active: true,
-		}));
-		const updateWorkflow = jest.fn(async () => {});
-		const resolveForExecution = jest.fn(() => ({
-			query: "Summarize performance",
-			displayQuery: "Daily report",
-		}));
+		};
+		const userWorkflowService = {
+			getWorkflow: jest.fn(async () => workflow),
+			updateWorkflow: jest.fn(async () => undefined),
+		} as unknown as UserWorkflowService;
 		const handleQuery = jest.fn(async function* () {
 			yield {
-				event: "thread_id" as const,
+				event: "thread_id",
 				data: {
 					type: ThreadType.WORKFLOW,
 					userId: "user-1",
@@ -25,33 +40,30 @@ describe("WorkflowExecutionService", () => {
 					title: "Daily report",
 					workflowId: "workflow-1",
 				},
-			};
-			return undefined;
+			} satisfies StreamEvent;
 		});
+		const queryService = { handleQuery } as unknown as QueryService;
+		const workflowVariableResolver = {
+			resolveForExecution: jest.fn(() => ({
+				query: "Summarize performance",
+				displayQuery: "Daily report",
+				definition: undefined,
+			})),
+		} as unknown as WorkflowVariableResolver;
 
 		const service = new WorkflowExecutionService(
-			{
-				getWorkflow,
-				updateWorkflow,
-			} as any,
-			{
-				handleQuery,
-			} as any,
-			{
-				resolveForExecution,
-			} as any,
+			userWorkflowService,
+			queryService,
+			workflowVariableResolver,
+			{} as ModelModule,
+			{} as MemoryModule,
+			{} as ToolCallingService,
 		);
 
 		await expect(service.executeWorkflow("workflow-1")).resolves.toEqual({
+			content: "",
 			threadId: "thread-1",
 		});
-
-		expect(resolveForExecution).toHaveBeenCalledWith(
-			expect.objectContaining({
-				workflowId: "workflow-1",
-			}),
-			undefined,
-		);
 		expect(handleQuery).toHaveBeenCalledWith(
 			{
 				type: ThreadType.WORKFLOW,
@@ -62,66 +74,142 @@ describe("WorkflowExecutionService", () => {
 			{
 				query: "Summarize performance",
 				displayQuery: "Daily report",
-				input: undefined,
 			},
 		);
-		expect(updateWorkflow).toHaveBeenCalledWith("workflow-1", {
-			lastRunAt: expect.any(Number),
-			lastThreadId: "thread-1",
-		});
+		expect(userWorkflowService.updateWorkflow).toHaveBeenCalledWith(
+			"workflow-1",
+			{
+				userId: "user-1",
+				lastRunAt: expect.any(Number),
+				lastThreadId: "thread-1",
+			},
+		);
 	});
 
-	it("preserves the workflow execution input shape for future structured input support", async () => {
-		const handleQuery = jest.fn(async function* () {
-			yield {
-				event: "thread_id" as const,
-				data: {
-					type: ThreadType.WORKFLOW,
-					userId: "user-1",
-					threadId: "thread-2",
-					title: "Daily report",
-					workflowId: "workflow-1",
-				},
-			};
-			return undefined;
-		});
-
-		const service = new WorkflowExecutionService(
-			{
-				getWorkflow: async () => ({
-					workflowId: "workflow-1",
-					userId: "user-1",
-					title: "Daily report",
-					content: "Summarize performance",
-					active: true,
-				}),
-				updateWorkflow: jest.fn(async () => {}),
-			} as any,
-			{
-				handleQuery,
-			} as any,
-			{
-				resolveForExecution: jest.fn(() => ({
-					query: "Summarize performance",
-					displayQuery: "Daily report",
-					input: {
-						parts: [{ kind: "text", text: "future workflow input" }],
+	it("suppresses unexpected task text chunks until response rendering starts", async () => {
+		const workflow = {
+			workflowId: "workflow-1",
+			userId: "user-1",
+			title: "Daily Report",
+			content: "Daily Report",
+			active: true,
+			definition: {
+				tasks: [
+					{
+						taskId: "task-1",
+						title: "Collect data",
+						prompt: "Collect data",
 					},
-				})),
-			} as any,
-		);
-
-		await service.executeWorkflow("workflow-1");
-
-		expect(handleQuery).toHaveBeenCalledWith(
-			expect.any(Object),
-			{
-				query: "Summarize performance",
-				displayQuery: "Daily report",
-				input: {
-					parts: [{ kind: "text", text: "future workflow input" }],
+				],
+				response: {
+					blocks: [
+						{
+							blockId: "block-1",
+							type: "heading" as const,
+							text: "Summary",
+						},
+					],
 				},
 			},
+		};
+		const userWorkflowService = {
+			getWorkflow: jest.fn(async () => workflow),
+			updateWorkflow: jest.fn(async () => undefined),
+		} as unknown as UserWorkflowService;
+		const queryService = {} as QueryService;
+		const workflowVariableResolver = {
+			resolveForExecution: jest.fn(() => ({
+				query: workflow.content,
+				displayQuery: workflow.title,
+				definition: workflow.definition,
+			})),
+		} as unknown as WorkflowVariableResolver;
+		const memoryModule = {
+			getThreadMemory: () => ({
+				createThread: jest.fn(async () => ({
+					type: ThreadType.WORKFLOW,
+					userId: workflow.userId,
+					threadId: "thread-1",
+					title: workflow.title,
+					workflowId: workflow.workflowId,
+				})),
+				addMessagesToThread: jest.fn(async () => undefined),
+			}),
+		} as unknown as MemoryModule;
+
+		const service = new WorkflowExecutionService(
+			userWorkflowService,
+			queryService,
+			workflowVariableResolver,
+			{} as ModelModule,
+			memoryModule,
+			{} as ToolCallingService,
 		);
+
+		(service as any).workflowTaskRunner = {
+			executeTask: async function* () {
+				yield {
+					event: "thinking_process",
+					data: {
+						title: "task thinking",
+						description: "running task",
+					},
+				} satisfies StreamEvent;
+				yield {
+					event: "text_chunk",
+					data: { delta: "unexpected early text" },
+				} satisfies StreamEvent;
+				yield {
+					event: "task_result",
+					data: {
+						taskId: "task-1",
+						title: "Collect data",
+						status: "completed",
+					},
+				} satisfies StreamEvent;
+
+				return {
+					taskId: "task-1",
+					title: "Collect data",
+					status: "completed",
+					content: "task result body",
+					startedAt: 1,
+					completedAt: 2,
+				} satisfies WorkflowTaskResult;
+			},
+		};
+		(service as any).workflowResponseComposer = {
+			renderResponseBlock: async function* () {
+				yield {
+					event: "text_chunk",
+					data: { delta: "## Summary\n\n" },
+				} satisfies StreamEvent;
+				return {
+					blockId: "block-1",
+					type: "heading",
+					content: "## Summary\n\n",
+				};
+			},
+		};
+
+		const events = await collectEvents(
+			service.executeWorkflowStream(workflow.workflowId),
+		);
+
+		expect(events.map((event) => event.event)).toEqual([
+			"thread_id",
+			"thinking_process",
+			"thinking_process",
+			"task_result",
+			"thinking_process",
+			"text_chunk",
+		]);
+		expect(
+			events.find(
+				(event) =>
+					event.event === "text_chunk" &&
+					event.data.delta === "unexpected early text",
+			),
+		).toBeUndefined();
 	});
 });
