@@ -24,6 +24,13 @@ import toolSelectPrompt from "../prompts/tool-select";
 import type { ToolCallingService } from "../tool-calling.service";
 import { AggregateService } from "./aggregate.service";
 
+type FinalStreamState = {
+	finalMessageId: string;
+	finalResponseText: string;
+	collectionName?: string;
+	finalMessageStarted: boolean;
+};
+
 function createFulfillmentResult(params: {
 	subquery: string;
 	intent?: Intent;
@@ -77,22 +84,6 @@ export class IntentFulfillService {
 		this.piiService = piiService;
 	}
 
-	/**
-	 * Fulfills the detected intent by generating a streaming response.
-	 *
-	 * Manages the complete inference loop including:
-	 * - Loading prompts and conversation history
-	 * - Collecting available tools from modules
-	 * - Executing model inference with tool support
-	 * - Processing tool calls iteratively until completion
-	 * - Streaming results as Server-Sent Events
-	 *
-	 * @param query - The user's input query
-	 * @param threadId - Thread identifier for context
-	 * @param thread - Previous conversation history
-	 * @param intent - Optional detected intent with custom prompt
-	 * @returns AsyncGenerator yielding StreamEvent objects
-	 */
 	private async *intentFulfilling(
 		query: string,
 		thread: ThreadObject,
@@ -168,17 +159,8 @@ export class IntentFulfillService {
 	/**
 	 * Processes all triggered intents and generates a unified response.
 	 *
-	 * Workflow:
-	 * 1. Process each intent sequentially, collecting results
-	 * 2. Yield thinking_process events for progress visibility
-	 * 3. Use AggregateService to unify results if needsAggregation is true
-	 * 4. Stream the final (possibly aggregated) response
-	 *
-	 * @param intents - Array of triggered intents to process
-	 * @param thread - The thread history
-	 * @param originalQuery - The user's original query (for aggregate context)
-	 * @param needsAggregation - Whether the results need to be aggregated
-	 * @returns AsyncGenerator yielding StreamEvent objects
+	 * Routes to one of three strategies based on intent count and aggregation flag,
+	 * then handles the common epilogue (PII masking, persistence, message_complete).
 	 */
 	public async *intentFulfill(
 		intents: Array<TriggeredIntent>,
@@ -199,221 +181,40 @@ export class IntentFulfillService {
 			startTime: new Date(streamStartTime).toISOString(),
 		});
 
-		const finalMessageId = randomUUID();
-		let finalResponseText = "";
-		let collectionName: string | undefined;
-		let finalMessageStarted = false;
-
-		const emitFinalResponseEvent = function* (
-			event: StreamEvent,
-		): Generator<StreamEvent> {
-			if (event.event === "text_chunk" && event.data.delta) {
-				if (!finalMessageStarted) {
-					finalMessageStarted = true;
-					yield {
-						event: "message_start",
-						data: {
-							messageId: finalMessageId,
-							role: MessageRole.MODEL,
-						},
-					};
-				}
-				yield {
-					event: "part_delta",
-					data: {
-						messageId: finalMessageId,
-						partIndex: 0,
-						part: { kind: "text" },
-						delta: event.data.delta,
-					},
-				};
-			}
-
-			yield event;
+		const state: FinalStreamState = {
+			finalMessageId: randomUUID(),
+			finalResponseText: "",
+			collectionName: undefined,
+			finalMessageStarted: false,
 		};
 
 		if (intents.length <= 1) {
-			// Single intent: stream response directly
 			const triggeredIntent = intents[0];
 			if (!triggeredIntent) {
 				return;
 			}
-
-			const { subquery = "", intent, actionPlan } = triggeredIntent;
-			loggers.intent.info(
-				`Process single intent: ${subquery}, ${intent?.name}`,
-			);
-			loggers.intent.info(`Action plan: ${actionPlan}`);
-
-			const intentThinking = this.buildIntentThinkingData(triggeredIntent);
-			if (intentThinking) {
-				yield { event: "thinking_process", data: intentThinking };
-			}
-
-			// Get the stream for this intent
-			const stream = this.getIntentStream(triggeredIntent, thread, input);
-			if (!stream) {
-				return;
-			}
-
-			// Stream response directly
-			for await (const event of stream) {
-				if (event.event === "text_chunk" && event.data.delta) {
-					finalResponseText += event.data.delta;
-				} else if (event.event === "collection_name") {
-					collectionName = event.data.name;
-				}
-				yield* emitFinalResponseEvent(event);
-			}
+			yield* this.fulfillSingleIntent(triggeredIntent, thread, input, state);
 		} else if (!needsAggregation) {
-			// Multiple intents but no aggregation needed: collect intermediate results, stream only last
-			for (let i = 0; i < intents.length; i++) {
-				const triggeredIntent = intents[i];
-				const { subquery = "", intent, actionPlan } = triggeredIntent;
-				loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
-				loggers.intent.info(`Action plan: ${actionPlan}`);
-
-				const isLastIntent = i === intents.length - 1;
-
-				const intentThinking = this.buildIntentThinkingData(triggeredIntent);
-				if (intentThinking) {
-					yield { event: "thinking_process", data: intentThinking };
-				}
-
-				// Get the stream for this intent
-				const stream = this.getIntentStream(triggeredIntent, thread);
-				if (!stream) {
-					continue;
-				}
-
-				if (isLastIntent) {
-					// Stream last intent response directly
-					for await (const event of stream) {
-						if (event.event === "text_chunk" && event.data.delta) {
-							finalResponseText += event.data.delta;
-						} else if (event.event === "collection_name") {
-							collectionName = event.data.name;
-						}
-						yield* emitFinalResponseEvent(event);
-					}
-				} else {
-					// Collect intermediate results without streaming text_chunk
-					let responseText = "";
-					for await (const event of stream) {
-						if (event.event === "text_chunk" && event.data.delta) {
-							responseText += event.data.delta;
-						} else if (event.event === "collection_name") {
-							collectionName = event.data.name;
-						} else if (event.event === "thinking_process") {
-							// Tool execution thinking_process events are yielded immediately
-							yield event;
-						}
-					}
-					// Add intermediate result to thread context for next intent
-					const responseMessage = createTextMessage({
-						messageId: randomUUID(),
-						role: MessageRole.MODEL,
-						timestamp: Date.now(),
-						text: responseText,
-					});
-					thread.messages.push(
-						createEphemeralModelContextMessage(responseMessage),
-					);
-				}
-			}
+			yield* this.fulfillSequential(intents, thread, state);
 		} else {
-			// Multi-intent mode with aggregation: collect all results then aggregate
-			const fulfillmentResults: FulfillmentResult[] = [];
-
-			for (let i = 0; i < intents.length; i++) {
-				const triggeredIntent = intents[i];
-				const { subquery = "", intent, actionPlan } = triggeredIntent;
-				loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
-				loggers.intent.info(`Action plan: ${actionPlan}`);
-
-				// Add previous result to thread context for inference (not stored in memory)
-				if (fulfillmentResults.length > 0) {
-					const lastResult = fulfillmentResults[fulfillmentResults.length - 1];
-					const lastResponseMessage =
-						lastResult.responseMessage ??
-						createTextMessage({
-							messageId: randomUUID(),
-							role: MessageRole.MODEL,
-							timestamp: Date.now(),
-							text: lastResult.response,
-						});
-					thread.messages.push(
-						createEphemeralModelContextMessage(lastResponseMessage),
-					);
-				}
-
-				const intentThinking = this.buildIntentThinkingData(triggeredIntent);
-				if (intentThinking) {
-					yield { event: "thinking_process", data: intentThinking };
-				}
-
-				// Get the stream for this intent
-				const stream = this.getIntentStream(triggeredIntent, thread);
-				if (!stream) {
-					continue;
-				}
-
-				// Collect response text (don't yield text_chunk yet)
-				let responseText = "";
-				for await (const event of stream) {
-					if (event.event === "text_chunk" && event.data.delta) {
-						responseText += event.data.delta;
-					} else if (event.event === "collection_name") {
-						collectionName = event.data.name;
-					} else if (event.event === "thinking_process") {
-						// Tool execution thinking_process events are yielded immediately
-						yield event;
-					}
-				}
-
-				const responseMessage = createTextMessage({
-					messageId: randomUUID(),
-					role: MessageRole.MODEL,
-					timestamp: Date.now(),
-					text: responseText,
-				});
-
-				fulfillmentResults.push(
-					createFulfillmentResult({
-						subquery,
-						intent,
-						actionPlan,
-						responseMessage,
-					}),
-				);
-			}
-
-			// Aggregate step: generate unified response
-			const aggregateStream = this.aggregateService.aggregate(
-				originalQuery,
-				fulfillmentResults,
-			);
-
-			for await (const event of aggregateStream) {
-				if (event.event === "text_chunk" && event.data.delta) {
-					finalResponseText += event.data.delta;
-				}
-				yield* emitFinalResponseEvent(event);
-			}
+			yield* this.fulfillWithAggregation(intents, thread, originalQuery, state);
 		}
 
 		// PII filtering on output before saving to memory (mask mode only)
 		if (this.piiService?.getMode() === PIIFilterMode.MASK) {
-			finalResponseText = await this.piiService.filterText(finalResponseText);
+			state.finalResponseText = await this.piiService.filterText(
+				state.finalResponseText,
+			);
 		}
 
-		// Save final response to memory
 		const finalMessage = createTextMessage({
-			messageId: finalMessageId,
+			messageId: state.finalMessageId,
 			role: MessageRole.MODEL,
 			timestamp: Date.now(),
-			text: finalResponseText,
-			metadata: collectionName ? { collectionName } : undefined,
+			text: state.finalResponseText,
+			metadata: state.collectionName
+				? { collectionName: state.collectionName }
+				: undefined,
 		});
 
 		try {
@@ -427,19 +228,17 @@ export class IntentFulfillService {
 		}
 
 		const streamEndTime = Date.now();
-		const streamDuration = streamEndTime - streamStartTime;
-
 		loggers.intentStream.info("Stream session completed", {
 			threadId: thread.threadId,
-			duration: `${streamDuration}ms`,
+			duration: `${streamEndTime - streamStartTime}ms`,
 			endTime: new Date(streamEndTime).toISOString(),
 		});
 
-		if (!finalMessageStarted) {
+		if (!state.finalMessageStarted) {
 			yield {
 				event: "message_start",
 				data: {
-					messageId: finalMessageId,
+					messageId: state.finalMessageId,
 					role: MessageRole.MODEL,
 				},
 			};
@@ -450,6 +249,194 @@ export class IntentFulfillService {
 		};
 
 		return finalMessage;
+	}
+
+	private async *fulfillSingleIntent(
+		triggeredIntent: TriggeredIntent,
+		thread: ThreadObject,
+		input: CanonicalMessageObject | undefined,
+		state: FinalStreamState,
+	): AsyncGenerator<StreamEvent, void> {
+		const { subquery = "", intent, actionPlan } = triggeredIntent;
+		loggers.intent.info(`Process single intent: ${subquery}, ${intent?.name}`);
+		loggers.intent.info(`Action plan: ${actionPlan}`);
+
+		const intentThinking = this.buildIntentThinkingData(triggeredIntent);
+		if (intentThinking) {
+			yield { event: "thinking_process", data: intentThinking };
+		}
+
+		const stream = this.getIntentStream(triggeredIntent, thread, input);
+		if (!stream) {
+			return;
+		}
+		yield* this.consumeFinalStream(stream, state);
+	}
+
+	private async *fulfillSequential(
+		intents: Array<TriggeredIntent>,
+		thread: ThreadObject,
+		state: FinalStreamState,
+	): AsyncGenerator<StreamEvent, void> {
+		for (let i = 0; i < intents.length; i++) {
+			const triggeredIntent = intents[i];
+			const { subquery = "", intent, actionPlan } = triggeredIntent;
+			loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
+			loggers.intent.info(`Action plan: ${actionPlan}`);
+
+			const intentThinking = this.buildIntentThinkingData(triggeredIntent);
+			if (intentThinking) {
+				yield { event: "thinking_process", data: intentThinking };
+			}
+
+			const stream = this.getIntentStream(triggeredIntent, thread);
+			if (!stream) {
+				continue;
+			}
+
+			const isLastIntent = i === intents.length - 1;
+			if (isLastIntent) {
+				yield* this.consumeFinalStream(stream, state);
+			} else {
+				const responseText = yield* this.consumeIntermediateStream(
+					stream,
+					state,
+				);
+				const responseMessage = createTextMessage({
+					messageId: randomUUID(),
+					role: MessageRole.MODEL,
+					timestamp: Date.now(),
+					text: responseText,
+				});
+				thread.messages.push(
+					createEphemeralModelContextMessage(responseMessage),
+				);
+			}
+		}
+	}
+
+	private async *fulfillWithAggregation(
+		intents: Array<TriggeredIntent>,
+		thread: ThreadObject,
+		originalQuery: string,
+		state: FinalStreamState,
+	): AsyncGenerator<StreamEvent, void> {
+		const fulfillmentResults: FulfillmentResult[] = [];
+
+		for (const triggeredIntent of intents) {
+			const { subquery = "", intent, actionPlan } = triggeredIntent;
+			loggers.intent.info(`Process query: ${subquery}, ${intent?.name}`);
+			loggers.intent.info(`Action plan: ${actionPlan}`);
+
+			// Inject previous result into thread context so the next intent can build on it
+			const lastResult = fulfillmentResults[fulfillmentResults.length - 1];
+			if (lastResult?.responseMessage) {
+				thread.messages.push(
+					createEphemeralModelContextMessage(lastResult.responseMessage),
+				);
+			}
+
+			const intentThinking = this.buildIntentThinkingData(triggeredIntent);
+			if (intentThinking) {
+				yield { event: "thinking_process", data: intentThinking };
+			}
+
+			const stream = this.getIntentStream(triggeredIntent, thread);
+			if (!stream) {
+				continue;
+			}
+
+			const responseText = yield* this.consumeIntermediateStream(stream, state);
+			const responseMessage = createTextMessage({
+				messageId: randomUUID(),
+				role: MessageRole.MODEL,
+				timestamp: Date.now(),
+				text: responseText,
+			});
+			fulfillmentResults.push(
+				createFulfillmentResult({
+					subquery,
+					intent,
+					actionPlan,
+					responseMessage,
+				}),
+			);
+		}
+
+		const aggregateStream = this.aggregateService.aggregate(
+			originalQuery,
+			fulfillmentResults,
+		);
+		yield* this.consumeFinalStream(aggregateStream, state);
+	}
+
+	/**
+	 * Consumes a stream destined for the final user-facing response.
+	 * Accumulates text + collection name into state, and re-emits each event
+	 * with the canonical message_start / part_delta wrappers prepended.
+	 */
+	private async *consumeFinalStream(
+		stream: AsyncIterable<StreamEvent>,
+		state: FinalStreamState,
+	): AsyncGenerator<StreamEvent, void> {
+		for await (const event of stream) {
+			if (event.event === "text_chunk" && event.data.delta) {
+				state.finalResponseText += event.data.delta;
+			} else if (event.event === "collection_name") {
+				state.collectionName = event.data.name;
+			}
+			yield* this.emitFinalResponseEvent(event, state);
+		}
+	}
+
+	/**
+	 * Consumes a stream whose text is collected for later aggregation/context,
+	 * not streamed to the client. Only thinking_process events pass through;
+	 * text deltas are buffered into the returned string.
+	 */
+	private async *consumeIntermediateStream(
+		stream: AsyncIterable<StreamEvent>,
+		state: FinalStreamState,
+	): AsyncGenerator<StreamEvent, string> {
+		let responseText = "";
+		for await (const event of stream) {
+			if (event.event === "text_chunk" && event.data.delta) {
+				responseText += event.data.delta;
+			} else if (event.event === "collection_name") {
+				state.collectionName = event.data.name;
+			} else if (event.event === "thinking_process") {
+				yield event;
+			}
+		}
+		return responseText;
+	}
+
+	private *emitFinalResponseEvent(
+		event: StreamEvent,
+		state: FinalStreamState,
+	): Generator<StreamEvent> {
+		if (event.event === "text_chunk" && event.data.delta) {
+			if (!state.finalMessageStarted) {
+				state.finalMessageStarted = true;
+				yield {
+					event: "message_start",
+					data: {
+						messageId: state.finalMessageId,
+						role: MessageRole.MODEL,
+					},
+				};
+			}
+			yield {
+				event: "part_delta",
+				data: {
+					messageId: state.finalMessageId,
+					partIndex: 0,
+					part: { kind: "text" },
+					delta: event.data.delta,
+				},
+			};
+		}
+		yield event;
 	}
 
 	private buildIntentThinkingData(
