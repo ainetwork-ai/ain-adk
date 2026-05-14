@@ -62,13 +62,25 @@ export class WorkflowTableFormulaEvaluator {
 			}
 		}
 
-		return {
-			rows,
-			totalRow: definition.totalFormula
-				? this.buildRecordTotalRow(definition, rows)
-				: undefined,
-			warnings,
-		};
+		let totalRow: RecordTableRow | undefined;
+		if (definition.totalFormula) {
+			totalRow = this.buildRecordTotalRow(definition, rows);
+			const totalIndex = definition.formulas.findIndex(
+				(formula) => formula.type === "total",
+			);
+			const postTotalFormulas = definition.formulas.slice(totalIndex + 1);
+			for (const formula of postTotalFormulas) {
+				if (formula.type === "expression") {
+					this.applyRecordExpressionFormula(formula, [totalRow], warnings);
+					continue;
+				}
+				if (formula.type === "sum") {
+					this.applyRecordSumFormula(formula, [totalRow]);
+				}
+			}
+		}
+
+		return { rows, totalRow, warnings };
 	}
 
 	private validateRecordFormulaDependencies(
