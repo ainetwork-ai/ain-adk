@@ -88,7 +88,7 @@ describe("WorkflowResponseComposer", () => {
 		);
 
 		const query = generateMessages.mock.calls[0][0].query;
-		expect(query).toContain("Rendered response blocks:");
+		expect(query).toContain("Already-rendered blocks");
 		expect(query).toContain("[sales-table] table");
 		expect(query).toContain("[sales-graph] graph");
 		expect(query).toContain('"headers": [');
