@@ -74,7 +74,7 @@ export class WorkflowResponseComposer {
 			block,
 			taskResults,
 			renderedBlocks,
-			"Generate this workflow response text from the task results. Return only the response block content.",
+			"Generate ONLY the new text described in Instructions. Task results and already-rendered blocks are reference context — never restate, echo, or repeat them in your output.",
 		);
 
 		const finalContent = content.endsWith("\n\n") ? content : `${content}\n\n`;
@@ -183,7 +183,7 @@ export class WorkflowResponseComposer {
 		taskResults: Record<string, WorkflowTaskResult>,
 	): WorkflowTaskResult[] {
 		if (!block.sourceTaskIds || block.sourceTaskIds.length === 0) {
-			return Object.values(taskResults);
+			return [];
 		}
 
 		return block.sourceTaskIds
@@ -196,16 +196,26 @@ export class WorkflowResponseComposer {
 		taskResults: WorkflowTaskResult[],
 		renderedBlocks: WorkflowRenderedBlock[],
 	): string {
-		const resultsText = serializeTaskResults(taskResults);
+		const sections: string[] = [];
+
+		if (taskResults.length > 0) {
+			sections.push(
+				`Task results (reference context — do not restate):\n${serializeTaskResults(taskResults)}`,
+			);
+		}
+
 		const blocksText = this.serializeRenderedBlocks(renderedBlocks);
-		return `Task results:
-${resultsText}
+		if (blocksText) {
+			sections.push(
+				`Already-rendered blocks (reference context — do not repeat):\n${blocksText}`,
+			);
+		}
 
-Rendered response blocks:
-${blocksText || "(none)"}
+		sections.push(
+			`Instructions:\n${block.prompt}\n\nOutput only the new text described above. Do not include any reference context.`,
+		);
 
-Instructions:
-${block.prompt}`;
+		return sections.join("\n\n");
 	}
 
 	private getSourceRenderedBlocks(
@@ -213,7 +223,7 @@ ${block.prompt}`;
 		renderedBlocks: WorkflowRenderedBlock[],
 	): WorkflowRenderedBlock[] {
 		if (!block.sourceBlockIds || block.sourceBlockIds.length === 0) {
-			return renderedBlocks;
+			return [];
 		}
 
 		const sourceBlockIds = new Set(block.sourceBlockIds);
