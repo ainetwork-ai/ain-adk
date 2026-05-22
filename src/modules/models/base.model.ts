@@ -1,12 +1,35 @@
 import type { ConnectorTool, FetchResponse } from "@/types/connector.js";
 import type { ThreadObject } from "@/types/memory.js";
-import type { LLMStream } from "@/types/stream.js";
+import type { AssembledToolCall, LLMStream } from "@/types/stream.js";
 
 export type ModelFetchOptions = {
 	reasoning?: "none" | "minimal" | "low" | "medium" | "high";
 	verbosity?: "low" | "medium" | "high";
 	toolChoice?: "auto" | "required";
 };
+
+/**
+ * Arguments for {@link BaseModel.appendAssistantToolCallTurn}.
+ */
+export interface AssistantToolCallTurn {
+	/** Text the assistant streamed in the same turn as the tool calls, or null. */
+	content: string | null;
+	/** Tool calls assembled from the stream. Must preserve provider-issued ids. */
+	toolCalls: AssembledToolCall[];
+}
+
+/**
+ * Arguments for {@link BaseModel.appendToolResult}.
+ */
+export interface ToolResultMessage {
+	/** Matches the `id` of the corresponding {@link AssembledToolCall}. */
+	toolCallId: string;
+	toolName: string;
+	/** Stringified result; providers wrap it in their native shape. */
+	content: string;
+	/** When true, the result represents a failure (skipped/error/invalid args). */
+	isError?: boolean;
+}
 
 /**
  * Abstract base class for AI model implementations.
@@ -34,12 +57,40 @@ export abstract class BaseModel<MessageType, FunctionType> {
 	}): MessageType[];
 
 	/**
-	 * Appends a new message to the existing message array.
+	 * Appends the assistant's tool-call turn to the message history.
 	 *
-	 * @param messages - Existing message array to expand
-	 * @param message - New message content to append
+	 * Called by `ToolCallingService` immediately after the streamed assistant
+	 * response is fully assembled and contains one or more tool calls, and
+	 * before the corresponding tool results are pushed.
+	 *
+	 * Each provider must translate the input into the shape its own protocol
+	 * expects (e.g. OpenAI/Azure: `{role:"assistant", content, tool_calls}`,
+	 * Gemini: `{role:"model", parts:[..., {functionCall}]}`).
+	 *
+	 * @param messages - Existing message array to mutate
+	 * @param turn - Assembled assistant turn (content + tool calls)
 	 */
-	abstract appendMessages(messages: MessageType[], message: string): void;
+	abstract appendAssistantToolCallTurn(
+		messages: MessageType[],
+		turn: AssistantToolCallTurn,
+	): void;
+
+	/**
+	 * Appends a single tool's result to the message history.
+	 *
+	 * Must be called once per `toolCallId` that appeared in the most recent
+	 * {@link appendAssistantToolCallTurn} — including cases where the tool was
+	 * skipped (unknown name, invalid arguments, etc.). Providers that enforce
+	 * matched tool_calls/tool_results pairs (e.g. OpenAI/Azure) will return a
+	 * 400 on the next request if this invariant is violated.
+	 *
+	 * @param messages - Existing message array to mutate
+	 * @param result - Tool execution result keyed by `toolCallId`
+	 */
+	abstract appendToolResult(
+		messages: MessageType[],
+		result: ToolResultMessage,
+	): void;
 
 	/**
 	 * Converts protocol-agnostic tools to model-specific function format.

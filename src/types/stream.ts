@@ -67,6 +67,21 @@ export interface ToolCallDelta {
 }
 
 /**
+ * A fully-assembled tool call reconstructed from a streamed assistant turn.
+ *
+ * The `id` is provider-issued and is the join key between the assistant's
+ * tool call and the corresponding tool result message that follows.
+ */
+export interface AssembledToolCall {
+	id: string;
+	type: "function";
+	function: {
+		name: string;
+		arguments: string;
+	};
+}
+
+/**
  * Normalized stream chunk interface for all LLM providers.
  *
  * This interface provides a consistent structure for stream responses
