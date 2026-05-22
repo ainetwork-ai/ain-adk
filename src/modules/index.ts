@@ -10,5 +10,10 @@ export type {
 	IWorkflowTemplateMemory,
 } from "./memory/base.memory.js";
 export { MemoryModule } from "./memory/memory.module.js";
-export { BaseModel, type ModelFetchOptions } from "./models/base.model.js";
+export {
+	type AssistantToolCallTurn,
+	BaseModel,
+	type ModelFetchOptions,
+	type ToolResultMessage,
+} from "./models/base.model.js";
 export { ModelModule } from "./models/model.module.js";
