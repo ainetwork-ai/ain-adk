@@ -2,7 +2,7 @@ import { getManifest } from "@/config/manifest";
 import type { A2AModule, MCPModule, ModelModule } from "@/modules";
 import { CONNECTOR_PROTOCOL_TYPE, type ConnectorTool } from "@/types/connector";
 import type { ThreadObject } from "@/types/memory";
-import type { StreamEvent } from "@/types/stream";
+import type { AssembledToolCall, StreamEvent } from "@/types/stream";
 import { loggers } from "@/utils/logger";
 import {
 	splitAdkToolArgs,
@@ -10,6 +10,14 @@ import {
 } from "@/utils/tool-args";
 
 export type ToolCallingMode = "all" | "mcp";
+
+/**
+ * Hard cap on the tool-calling iteration loop. The loop normally exits when
+ * the model returns a turn with no tool_calls; the cap is a defense-in-depth
+ * guard against runaway interactions caused by protocol drift or persistent
+ * model loops.
+ */
+export const MAX_TOOL_ITERATIONS = 15;
 
 export class ToolCallingService {
 	private modelModule: ModelModule;
@@ -51,8 +59,9 @@ export class ToolCallingService {
 		const tools = [...params.tools];
 		const processList: string[] = [];
 		let isFirstCall = true;
+		let iteration = 0;
 
-		while (true) {
+		for (; iteration < MAX_TOOL_ITERATIONS; iteration++) {
 			const functions = modelInstance.convertToolsToFunctions(tools);
 			const toolChoice =
 				isFirstCall && params.toolChoice === "required" && functions.length > 0
@@ -66,11 +75,8 @@ export class ToolCallingService {
 			);
 			isFirstCall = false;
 
-			const assembledToolCalls: {
-				id: string;
-				type: "function";
-				function: { name: string; arguments: string };
-			}[] = [];
+			const assembledToolCalls: AssembledToolCall[] = [];
+			let assistantText = "";
 
 			for await (const chunk of responseStream) {
 				const delta = chunk.delta;
@@ -89,6 +95,7 @@ export class ToolCallingService {
 						}
 					}
 				} else if (chunk.delta?.content) {
+					assistantText += chunk.delta.content;
 					yield {
 						event: "text_chunk",
 						data: { delta: chunk.delta.content },
@@ -102,13 +109,28 @@ export class ToolCallingService {
 			});
 
 			if (assembledToolCalls.length === 0) {
-				break;
+				return { toolCallsExecuted: processList.length };
 			}
+
+			modelInstance.appendAssistantToolCallTurn(params.messages, {
+				content: assistantText.length > 0 ? assistantText : null,
+				toolCalls: assembledToolCalls,
+			});
 
 			for (const toolCall of assembledToolCalls) {
 				const toolName = toolCall.function.name;
 				const selectedTool = this.selectTool(tools, toolName);
 				if (!selectedTool) {
+					loggers.intent.warn("Tool not found", {
+						toolName,
+						toolCallId: toolCall.id,
+					});
+					modelInstance.appendToolResult(params.messages, {
+						toolCallId: toolCall.id,
+						toolName,
+						content: `Tool "${toolName}" is not available.`,
+						isError: true,
+					});
 					continue;
 				}
 
@@ -121,10 +143,12 @@ export class ToolCallingService {
 						arguments: toolCall.function.arguments,
 						error,
 					});
-					modelInstance.appendMessages(
-						params.messages,
-						`[Bot Called Tool ${toolName}]\nInvalid tool arguments JSON: ${toolCall.function.arguments}`,
-					);
+					modelInstance.appendToolResult(params.messages, {
+						toolCallId: toolCall.id,
+						toolName,
+						content: `Invalid tool arguments JSON: ${toolCall.function.arguments}`,
+						isError: true,
+					});
 					continue;
 				}
 
@@ -147,8 +171,19 @@ export class ToolCallingService {
 
 				loggers.intent.debug("Tool Result", { toolResult });
 				processList.push(toolResult);
-				modelInstance.appendMessages(params.messages, toolResult);
+				modelInstance.appendToolResult(params.messages, {
+					toolCallId: toolCall.id,
+					toolName,
+					content: toolResult,
+				});
 			}
+		}
+
+		if (iteration >= MAX_TOOL_ITERATIONS) {
+			loggers.intent.warn("Tool calling loop reached max iterations cap", {
+				threadId: params.thread.threadId,
+				maxIterations: MAX_TOOL_ITERATIONS,
+			});
 		}
 
 		return { toolCallsExecuted: processList.length };
