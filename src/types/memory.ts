@@ -387,6 +387,8 @@ export interface WorkflowTemplate {
 	title: string;
 	description: string;
 	active: boolean;
+	/** Classification label for grouping templates in the UI (e.g. "식음", "객실"). */
+	category?: string;
 	/** The prompt/instruction template with {{variable}} placeholders */
 	content: string;
 	/** Structured workflow definition. If omitted, legacy content execution is used. */
@@ -410,6 +412,8 @@ export interface UserWorkflow {
 	title: string;
 	description?: string;
 	active: boolean;
+	/** Classification label for grouping workflows in the UI (e.g. "식음", "객실"). Copied from the source template. */
+	category?: string;
 
 	/** Reference to the original WorkflowTemplate (optional) */
 	templateId?: string;
