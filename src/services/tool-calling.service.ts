@@ -77,8 +77,12 @@ export class ToolCallingService {
 
 			const assembledToolCalls: AssembledToolCall[] = [];
 			let assistantText = "";
+			let finishReason: string | null = null;
 
 			for await (const chunk of responseStream) {
+				if (chunk.finish_reason) {
+					finishReason = chunk.finish_reason;
+				}
 				const delta = chunk.delta;
 				if (delta?.tool_calls) {
 					for (const { index, id, function: func } of delta.tool_calls) {
@@ -101,6 +105,22 @@ export class ToolCallingService {
 						data: { delta: chunk.delta.content },
 					};
 				}
+			}
+
+			const finishLog = {
+				threadId: params.thread.threadId,
+				iteration,
+				finishReason,
+				assistantTextLength: assistantText.length,
+				toolCallCount: assembledToolCalls.length,
+			};
+			if (finishReason === "length" || finishReason === "content_filter") {
+				loggers.intent.warn(
+					`Model stream ended with finish_reason="${finishReason}" (response likely truncated)`,
+					finishLog,
+				);
+			} else {
+				loggers.intentStream.debug("Model stream finished", finishLog);
 			}
 
 			loggers.intentStream.debug("assembledToolCalls", {
