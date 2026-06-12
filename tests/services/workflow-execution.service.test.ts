@@ -67,6 +67,7 @@ describe("WorkflowExecutionService", () => {
 				})),
 				addMessagesToThread: jest.fn(async () => undefined),
 			}),
+			getDocumentMemory: () => undefined,
 		} as unknown as MemoryModule;
 		const modelModule = {} as ModelModule;
 		const toolCallingService = {} as ToolCallingService;
@@ -145,5 +146,118 @@ describe("WorkflowExecutionService", () => {
 					event.data.delta === "unexpected early text",
 			),
 		).toBeUndefined();
+	});
+
+	it("creates a document and appends a rich reference message when document memory is available", async () => {
+		const workflow = {
+			workflowId: "workflow-1",
+			userId: "user-1",
+			title: "Daily Report",
+			content: "Daily Report",
+			active: true,
+			definition: {
+				tasks: [
+					{ taskId: "task-1", title: "Collect data", prompt: "Collect data" },
+				],
+				response: {
+					blocks: [
+						{ blockId: "block-1", type: "heading" as const, text: "Summary" },
+					],
+				},
+			},
+		};
+		const userWorkflowService = {
+			getWorkflow: jest.fn(async () => workflow),
+			updateWorkflow: jest.fn(async () => undefined),
+		} as unknown as UserWorkflowService;
+		const queryService = {} as QueryService;
+		const workflowVariableResolver = {
+			resolveForExecution: jest.fn(() => ({
+				query: workflow.content,
+				displayQuery: workflow.title,
+				definition: workflow.definition,
+			})),
+		} as unknown as WorkflowVariableResolver;
+
+		const addMessagesToThread = jest.fn(async () => undefined);
+		const createDocument = jest.fn(async (doc) => doc);
+		const memoryModule = {
+			getThreadMemory: () => ({
+				createThread: jest.fn(async () => ({
+					type: ThreadType.WORKFLOW,
+					userId: workflow.userId,
+					threadId: "thread-1",
+					title: workflow.title,
+					workflowId: workflow.workflowId,
+				})),
+				addMessagesToThread,
+			}),
+			getDocumentMemory: () => ({ createDocument }),
+		} as unknown as MemoryModule;
+		const modelModule = {} as ModelModule;
+		const toolCallingService = {} as ToolCallingService;
+
+		const service = new WorkflowExecutionService(
+			userWorkflowService,
+			queryService,
+			workflowVariableResolver,
+			modelModule,
+			memoryModule,
+			toolCallingService,
+		);
+
+		(service as any).workflowTaskRunner = {
+			executeTask: async function* () {
+				return {
+					taskId: "task-1",
+					title: "Collect data",
+					status: "completed",
+					content: "task result body",
+					startedAt: 1,
+					completedAt: 2,
+				} satisfies WorkflowTaskResult;
+			},
+		};
+		(service as any).workflowResponseComposer = {
+			renderResponseBlock: async function* () {
+				yield {
+					event: "text_chunk",
+					data: { delta: "## Summary\n\n" },
+				} satisfies StreamEvent;
+				return {
+					blockId: "block-1",
+					type: "heading",
+					content: "## Summary\n\n",
+				};
+			},
+		};
+
+		await collectEvents(service.executeWorkflowStream(workflow.workflowId));
+
+		expect(createDocument).toHaveBeenCalledTimes(1);
+		const createdDoc = createDocument.mock.calls[0][0];
+		expect(createdDoc).toMatchObject({
+			userId: "user-1",
+			source: "WORKFLOW",
+			format: "MARKDOWN",
+			content: "## Summary\n\n",
+			version: 1,
+			workflowId: "workflow-1",
+			threadId: "thread-1",
+		});
+
+		// Find the rich reference message appended for the document.
+		const richCall = addMessagesToThread.mock.calls.find(
+			(call: any[]) => call[2]?.[0]?.content?.type === "rich",
+		);
+		expect(richCall).toBeDefined();
+		const richMessage = (richCall as any[])[2][0];
+		expect(richMessage.content.parts).toEqual([
+			{
+				type: "document",
+				documentId: createdDoc.documentId,
+				title: "Daily Report",
+			},
+		]);
 	});
 });

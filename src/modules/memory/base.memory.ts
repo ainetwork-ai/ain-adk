@@ -1,3 +1,4 @@
+import type { Document, DocumentFilter } from "@/types/document";
 import type {
 	Intent,
 	MessageObject,
@@ -21,6 +22,11 @@ export interface IMemory {
 	getAgentMemory(): IAgentMemory;
 	getWorkflowTemplateMemory(): IWorkflowTemplateMemory;
 	getUserWorkflowMemory(): IUserWorkflowMemory;
+	/**
+	 * Document storage. Optional for backward compatibility — memory
+	 * implementations that predate documents may omit it.
+	 */
+	getDocumentMemory?(): IDocumentMemory;
 }
 
 /**
@@ -107,4 +113,20 @@ export interface IUserWorkflowMemory {
 	listUserWorkflows(userId?: string): Promise<UserWorkflow[]>;
 	/** List all active scheduled workflows across all users (used by scheduler) */
 	listActiveScheduledWorkflows(): Promise<UserWorkflow[]>;
+}
+
+/**
+ * Document memory interface - handles document persistence.
+ *
+ * Documents are first-class, mutable entities referenced from threads.
+ */
+export interface IDocumentMemory {
+	getDocument(documentId: string): Promise<Document | undefined>;
+	createDocument(document: Document): Promise<Document>;
+	updateDocument(
+		documentId: string,
+		document: Partial<Document>,
+	): Promise<void>;
+	deleteDocument(documentId: string): Promise<void>;
+	listDocuments(userId?: string, filter?: DocumentFilter): Promise<Document[]>;
 }

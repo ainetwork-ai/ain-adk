@@ -3,6 +3,7 @@ export { AuthModule } from "./auth/auth.module.js";
 export { MCPModule } from "./mcp/mcp.module.js";
 export type {
 	IAgentMemory,
+	IDocumentMemory,
 	IIntentMemory,
 	IMemory,
 	IThreadMemory,

@@ -6,6 +6,7 @@ import {
 } from "@/config/modules";
 import { getOnIntentFallback } from "@/config/options";
 import { AgentApiController } from "@/controllers/api/agent.api.controller";
+import { DocumentApiController } from "@/controllers/api/document.api.controller";
 import { IntentApiController } from "@/controllers/api/intent.api.controller";
 import { ModelApiController } from "@/controllers/api/model.api.controller";
 import { ThreadApiController } from "@/controllers/api/threads.api.controller";
@@ -55,6 +56,7 @@ class Container {
 	private _intentApiController?: IntentApiController;
 	private _workflowTemplateApiController?: WorkflowTemplateApiController;
 	private _userWorkflowApiController?: UserWorkflowApiController;
+	private _documentApiController?: DocumentApiController;
 
 	getThreadService(): ThreadService {
 		if (!this._threadService) {
@@ -242,6 +244,15 @@ class Container {
 		return this._userWorkflowApiController;
 	}
 
+	getDocumentApiController(): DocumentApiController {
+		if (!this._documentApiController) {
+			this._documentApiController = new DocumentApiController(
+				getMemoryModule(),
+			);
+		}
+		return this._documentApiController;
+	}
+
 	/**
 	 * Reset all instances (useful for testing)
 	 */
@@ -267,6 +278,7 @@ class Container {
 		this._intentApiController = undefined;
 		this._workflowTemplateApiController = undefined;
 		this._userWorkflowApiController = undefined;
+		this._documentApiController = undefined;
 	}
 }
 

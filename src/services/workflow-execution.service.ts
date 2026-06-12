@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { A2AModule, MemoryModule, ModelModule } from "@/modules";
+import { DocumentFormat, DocumentSource } from "@/types/document.js";
 import {
 	MessageRole,
 	type ThreadMetadata,
@@ -11,7 +12,10 @@ import {
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream.js";
 import { loggers } from "@/utils/logger.js";
-import { appendTextMessageToThread } from "@/utils/thread-messages.js";
+import {
+	appendRichMessageToThread,
+	appendTextMessageToThread,
+} from "@/utils/thread-messages.js";
 import type { QueryService } from "./query.service.js";
 import type { ToolCallingService } from "./tool-calling.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
@@ -318,18 +322,53 @@ export class WorkflowExecutionService {
 				finalContent ||
 				(executionError ? `오류: ${executionError.message}` : "");
 			try {
-				await appendTextMessageToThread(
-					this.memoryModule,
-					thread,
-					MessageRole.MODEL,
-					responseContent,
-					{
+				const documentMemory = this.memoryModule.getDocumentMemory();
+				if (documentMemory && !executionError && finalContent) {
+					// Promote the workflow result to a first-class document and
+					// reference it from the thread (body is resolved on demand).
+					const documentId = randomUUID();
+					const now = new Date().toISOString();
+					await documentMemory.createDocument({
+						documentId,
+						userId: workflow.userId,
+						title: thread.title,
+						format: DocumentFormat.MARKDOWN,
+						content: finalContent,
+						blocks: renderedBlocks,
+						source: DocumentSource.WORKFLOW,
 						workflowId,
-						workflowRun: true,
-						responseBlocks: renderedBlocks,
-						...(executionError ? { error: executionError.message } : {}),
-					},
-				);
+						threadId: thread.threadId,
+						version: 1,
+						createdAt: now,
+						updatedAt: now,
+					});
+					await appendRichMessageToThread(
+						this.memoryModule,
+						thread,
+						MessageRole.MODEL,
+						[{ type: "document", documentId, title: thread.title }],
+						{
+							workflowId,
+							workflowRun: true,
+							documentId,
+						},
+					);
+				} else {
+					// No document memory (or execution failed): keep the legacy
+					// inline text message with structured blocks in metadata.
+					await appendTextMessageToThread(
+						this.memoryModule,
+						thread,
+						MessageRole.MODEL,
+						responseContent,
+						{
+							workflowId,
+							workflowRun: true,
+							responseBlocks: renderedBlocks,
+							...(executionError ? { error: executionError.message } : {}),
+						},
+					);
+				}
 			} catch (saveError) {
 				loggers.agent.error("Failed to save workflow response message", {
 					workflowId,

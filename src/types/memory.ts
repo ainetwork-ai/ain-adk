@@ -11,14 +11,45 @@ export enum MessageRole {
 }
 
 /**
+ * A plain-text segment within a "rich" message.
+ */
+export type TextPart = {
+	type: "text";
+	text: string;
+};
+
+/**
+ * A reference to a {@link Document} within a "rich" message.
+ *
+ * The body is NOT embedded — clients resolve `documentId` to fetch the latest
+ * document (rendering it inline or as a link). `title` is a label hint only.
+ */
+export type DocumentPart = {
+	type: "document";
+	documentId: string;
+	/** Label hint for rendering (e.g. link text). Not the canonical title. */
+	title?: string;
+};
+
+/**
+ * A single segment of a "rich" message. Discriminated by `type`.
+ */
+export type MessagePart = TextPart | DocumentPart;
+
+/**
  * Content structure for message content.
  *
  * Supports multi-part content with different types (text, images, etc.).
+ *
+ * - `type: "text"` — `parts` is `string[]` (legacy/simple text).
+ * - `type: "document"` — `parts` is a single `[DocumentPart]` (document-only).
+ * - `type: "rich"` — `parts` is `MessagePart[]`, mixing text and document
+ *   references in display order.
  */
 export type MessageContentObject = {
-	/** Content type (e.g., "text", "image", "tool_use") */
+	/** Content type (e.g., "text", "document", "rich"). */
 	type: string;
-	/** Array of content parts, structure depends on content type */
+	/** Array of content parts, structure depends on content type. */
 	parts: unknown[];
 };
 
