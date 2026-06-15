@@ -32,6 +32,17 @@ export const createDocumentApiRouter = (): Router => {
 	// APIs (prefix: /api/document)
 	router.get("/", checkDocumentMemory, controller.handleGetAllDocuments);
 	router.get("/:id", checkDocumentMemory, controller.handleGetDocument);
+	router.post("/", checkDocumentMemory, controller.handleCreateDocument);
+	router.post(
+		"/:id/slots/:slotId/fill",
+		checkDocumentMemory,
+		controller.handleFillSlot,
+	);
+	router.post(
+		"/:id/slots/:slotId/fill/stream",
+		checkDocumentMemory,
+		controller.handleFillSlotStream,
+	);
 	router.post(
 		"/update/:id",
 		checkDocumentMemory,

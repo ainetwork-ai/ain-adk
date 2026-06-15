@@ -260,4 +260,121 @@ describe("WorkflowExecutionService", () => {
 			},
 		]);
 	});
+
+	it("fills a document slot from its bound workflow without creating a thread", async () => {
+		const workflow = {
+			workflowId: "workflow-1",
+			userId: "user-1",
+			title: "Revenue",
+			content: "Revenue",
+			active: true,
+			definition: {
+				tasks: [
+					{ taskId: "task-1", title: "Collect data", prompt: "Collect data" },
+				],
+				response: {
+					blocks: [
+						{ blockId: "block-1", type: "heading" as const, text: "Summary" },
+					],
+				},
+			},
+		};
+		const userWorkflowService = {
+			getWorkflow: jest.fn(async () => workflow),
+			updateWorkflow: jest.fn(async () => undefined),
+		} as unknown as UserWorkflowService;
+		const queryService = {} as QueryService;
+		const workflowVariableResolver = {
+			resolveForExecution: jest.fn(() => ({
+				query: workflow.content,
+				displayQuery: workflow.title,
+				definition: workflow.definition,
+			})),
+		} as unknown as WorkflowVariableResolver;
+
+		const document = {
+			documentId: "doc-1",
+			userId: "user-1",
+			title: "Monthly Report",
+			format: "MARKDOWN",
+			content: "## 매출\n{{slot:revenue}}\n",
+			version: 1,
+			source: "MANUAL",
+			slots: [
+				{
+					slotId: "revenue",
+					status: "empty",
+					binding: { type: "WORKFLOW", workflowId: "workflow-1" },
+				},
+			],
+			createdAt: "t0",
+			updatedAt: "t0",
+		};
+		const createThread = jest.fn();
+		const updateDocument = jest.fn(async () => undefined);
+		const memoryModule = {
+			getThreadMemory: () => ({ createThread }),
+			getDocumentMemory: () => ({
+				getDocument: jest.fn(async () => document),
+				updateDocument,
+			}),
+		} as unknown as MemoryModule;
+		const modelModule = {} as ModelModule;
+		const toolCallingService = {} as ToolCallingService;
+
+		const service = new WorkflowExecutionService(
+			userWorkflowService,
+			queryService,
+			workflowVariableResolver,
+			modelModule,
+			memoryModule,
+			toolCallingService,
+		);
+
+		(service as any).workflowTaskRunner = {
+			executeTask: async function* () {
+				return {
+					taskId: "task-1",
+					title: "Collect data",
+					status: "completed",
+					content: "task result body",
+					startedAt: 1,
+					completedAt: 2,
+				} satisfies WorkflowTaskResult;
+			},
+		};
+		(service as any).workflowResponseComposer = {
+			renderResponseBlock: async function* () {
+				yield {
+					event: "text_chunk",
+					data: { delta: "## Summary\n\n" },
+				} satisfies StreamEvent;
+				return { blockId: "block-1", type: "heading", content: "## Summary\n\n" };
+			},
+		};
+
+		const events = await collectEvents(
+			service.fillDocumentSlotStream("doc-1", "revenue"),
+		);
+
+		// No thread is created for slot fills.
+		expect(createThread).not.toHaveBeenCalled();
+
+		// Emits a document_id event identifying the target slot.
+		expect(events).toContainEqual({
+			event: "document_id",
+			data: { documentId: "doc-1", slotId: "revenue" },
+		});
+
+		// Last slot update writes the resolved fragment into the slot.
+		const lastUpdate =
+			updateDocument.mock.calls[updateDocument.mock.calls.length - 1];
+		expect(lastUpdate[0]).toBe("doc-1");
+		const updatedSlot = (lastUpdate[1] as any).slots[0];
+		expect(updatedSlot.status).toBe("resolved");
+		expect(updatedSlot.fragment).toMatchObject({
+			content: "## Summary\n\n",
+			source: { type: "WORKFLOW", workflowId: "workflow-1" },
+		});
+	});
 });

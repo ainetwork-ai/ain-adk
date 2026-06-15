@@ -21,13 +21,64 @@ export enum DocumentSource {
 }
 
 /**
+ * A resolved result fragment produced by a workflow/query execution.
+ *
+ * This is the same shape a workflow already produces (markdown + structured
+ * render blocks); it fills a single {@link DocumentSlot}.
+ */
+export interface DocumentFragment {
+	/** Rendered markdown for this fragment. */
+	content: string;
+	/** Structured render artifacts (tables/graphs) for rich rendering. */
+	blocks?: WorkflowRenderedBlock[];
+	/** What produced this fragment. */
+	source:
+		| { type: "WORKFLOW"; workflowId: string }
+		| { type: "QUERY"; query: string };
+	/** ISO timestamp when the fragment was resolved. */
+	resolvedAt: string;
+}
+
+export type DocumentSlotStatus = "empty" | "running" | "resolved" | "failed";
+
+/**
+ * A placeholder within a document body, addressed by a `{{slot:slotId}}` token
+ * in {@link Document.content}. Filled on demand by a bound workflow/query.
+ */
+export interface DocumentSlot {
+	/** Matches the `{{slot:slotId}}` token in the document content. */
+	slotId: string;
+	/** Human-readable label for the slot. */
+	label?: string;
+	/** Fill lifecycle status. */
+	status: DocumentSlotStatus;
+	/**
+	 * Pre-declared source that fills this slot. A fill request may override
+	 * the workflow/variables explicitly.
+	 */
+	binding?:
+		| {
+				type: "WORKFLOW";
+				workflowId: string;
+				executionVariables?: Record<string, string>;
+		  }
+		| { type: "QUERY"; query: string };
+	/** Resolved result once filled. */
+	fragment?: DocumentFragment;
+	/** Error message when `status === "failed"`. */
+	error?: string;
+}
+
+/**
  * A first-class, mutable document.
  *
  * Documents hold the canonical result of a workflow/query as markdown and are
  * referenced from threads (rather than embedded), so manual edits are always
  * reflected wherever the document is rendered.
  *
- * - `content` is the canonical markdown (the edit target).
+ * - `content` is the canonical markdown (the edit target). It may contain
+ *   `{{slot:slotId}}` tokens that are substituted with the resolved fragment
+ *   of the matching {@link DocumentSlot}.
  * - `blocks` are the structured render artifacts captured at creation time and
  *   are read-only metadata. After a manual edit (`editedManually = true`) they
  *   may no longer be in sync with `content`.
@@ -42,6 +93,10 @@ export interface Document {
 	content: string;
 	/** Structured render artifacts captured at creation (read-only metadata). */
 	blocks?: WorkflowRenderedBlock[];
+	/** Placeholder slots referenced by `{{slot:slotId}}` tokens in `content`. */
+	slots?: DocumentSlot[];
+	/** Optional grouping key for viewing related documents together. */
+	groupId?: string;
 	/** Where this document came from. */
 	source: DocumentSource;
 	/** Source workflow when `source === WORKFLOW`. */
@@ -65,4 +120,5 @@ export type DocumentFilter = {
 	workflowId?: string;
 	threadId?: string;
 	source?: DocumentSource;
+	groupId?: string;
 };

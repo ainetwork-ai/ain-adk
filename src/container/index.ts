@@ -248,6 +248,7 @@ class Container {
 		if (!this._documentApiController) {
 			this._documentApiController = new DocumentApiController(
 				getMemoryModule(),
+				this.getWorkflowExecutionService(),
 			);
 		}
 		return this._documentApiController;
