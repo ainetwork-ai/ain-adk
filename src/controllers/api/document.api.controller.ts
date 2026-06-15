@@ -45,13 +45,13 @@ export class DocumentApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const documentMemory = this.memoryModule.getDocumentMemory();
-			const { workflowId, threadId, source, groupId } = req.query as {
+			const { workflowId, threadId, source, labels } = req.query as {
 				workflowId?: string;
 				threadId?: string;
 				source?: DocumentSource;
-				groupId?: string;
+				labels?: Record<string, string>;
 			};
-			const filter: DocumentFilter = { workflowId, threadId, source, groupId };
+			const filter: DocumentFilter = { workflowId, threadId, source, labels };
 			const documents = await documentMemory?.listDocuments(userId, filter);
 			res.json(documents ?? []);
 		} catch (error) {
@@ -84,10 +84,11 @@ export class DocumentApiController {
 			const { id } = req.params as { id: string };
 			const existing = await this.getAuthorizedDocument(userId, id);
 
-			const { title, content, slots } = req.body as {
+			const { title, content, slots, labels } = req.body as {
 				title?: string;
 				content?: string;
 				slots?: DocumentSlot[];
+				labels?: Record<string, string>;
 			};
 
 			const updates: Partial<Document> = {
@@ -103,6 +104,9 @@ export class DocumentApiController {
 			}
 			if (slots !== undefined) {
 				updates.slots = slots;
+			}
+			if (labels !== undefined) {
+				updates.labels = labels;
 			}
 
 			await this.memoryModule.getDocumentMemory()?.updateDocument(id, updates);
@@ -137,11 +141,11 @@ export class DocumentApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const documentMemory = this.memoryModule.getDocumentMemory();
-			const { title, content, slots, groupId, format } = req.body as {
+			const { title, content, slots, labels, format } = req.body as {
 				title?: string;
 				content?: string;
 				slots?: DocumentSlot[];
-				groupId?: string;
+				labels?: Record<string, string>;
 				format?: DocumentFormat;
 			};
 
@@ -153,7 +157,7 @@ export class DocumentApiController {
 				format: format ?? DocumentFormat.MARKDOWN,
 				content: content ?? "",
 				slots,
-				groupId,
+				labels,
 				source: DocumentSource.MANUAL,
 				version: 1,
 				createdAt: now,

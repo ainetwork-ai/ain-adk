@@ -95,8 +95,15 @@ export interface Document {
 	blocks?: WorkflowRenderedBlock[];
 	/** Placeholder slots referenced by `{{slot:slotId}}` tokens in `content`. */
 	slots?: DocumentSlot[];
-	/** Optional grouping key for viewing related documents together. */
-	groupId?: string;
+	/**
+	 * Faceted grouping dimensions, e.g.
+	 * `{ category: "logbook", workplaceId: "123", month: "2026-06" }`.
+	 *
+	 * The hierarchy/nesting order is NOT encoded here — it is decided at query
+	 * or render time by choosing an order of label keys. This keeps grouping
+	 * extensible to any number of levels without schema changes.
+	 */
+	labels?: Record<string, string>;
 	/** Where this document came from. */
 	source: DocumentSource;
 	/** Source workflow when `source === WORKFLOW`. */
@@ -115,10 +122,13 @@ export interface Document {
 
 /**
  * Optional filters for listing documents.
+ *
+ * `labels` is a subset match: every provided key/value must equal the
+ * document's corresponding label.
  */
 export type DocumentFilter = {
 	workflowId?: string;
 	threadId?: string;
 	source?: DocumentSource;
-	groupId?: string;
+	labels?: Record<string, string>;
 };
