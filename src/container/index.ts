@@ -15,6 +15,7 @@ import { WorkflowTemplateApiController } from "@/controllers/api/workflow-templa
 import { IntentController } from "@/controllers/intent.controller";
 import { QueryController } from "@/controllers/query.controller";
 import { A2AService } from "@/services/a2a.service";
+import { DocumentAdviceService } from "@/services/document-advice.service";
 import { IntentFulfillService } from "@/services/intents/fulfill.service";
 import { IntentTriggerService } from "@/services/intents/trigger.service";
 import { PIIService } from "@/services/pii.service";
@@ -46,6 +47,7 @@ class Container {
 	private _workflowExecutionService?: WorkflowExecutionService;
 	private _workflowVariableResolver?: WorkflowVariableResolver;
 	private _schedulerService?: SchedulerService;
+	private _documentAdviceService?: DocumentAdviceService;
 
 	// Controllers
 	private _queryController?: QueryController;
@@ -244,11 +246,22 @@ class Container {
 		return this._userWorkflowApiController;
 	}
 
+	getDocumentAdviceService(): DocumentAdviceService {
+		if (!this._documentAdviceService) {
+			this._documentAdviceService = new DocumentAdviceService(
+				getModelModule(),
+				getMemoryModule(),
+			);
+		}
+		return this._documentAdviceService;
+	}
+
 	getDocumentApiController(): DocumentApiController {
 		if (!this._documentApiController) {
 			this._documentApiController = new DocumentApiController(
 				getMemoryModule(),
 				this.getWorkflowExecutionService(),
+				this.getDocumentAdviceService(),
 			);
 		}
 		return this._documentApiController;
@@ -270,6 +283,7 @@ class Container {
 		this._workflowExecutionService = undefined;
 		this._workflowVariableResolver = undefined;
 		this._schedulerService = undefined;
+		this._documentAdviceService = undefined;
 
 		this._queryController = undefined;
 		this._intentController = undefined;

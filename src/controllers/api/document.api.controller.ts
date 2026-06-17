@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { MemoryModule } from "@/modules/index.js";
+import type { DocumentAdviceService } from "@/services/document-advice.service.js";
 import type { WorkflowExecutionService } from "@/services/workflow-execution.service.js";
 import { AinHttpError } from "@/types/agent.js";
 import {
@@ -16,13 +17,16 @@ import { streamEventsToSSE } from "@/utils/sse-stream.js";
 export class DocumentApiController {
 	private memoryModule: MemoryModule;
 	private workflowExecutionService: WorkflowExecutionService;
+	private documentAdviceService: DocumentAdviceService;
 
 	constructor(
 		memoryModule: MemoryModule,
 		workflowExecutionService: WorkflowExecutionService,
+		documentAdviceService: DocumentAdviceService,
 	) {
 		this.memoryModule = memoryModule;
 		this.workflowExecutionService = workflowExecutionService;
+		this.documentAdviceService = documentAdviceService;
 	}
 
 	private async getAuthorizedDocument(
@@ -216,6 +220,21 @@ export class DocumentApiController {
 					{ workflowId, executionVariables },
 					signal,
 				);
+			},
+		});
+	};
+
+	public handleGenerateAdviceStream = async (req: Request, res: Response) => {
+		const userId = res.locals.userId || "";
+		const { id } = req.params as { id: string };
+
+		await streamEventsToSSE(req, res, {
+			logLabel: "Document advice stream",
+			userId,
+			logContext: { documentId: id },
+			setup: async (signal) => {
+				await this.getAuthorizedDocument(userId, id);
+				return this.documentAdviceService.generateAdviceStream(id, signal);
 			},
 		});
 	};
