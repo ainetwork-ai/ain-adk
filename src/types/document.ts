@@ -83,6 +83,14 @@ export interface DocumentSlot {
  *   are read-only metadata. After a manual edit (`editedManually = true`) they
  *   may no longer be in sync with `content`.
  */
+/** AI-generated advice derived from a document's rendered content. */
+export interface DocumentAdvice {
+	/** Generated advice text (plain prose / light markdown). */
+	content: string;
+	/** ISO timestamp when generated. */
+	generatedAt: string;
+}
+
 export interface Document {
 	documentId: string;
 	userId: string;
@@ -93,6 +101,8 @@ export interface Document {
 	content: string;
 	/** Structured render artifacts captured at creation (read-only metadata). */
 	blocks?: WorkflowRenderedBlock[];
+	/** Cached AI advice generated from the rendered content. */
+	advice?: DocumentAdvice;
 	/** Placeholder slots referenced by `{{slot:slotId}}` tokens in `content`. */
 	slots?: DocumentSlot[];
 	/**
