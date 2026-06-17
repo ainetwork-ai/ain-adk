@@ -16,6 +16,7 @@ import {
 	type WorkflowDefinition,
 	type WorkflowRenderedBlock,
 	type WorkflowTaskResult,
+	type WorkflowTemplate,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream.js";
 import { loggers } from "@/utils/logger.js";
@@ -503,12 +504,13 @@ export class WorkflowExecutionService {
 			data: { documentId, slotId },
 		};
 
-		const workflow = await this.userWorkflowService.getWorkflow(workflowId);
+		// A slot may bind to either a user workflow or a workflow template.
+		const workflow = await this.getFillableWorkflow(workflowId);
 		if (!workflow) {
-			throw new Error(`User workflow not found: ${workflowId}`);
+			throw new Error(`User workflow or template not found: ${workflowId}`);
 		}
 
-		const { definition } = this.workflowVariableResolver.resolveForExecution(
+		const { definition } = this.workflowVariableResolver.resolveForDocumentFill(
 			workflow,
 			executionVariables,
 		);
@@ -623,6 +625,23 @@ export class WorkflowExecutionService {
 			lastRunAt: Date.now(),
 			lastThreadId: threadId,
 		});
+	}
+
+	/**
+	 * Resolves a slot binding's `workflowId` to a runnable workflow, accepting
+	 * either a user workflow or a workflow template. User workflows take
+	 * precedence; falls back to a template with the same id.
+	 */
+	private async getFillableWorkflow(
+		workflowId: string,
+	): Promise<UserWorkflow | WorkflowTemplate | undefined> {
+		const userWorkflow = await this.userWorkflowService.getWorkflow(workflowId);
+		if (userWorkflow) {
+			return userWorkflow;
+		}
+		return this.memoryModule
+			.getWorkflowTemplateMemory()
+			.getTemplate(workflowId);
 	}
 
 	private async createWorkflowThread(

@@ -180,6 +180,62 @@ describe("WorkflowVariableResolver", () => {
 		);
 	});
 
+	describe("resolveForDocumentFill", () => {
+		it("substitutes provided variables regardless of resolveAt declaration, including undeclared keys", () => {
+			const resolver = new WorkflowVariableResolver();
+
+			const result = resolver.resolveForDocumentFill(
+				{
+					title: "{{workplace}} 매출",
+					content: "{{workplace}} / {{date}} / {{plu}}",
+					timezone: "Asia/Seoul",
+					// workplace declared as creation, date/plu not declared at all.
+					variables: {
+						workplace: {
+							id: "workplace",
+							label: "매장",
+							type: "text",
+							resolveAt: "creation",
+						},
+					},
+					definition: {
+						tasks: [
+							{
+								taskId: "fetch",
+								title: "조회",
+								prompt: "매장 {{workplace}} 일자 {{date}} 품목 {{plu}}",
+							},
+						],
+						response: { blocks: [] },
+					},
+				},
+				{ workplace: "온달", date: "2026-06-16", plu: "1234" },
+			);
+
+			expect(result.query).toBe("온달 / 2026-06-16 / 1234");
+			expect(result.displayQuery).toBe("온달 매출");
+			expect(result.definition?.tasks[0].prompt).toBe(
+				"매장 온달 일자 2026-06-16 품목 1234",
+			);
+		});
+
+		it("still resolves built-in template tokens in the workflow body", () => {
+			const resolver = new WorkflowVariableResolver();
+
+			const result = resolver.resolveForDocumentFill(
+				{
+					title: "리포트",
+					content: "{{workplace}} {{today}}",
+					timezone: "Asia/Seoul",
+					definition: { tasks: [], response: { blocks: [] } },
+				},
+				{ workplace: "온달" },
+			);
+
+			expect(result.query).toMatch(/^온달 \d{4}-\d{2}-\d{2}$/);
+		});
+	});
+
 	it("replaces placeholders by variable id as well as variable key", () => {
 		const resolver = new WorkflowVariableResolver();
 

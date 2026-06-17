@@ -725,4 +725,71 @@ export class WorkflowVariableResolver {
 			),
 		};
 	}
+
+	/**
+	 * Resolves a workflow for filling a document slot.
+	 *
+	 * Unlike {@link resolveForExecution}, the document context has no
+	 * creation/execution distinction: every variable value is already decided
+	 * (entered in the document-creation dialog or fixed by the workplace) and
+	 * stored on the slot binding. So all provided values are substituted
+	 * regardless of each variable's declared `resolveAt`, then built-in template
+	 * tokens (e.g. `{{today}}`) are resolved. This does NOT change how standalone
+	 * workflow execution resolves variables.
+	 */
+	resolveForDocumentFill(
+		workflow: WorkflowTextFields,
+		providedVariables?: Record<string, string>,
+	): {
+		query: string;
+		displayQuery: string;
+		definition?: WorkflowDefinition;
+	} {
+		const { timezone } = workflow;
+		let query = workflow.content;
+		let displayQuery = workflow.title;
+		let definition = workflow.definition;
+		const normalizedVariables = normalizeWorkflowVariablesRecord(
+			workflow.variables,
+		);
+		const mergedVariables = {
+			...(workflow.variableValues || {}),
+			...(providedVariables || {}),
+		};
+
+		if (Object.keys(mergedVariables).length > 0) {
+			const resolvedVars = resolveTemplateRecord(mergedVariables, timezone);
+			// Force every replacement to apply now (resolveAt-agnostic): the values
+			// are already final, so creation- and execution-scoped tokens alike are
+			// substituted in a single pass.
+			const replacements = buildVariableReplacements(
+				resolvedVars,
+				normalizedVariables,
+			).map((replacement) => ({
+				...replacement,
+				resolveAt: "execution" as const,
+			}));
+			query = resolveWorkflowVariables(query, replacements, "execution");
+			displayQuery = resolveWorkflowVariables(
+				displayQuery,
+				replacements,
+				"execution",
+			);
+			definition = replaceWorkflowVariablesInValue(
+				definition,
+				replacements,
+				"execution",
+			) as WorkflowDefinition | undefined;
+		}
+
+		return {
+			query: resolveTemplateString(query, timezone),
+			displayQuery: resolveTemplateString(displayQuery, timezone),
+			definition: validateWorkflowDefinition(
+				resolveTemplateValue(definition, timezone) as
+					| WorkflowDefinition
+					| undefined,
+			),
+		};
+	}
 }
