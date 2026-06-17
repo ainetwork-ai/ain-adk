@@ -20,6 +20,7 @@ export class DocumentAdviceService {
 
 	async *generateAdviceStream(
 		documentId: string,
+		options?: { advicePrompt?: string },
 		signal?: AbortSignal,
 	): AsyncGenerator<StreamEvent> {
 		const documentMemory = this.memoryModule.getDocumentMemory();
@@ -32,7 +33,9 @@ export class DocumentAdviceService {
 		}
 
 		const renderedContent = renderDocument(document);
-		const systemPrompt = await documentAdvicePrompt(this.memoryModule);
+		const systemPrompt =
+			options?.advicePrompt?.trim() ||
+			(await documentAdvicePrompt(this.memoryModule));
 
 		const model = this.modelModule.getModel();
 		const modelOptions = this.modelModule.getModelOptions();

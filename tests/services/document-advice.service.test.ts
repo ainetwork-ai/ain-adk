@@ -78,4 +78,15 @@ describe("DocumentAdviceService", () => {
 		await collect(service.generateAdviceStream("doc-1"));
 		expect(updateDocument).not.toHaveBeenCalled();
 	});
+
+	it("uses the provided advicePrompt as the system prompt", async () => {
+		const { modelModule, memoryModule, model } = makeModules();
+		const service = new DocumentAdviceService(modelModule, memoryModule);
+		await collect(
+			service.generateAdviceStream("doc-1", { advicePrompt: "커스텀 프롬프트" }),
+		);
+		expect(model.generateMessages).toHaveBeenCalledWith(
+			expect.objectContaining({ systemPrompt: "커스텀 프롬프트" }),
+		);
+	});
 });

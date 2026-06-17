@@ -234,7 +234,12 @@ export class DocumentApiController {
 			logContext: { documentId: id },
 			setup: async (signal) => {
 				await this.getAuthorizedDocument(userId, id);
-				return this.documentAdviceService.generateAdviceStream(id, signal);
+				const { advicePrompt } = req.body as { advicePrompt?: string };
+				return this.documentAdviceService.generateAdviceStream(
+					id,
+					{ advicePrompt },
+					signal,
+				);
 			},
 		});
 	};
