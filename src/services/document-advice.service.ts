@@ -65,10 +65,10 @@ export class DocumentAdviceService {
 		}
 
 		try {
+			// Persist only the advice (metadata); do NOT bump version off a
+			// pre-stream read, which could clobber a concurrent edit (lost update).
 			await documentMemory.updateDocument(documentId, {
 				advice: { content, generatedAt: new Date().toISOString() },
-				version: document.version + 1,
-				updatedAt: new Date().toISOString(),
 			});
 		} catch (saveError) {
 			loggers.agent.error("Failed to cache document advice", {

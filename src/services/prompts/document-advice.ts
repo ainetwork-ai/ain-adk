@@ -2,7 +2,7 @@ import type { MemoryModule } from "@/modules";
 
 async function documentAdvicePrompt(memoryModule: MemoryModule) {
 	const prompt =
-		(await memoryModule?.getAgentMemory()?.getDocumentAdvicePrompt?.()) ||
+		(await memoryModule.getAgentMemory()?.getDocumentAdvicePrompt?.()) ||
 		`당신은 매장 운영을 돕는 분석 어시스턴트입니다.
 아래는 한 매장의 로그북(운영 메모와 매출/지표 데이터)입니다.
 이 내용을 바탕으로 운영자에게 도움이 되는 조언을 한국어로 작성하세요.

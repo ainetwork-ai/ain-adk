@@ -681,49 +681,7 @@ export class WorkflowVariableResolver {
 		displayQuery: string;
 		definition?: WorkflowDefinition;
 	} {
-		const { timezone } = workflow;
-		let query = workflow.content;
-		let displayQuery = workflow.title;
-		let definition = workflow.definition;
-		const normalizedVariables = normalizeWorkflowVariablesRecord(
-			workflow.variables,
-		);
-		const mergedExecutionVariables = {
-			...(workflow.variableValues || {}),
-			...(executionVariables || {}),
-		};
-
-		if (Object.keys(mergedExecutionVariables).length > 0) {
-			const resolvedVars = resolveTemplateRecord(
-				mergedExecutionVariables,
-				timezone,
-			);
-			const replacements = buildVariableReplacements(
-				resolvedVars,
-				normalizedVariables,
-			);
-			query = resolveWorkflowVariables(query, replacements, "execution");
-			displayQuery = resolveWorkflowVariables(
-				displayQuery,
-				replacements,
-				"execution",
-			);
-			definition = replaceWorkflowVariablesInValue(
-				definition,
-				replacements,
-				"execution",
-			) as WorkflowDefinition | undefined;
-		}
-
-		return {
-			query: resolveTemplateString(query, timezone),
-			displayQuery: resolveTemplateString(displayQuery, timezone),
-			definition: validateWorkflowDefinition(
-				resolveTemplateValue(definition, timezone) as
-					| WorkflowDefinition
-					| undefined,
-			),
-		};
+		return this.resolveExecutionLike(workflow, executionVariables, false);
 	}
 
 	/**
@@ -745,6 +703,24 @@ export class WorkflowVariableResolver {
 		displayQuery: string;
 		definition?: WorkflowDefinition;
 	} {
+		return this.resolveExecutionLike(workflow, providedVariables, true);
+	}
+
+	/**
+	 * Shared execution-time variable substitution. Only `execution`-scoped
+	 * replacements apply, EXCEPT when `forceResolveAt` is true (document-slot
+	 * fills), where every provided value is applied regardless of its declared
+	 * `resolveAt`. Built-in template tokens (e.g. `{{today}}`) are always resolved.
+	 */
+	private resolveExecutionLike(
+		workflow: WorkflowTextFields,
+		providedVariables: Record<string, string> | undefined,
+		forceResolveAt: boolean,
+	): {
+		query: string;
+		displayQuery: string;
+		definition?: WorkflowDefinition;
+	} {
 		const { timezone } = workflow;
 		let query = workflow.content;
 		let displayQuery = workflow.title;
@@ -759,16 +735,16 @@ export class WorkflowVariableResolver {
 
 		if (Object.keys(mergedVariables).length > 0) {
 			const resolvedVars = resolveTemplateRecord(mergedVariables, timezone);
-			// Force every replacement to apply now (resolveAt-agnostic): the values
-			// are already final, so creation- and execution-scoped tokens alike are
-			// substituted in a single pass.
-			const replacements = buildVariableReplacements(
+			let replacements = buildVariableReplacements(
 				resolvedVars,
 				normalizedVariables,
-			).map((replacement) => ({
-				...replacement,
-				resolveAt: "execution" as const,
-			}));
+			);
+			if (forceResolveAt) {
+				replacements = replacements.map((replacement) => ({
+					...replacement,
+					resolveAt: "execution" as const,
+				}));
+			}
 			query = resolveWorkflowVariables(query, replacements, "execution");
 			displayQuery = resolveWorkflowVariables(
 				displayQuery,
