@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getMemoryModule } from "@/config/modules";
 import { createAgentApiRouter } from "./api/agent.routes.js";
+import { createDocumentApiRouter } from "./api/document.routes.js";
 import { createIntentApiRouter } from "./api/intent.routes.js";
 import { createModelApiRouter } from "./api/model.routes.js";
 import { createThreadApiRouter } from "./api/threads.routes.js";
@@ -19,6 +20,9 @@ export const createApiRouter = (): Router => {
 		router.use("/intent", createIntentApiRouter());
 		router.use("/workflow-template", createWorkflowTemplateApiRouter());
 		router.use("/user-workflow", createUserWorkflowApiRouter());
+		if (memoryModule.getDocumentMemory()) {
+			router.use("/document", createDocumentApiRouter());
+		}
 	}
 
 	return router;

@@ -132,7 +132,8 @@ export class MCPModule {
 		_args?: Record<string, unknown>,
 	): Promise<string> {
 		const { connectorName, toolName } = tool;
-		const client = this.mcpConnectors.get(connectorName)?.client;
+		const connector = this.mcpConnectors.get(connectorName);
+		const client = connector?.client;
 
 		try {
 			if (!client) {
@@ -141,10 +142,20 @@ export class MCPModule {
 
 			// `${name}-${tool.name}` => tool.name
 			const mcpToolName = toolName.slice(connectorName.length + 1);
-			const result = await client.callTool({
-				name: mcpToolName,
-				arguments: _args,
-			});
+			// Per-connector timeout override (defaults to the SDK's 60s when unset).
+			// resetTimeoutOnProgress lets a tool that streams progress notifications
+			// keep the call alive past the base timeout.
+			const requestTimeoutMs = connector?.config.requestTimeoutMs;
+			const result = await client.callTool(
+				{
+					name: mcpToolName,
+					arguments: _args,
+				},
+				undefined,
+				requestTimeoutMs !== undefined
+					? { timeout: requestTimeoutMs, resetTimeoutOnProgress: true }
+					: undefined,
+			);
 			const toolResult =
 				`[Bot Called Tool ${toolName} with args ${JSON.stringify(_args)}]\n` +
 				JSON.stringify(result.content, null, 2);

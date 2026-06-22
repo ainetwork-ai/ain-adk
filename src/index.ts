@@ -96,6 +96,11 @@ export class AINAgent {
 		},
 	) {
 		this.app = express();
+		// Express 5 defaults the query parser to "simple", which does not parse
+		// nested/bracket params (e.g. `?labels[category]=logbook`). Use the
+		// "extended" parser so faceted filters like DocumentFilter.labels are
+		// decoded into nested objects on req.query.
+		this.app.set("query parser", "extended");
 
 		// Set manifest
 		this.manifest = manifest;

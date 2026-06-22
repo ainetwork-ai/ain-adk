@@ -42,6 +42,10 @@ export type StreamEvent =
 	  }
 	| { event: "error"; data: { message: string } }
 	| { event: "thread_id"; data: ThreadMetadata }
+	| {
+			event: "document_id";
+			data: { documentId: string; slotId: string };
+	  }
 	| { event: "intent_process"; data: { subquery: string; actionPlan: string } }
 	| { event: "collection_name"; data: { name: string } }
 	| {

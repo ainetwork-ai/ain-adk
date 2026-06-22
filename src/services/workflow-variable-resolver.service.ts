@@ -681,6 +681,46 @@ export class WorkflowVariableResolver {
 		displayQuery: string;
 		definition?: WorkflowDefinition;
 	} {
+		return this.resolveExecutionLike(workflow, executionVariables, false);
+	}
+
+	/**
+	 * Resolves a workflow for filling a document slot.
+	 *
+	 * Unlike {@link resolveForExecution}, the document context has no
+	 * creation/execution distinction: every variable value is already decided
+	 * (entered in the document-creation dialog or fixed by the workplace) and
+	 * stored on the slot binding. So all provided values are substituted
+	 * regardless of each variable's declared `resolveAt`, then built-in template
+	 * tokens (e.g. `{{today}}`) are resolved. This does NOT change how standalone
+	 * workflow execution resolves variables.
+	 */
+	resolveForDocumentFill(
+		workflow: WorkflowTextFields,
+		providedVariables?: Record<string, string>,
+	): {
+		query: string;
+		displayQuery: string;
+		definition?: WorkflowDefinition;
+	} {
+		return this.resolveExecutionLike(workflow, providedVariables, true);
+	}
+
+	/**
+	 * Shared execution-time variable substitution. Only `execution`-scoped
+	 * replacements apply, EXCEPT when `forceResolveAt` is true (document-slot
+	 * fills), where every provided value is applied regardless of its declared
+	 * `resolveAt`. Built-in template tokens (e.g. `{{today}}`) are always resolved.
+	 */
+	private resolveExecutionLike(
+		workflow: WorkflowTextFields,
+		providedVariables: Record<string, string> | undefined,
+		forceResolveAt: boolean,
+	): {
+		query: string;
+		displayQuery: string;
+		definition?: WorkflowDefinition;
+	} {
 		const { timezone } = workflow;
 		let query = workflow.content;
 		let displayQuery = workflow.title;
@@ -688,20 +728,23 @@ export class WorkflowVariableResolver {
 		const normalizedVariables = normalizeWorkflowVariablesRecord(
 			workflow.variables,
 		);
-		const mergedExecutionVariables = {
+		const mergedVariables = {
 			...(workflow.variableValues || {}),
-			...(executionVariables || {}),
+			...(providedVariables || {}),
 		};
 
-		if (Object.keys(mergedExecutionVariables).length > 0) {
-			const resolvedVars = resolveTemplateRecord(
-				mergedExecutionVariables,
-				timezone,
-			);
-			const replacements = buildVariableReplacements(
+		if (Object.keys(mergedVariables).length > 0) {
+			const resolvedVars = resolveTemplateRecord(mergedVariables, timezone);
+			let replacements = buildVariableReplacements(
 				resolvedVars,
 				normalizedVariables,
 			);
+			if (forceResolveAt) {
+				replacements = replacements.map((replacement) => ({
+					...replacement,
+					resolveAt: "execution" as const,
+				}));
+			}
 			query = resolveWorkflowVariables(query, replacements, "execution");
 			displayQuery = resolveWorkflowVariables(
 				displayQuery,

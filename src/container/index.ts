@@ -6,6 +6,7 @@ import {
 } from "@/config/modules";
 import { getOnIntentFallback } from "@/config/options";
 import { AgentApiController } from "@/controllers/api/agent.api.controller";
+import { DocumentApiController } from "@/controllers/api/document.api.controller";
 import { IntentApiController } from "@/controllers/api/intent.api.controller";
 import { ModelApiController } from "@/controllers/api/model.api.controller";
 import { ThreadApiController } from "@/controllers/api/threads.api.controller";
@@ -14,6 +15,7 @@ import { WorkflowTemplateApiController } from "@/controllers/api/workflow-templa
 import { IntentController } from "@/controllers/intent.controller";
 import { QueryController } from "@/controllers/query.controller";
 import { A2AService } from "@/services/a2a.service";
+import { DocumentAdviceService } from "@/services/document-advice.service";
 import { IntentFulfillService } from "@/services/intents/fulfill.service";
 import { IntentTriggerService } from "@/services/intents/trigger.service";
 import { PIIService } from "@/services/pii.service";
@@ -45,6 +47,7 @@ class Container {
 	private _workflowExecutionService?: WorkflowExecutionService;
 	private _workflowVariableResolver?: WorkflowVariableResolver;
 	private _schedulerService?: SchedulerService;
+	private _documentAdviceService?: DocumentAdviceService;
 
 	// Controllers
 	private _queryController?: QueryController;
@@ -55,6 +58,7 @@ class Container {
 	private _intentApiController?: IntentApiController;
 	private _workflowTemplateApiController?: WorkflowTemplateApiController;
 	private _userWorkflowApiController?: UserWorkflowApiController;
+	private _documentApiController?: DocumentApiController;
 
 	getThreadService(): ThreadService {
 		if (!this._threadService) {
@@ -242,6 +246,27 @@ class Container {
 		return this._userWorkflowApiController;
 	}
 
+	getDocumentAdviceService(): DocumentAdviceService {
+		if (!this._documentAdviceService) {
+			this._documentAdviceService = new DocumentAdviceService(
+				getModelModule(),
+				getMemoryModule(),
+			);
+		}
+		return this._documentAdviceService;
+	}
+
+	getDocumentApiController(): DocumentApiController {
+		if (!this._documentApiController) {
+			this._documentApiController = new DocumentApiController(
+				getMemoryModule(),
+				this.getWorkflowExecutionService(),
+				this.getDocumentAdviceService(),
+			);
+		}
+		return this._documentApiController;
+	}
+
 	/**
 	 * Reset all instances (useful for testing)
 	 */
@@ -258,6 +283,7 @@ class Container {
 		this._workflowExecutionService = undefined;
 		this._workflowVariableResolver = undefined;
 		this._schedulerService = undefined;
+		this._documentAdviceService = undefined;
 
 		this._queryController = undefined;
 		this._intentController = undefined;
@@ -267,6 +293,7 @@ class Container {
 		this._intentApiController = undefined;
 		this._workflowTemplateApiController = undefined;
 		this._userWorkflowApiController = undefined;
+		this._documentApiController = undefined;
 	}
 }
 

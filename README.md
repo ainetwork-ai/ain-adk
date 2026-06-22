@@ -13,6 +13,7 @@ A TypeScript library for building AI agents with multi-protocol support includin
 - **Thread Management**: Built-in memory module for conversation history
 - **Intent System**: Single/multi-intent triggering with intelligent response aggregation
 - **Workflow Management**: Built-in workflow storage and execution with display query support
+- **Document System**: First-class, mutable documents with slot-filling, faceted labels, and AI-generated advice
 - **Dual Build System**: Supports both ESM and CJS formats for maximum compatibility
 - **Structured Logging**: Winston-based logging system with service-specific loggers
 - **TypeScript First**: Built with strict TypeScript configuration
@@ -70,6 +71,8 @@ interface AINAgentModules {
 
 Each module can be independently configured and passed to the agent constructor.
 
+The `MemoryModule` exposes an optional `IDocumentMemory` (`getDocumentMemory()`). When the underlying memory implementation provides it, document storage and the `/api/document` endpoints are enabled; older implementations that omit it remain fully backward compatible.
+
 ### Intent System
 
 The library supports flexible intent triggering modes:
@@ -87,6 +90,25 @@ Built-in workflow management capabilities:
 - **Display Query Support**: Separate display query for workflow execution visualization
 - **Structured Execution**: Define workflows with tasks and response blocks
 - **RESTful API**: Complete workflow management through `/api/workflow-template` and `/api/user-workflow` endpoints
+
+### Document System
+
+Documents are first-class, **mutable** entities that hold the canonical result of a workflow or query as markdown. They are *referenced* from threads (via a `document` message part) rather than embedded, so manual edits are always reflected wherever the document is rendered. The system is enabled whenever the memory implementation provides an `IDocumentMemory` (`getDocumentMemory()`); it is optional and fully backward compatible.
+
+- **Document Storage**: CRUD via `IDocumentMemory` — `getDocument`, `createDocument`, `updateDocument`, `deleteDocument`, `listDocuments(userId?, filter?)`. Documents are versioned (`version` increments on every update) and track `editedManually`.
+- **Slots**: A document body may contain `{{slot:slotId}}` tokens backed by `DocumentSlot` entries. Each slot has a lifecycle status (`empty` → `running` → `resolved`/`failed`) and an optional `binding` to a workflow (with `executionVariables`) or a query. Slots are filled on demand and the resolved `DocumentFragment` (markdown + structured render blocks) is substituted at render time.
+- **Rendering**: `renderDocument(document)` (`src/utils/document-render.ts`) produces final markdown by substituting each slot token with its resolved fragment, falling back to a status placeholder for unresolved slots. Tokens with no matching slot are left untouched.
+- **Faceted Labels**: `labels` (e.g. `{ category: "logbook", workplaceId: "123", month: "2026-06" }`) provide schema-free grouping. The nesting/hierarchy order is chosen at query or render time, so any number of grouping levels is supported without schema changes. Listing supports subset-match filtering by `labels`, plus `workflowId`/`threadId`/`source`.
+- **Workflow Promotion**: When document memory is available, a user-workflow execution promotes its result into a first-class document and references it from the thread (instead of embedding the markdown inline).
+- **Rich Messages**: Thread message content supports `type: "rich"` with `MessagePart[]` mixing `TextPart` and `DocumentPart` (a `documentId` reference resolved client-side), alongside the legacy `text` form.
+
+### AI Document Advice
+
+The library can generate a short, operational AI **advice** from a document's rendered content:
+
+- **Streaming generation**: `DocumentAdviceService.generateAdviceStream` runs a single-turn streaming completion over the rendered document and emits `text_chunk` events over SSE.
+- **Caching**: On completion the advice is cached on `document.advice` (`{ content, generatedAt }`). The cache write persists only the advice metadata and does not bump the document version, avoiding lost updates against concurrent edits. Nothing is persisted on error or empty output.
+- **Prompt resolution**: A per-call `advicePrompt` (request body) takes precedence, then the agent-memory hook `getDocumentAdvicePrompt()`, then a built-in Korean default prompt.
 
 ### Dependency Injection
 
@@ -118,6 +140,7 @@ Benefits:
 - Automatic tool discovery and execution
 - Supports multiple concurrent MCP servers
 - Protocol-specific tool wrapping as `IMCPTool`
+- Per-connector `requestTimeoutMs` override (in `MCPConfig`) for long-running tools; overrides the SDK's default 60s per-request timeout and uses `resetTimeoutOnProgress` so tools that stream progress notifications stay alive past the base timeout
 
 #### A2A (Agent-to-Agent)  
 - RESTful API for inter-agent communication
@@ -132,6 +155,7 @@ Benefits:
 - **Streaming Support**: Dual implementation for streaming and non-streaming queries
 - **Intent System**: Single/multi-intent triggering with intelligent response aggregation
 - **Workflow Management**: Built-in workflow storage and execution with display query support
+- **Document System**: Mutable documents with on-demand slot-filling, faceted labels, and cached AI advice
 - **Service Layer**: Clean separation with controllers and services
 - **Type Safety**: Comprehensive TypeScript types with strict mode
 - **Error Handling**: Global error middleware with structured logging
@@ -209,6 +233,7 @@ modelLogger.error('Model API error');
     - `task_output`: Workflow task output chunk
     - `task_result`: Workflow task completion status
     - `thread_id`: Thread metadata
+    - `document_id`: Document/slot reference (`{ documentId, slotId }`) for slot-fill streams
     - `thinking_process`: Thinking/reasoning steps
     - `collection_name`: Collection metadata emitted by integrations
     - `error`: Error message
@@ -235,6 +260,18 @@ modelLogger.error('Model API error');
 - `POST /api/user-workflow/:id/execute/stream` - Execute user workflow with streaming (SSE)
 - `POST /api/user-workflow/update/:id` - Update user workflow
 - `POST /api/user-workflow/delete/:id` - Delete user workflow
+
+### Document Endpoints (when the memory module provides `IDocumentMemory`)
+- `GET /api/document` - List documents (filterable by `workflowId`, `threadId`, `source`, and subset-match `labels[...]`)
+- `GET /api/document/:id` - Get document details
+- `POST /api/document` - Create a document (`source: MANUAL`)
+- `POST /api/document/:id/slots/:slotId/fill` - Fill a slot via its bound workflow/query (non-streaming)
+- `POST /api/document/:id/slots/:slotId/fill/stream` - Fill a slot with streaming (SSE)
+  - Body: `{ workflowId?: string, executionVariables?: Record<string, string> }`
+- `POST /api/document/:id/advice/stream` - Generate AI advice with streaming (SSE)
+  - Body: `{ advicePrompt?: string }` (optional per-call prompt override)
+- `POST /api/document/update/:id` - Update document (`title`/`content`/`slots`/`labels`; marks `editedManually`)
+- `POST /api/document/delete/:id` - Delete document
 
 ### A2A Server Endpoints (when `manifest.url` is configured)
 - `GET /.well-known/agent.json` - Agent discovery endpoint (A2A ~v0.2.0)
