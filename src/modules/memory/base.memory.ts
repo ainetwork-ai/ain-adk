@@ -1,4 +1,4 @@
-import type { Document, DocumentFilter } from "@/types/document";
+import type { Document, DocumentFilter, DocumentSlot } from "@/types/document";
 import type {
 	Intent,
 	MessageObject,
@@ -127,6 +127,19 @@ export interface IDocumentMemory {
 	updateDocument(
 		documentId: string,
 		document: Partial<Document>,
+	): Promise<void>;
+	/**
+	 * Atomically patch a single slot of a document. Concurrent fills of
+	 * different slots must not clobber each other, so implementations MUST
+	 * target only the matched slot (e.g. Mongo's positional `$` operator)
+	 * rather than rewriting the whole `slots` array from a caller snapshot,
+	 * and MUST bump `version`/`updatedAt` in the same write. Keys whose value
+	 * is `undefined` are removed from the slot.
+	 */
+	updateDocumentSlot(
+		documentId: string,
+		slotId: string,
+		patch: Partial<DocumentSlot>,
 	): Promise<void>;
 	deleteDocument(documentId: string): Promise<void>;
 	listDocuments(userId?: string, filter?: DocumentFilter): Promise<Document[]>;
