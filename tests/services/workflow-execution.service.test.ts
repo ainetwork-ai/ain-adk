@@ -326,12 +326,12 @@ describe("WorkflowExecutionService", () => {
 			updatedAt: "t0",
 		};
 		const createThread = jest.fn();
-		const updateDocument = jest.fn(async () => undefined);
+		const updateDocumentSlot = jest.fn(async () => undefined);
 		const memoryModule = {
 			getThreadMemory: () => ({ createThread }),
 			getDocumentMemory: () => ({
 				getDocument: jest.fn(async () => document),
-				updateDocument,
+				updateDocumentSlot,
 			}),
 		} as unknown as MemoryModule;
 		const modelModule = {} as ModelModule;
@@ -381,13 +381,14 @@ describe("WorkflowExecutionService", () => {
 			data: { documentId: "doc-1", slotId: "revenue" },
 		});
 
-		// Last slot update writes the resolved fragment into the slot.
+		// Last slot update patches the target slot with the resolved fragment.
 		const lastUpdate =
-			updateDocument.mock.calls[updateDocument.mock.calls.length - 1];
+			updateDocumentSlot.mock.calls[updateDocumentSlot.mock.calls.length - 1];
 		expect(lastUpdate[0]).toBe("doc-1");
-		const updatedSlot = (lastUpdate[1] as any).slots[0];
-		expect(updatedSlot.status).toBe("resolved");
-		expect(updatedSlot.fragment).toMatchObject({
+		expect(lastUpdate[1]).toBe("revenue");
+		const patch = lastUpdate[2] as any;
+		expect(patch.status).toBe("resolved");
+		expect(patch.fragment).toMatchObject({
 			content: "## Summary\n\n",
 			source: { type: "WORKFLOW", workflowId: "workflow-1" },
 		});
@@ -446,13 +447,13 @@ describe("WorkflowExecutionService", () => {
 			createdAt: "t0",
 			updatedAt: "t0",
 		};
-		const updateDocument = jest.fn(async () => undefined);
+		const updateDocumentSlot = jest.fn(async () => undefined);
 		const memoryModule = {
 			getThreadMemory: () => ({ createThread: jest.fn() }),
 			getWorkflowTemplateMemory: () => ({ getTemplate }),
 			getDocumentMemory: () => ({
 				getDocument: jest.fn(async () => document),
-				updateDocument,
+				updateDocumentSlot,
 			}),
 		} as unknown as MemoryModule;
 
@@ -501,10 +502,11 @@ describe("WorkflowExecutionService", () => {
 		});
 
 		const lastUpdate =
-			updateDocument.mock.calls[updateDocument.mock.calls.length - 1];
-		const updatedSlot = (lastUpdate[1] as any).slots[0];
-		expect(updatedSlot.status).toBe("resolved");
-		expect(updatedSlot.fragment).toMatchObject({
+			updateDocumentSlot.mock.calls[updateDocumentSlot.mock.calls.length - 1];
+		expect(lastUpdate[1]).toBe("revenue");
+		const patch = lastUpdate[2] as any;
+		expect(patch.status).toBe("resolved");
+		expect(patch.fragment).toMatchObject({
 			content: "## Summary\n\n",
 			source: { type: "WORKFLOW", workflowId: "template-1" },
 		});

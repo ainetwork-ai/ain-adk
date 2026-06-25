@@ -569,9 +569,11 @@ export class WorkflowExecutionService {
 	}
 
 	/**
-	 * Writes a partial update to a single slot and persists the document with a
-	 * bumped version. Mutates the in-memory `document.slots` so subsequent
-	 * updates in the same run build on the latest state.
+	 * Atomically patches a single slot via the memory layer. Must NOT rebuild
+	 * the whole slots array from `document` (a snapshot taken when the fill
+	 * started): concurrent fills of other slots would clobber each other's
+	 * results. `updateDocumentSlot` targets only the matched slot and bumps
+	 * `version`/`updatedAt` in the same write.
 	 */
 	private async updateSlot(
 		documentMemory: NonNullable<ReturnType<MemoryModule["getDocumentMemory"]>>,
@@ -579,17 +581,7 @@ export class WorkflowExecutionService {
 		slotId: string,
 		patch: Partial<DocumentSlot>,
 	): Promise<void> {
-		const slots = (document.slots ?? []).map((slot) =>
-			slot.slotId === slotId ? { ...slot, ...patch } : slot,
-		);
-		document.slots = slots;
-		document.version += 1;
-		document.updatedAt = new Date().toISOString();
-		await documentMemory.updateDocument(document.documentId, {
-			slots,
-			version: document.version,
-			updatedAt: document.updatedAt,
-		});
+		await documentMemory.updateDocumentSlot(document.documentId, slotId, patch);
 	}
 
 	private async *executeLegacyWorkflowStream(
