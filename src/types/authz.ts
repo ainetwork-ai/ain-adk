@@ -8,19 +8,21 @@ import type { DocumentFilter } from "./document.js";
  */
 export interface PermissionResolver {
 	/** Single-resource decision (write/byId/gate). `attrs` carries resource
-	 * attributes such as `{ venue }`. Returns true if allowed. */
+	 * attributes such as `{ category, venue }`. Returns true if allowed. */
 	can(
 		userId: string,
 		resource: string,
 		action: string,
 		attrs?: Record<string, string>,
 	): Promise<boolean>;
-	/** List decision: the filter to apply to a list query. `null` = unrestricted,
-	 * `"deny"` = no access (empty result). */
+	/** List decision: the cross-user read scope for this user. `null` =
+	 * unrestricted (see everything). `[]` = no cross-user access (the caller's
+	 * own records only). A non-empty array is OR-ed together and unioned with
+	 * the caller's own records by the handler. */
 	listFilter(
 		userId: string,
 		resource: string,
-	): Promise<DocumentFilter | null | "deny">;
+	): Promise<DocumentFilter[] | null>;
 }
 
 export type AuthzMode = "list" | "byId" | "fromBody" | "gate";

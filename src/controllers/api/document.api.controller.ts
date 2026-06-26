@@ -67,28 +67,34 @@ export class DocumentApiController {
 				source,
 				labels,
 			};
-			const authzFilter = res.locals.authzFilter as DocumentFilter | undefined;
+			const authzFilters = res.locals.authzFilters as
+				| DocumentFilter[]
+				| undefined;
 
 			let documents: Document[];
 			if (res.locals.authzListAll) {
 				// admin / unrestricted
 				documents =
 					(await documentMemory?.listDocuments(undefined, baseFilter)) ?? [];
-			} else if (authzFilter) {
-				// own documents ∪ logbooks the user may read
+			} else if (authzFilters?.length) {
+				// own documents ∪ records each read-role permits (cross-user)
 				const own =
 					(await documentMemory?.listDocuments(userId, baseFilter)) ?? [];
-				const logbookFilter: DocumentFilter = {
-					...baseFilter,
-					labels: { ...(labels ?? {}), ...(authzFilter.labels ?? {}) },
-				};
-				const logbooks =
-					(await documentMemory?.listDocuments(undefined, logbookFilter)) ?? [];
+				const sets = await Promise.all(
+					authzFilters.map((f) =>
+						documentMemory?.listDocuments(undefined, {
+							...baseFilter,
+							labels: { ...(labels ?? {}), ...(f.labels ?? {}) },
+						}),
+					),
+				);
 				const byId = new Map<string, Document>();
-				for (const d of [...own, ...logbooks]) byId.set(d.documentId, d);
+				for (const d of [own, ...sets].flat()) {
+					if (d) byId.set(d.documentId, d);
+				}
 				documents = [...byId.values()];
 			} else {
-				// no authz (legacy) or no logbook access → own documents only
+				// no authz (legacy) or no cross-user access → own documents only
 				documents =
 					(await documentMemory?.listDocuments(userId, baseFilter)) ?? [];
 			}

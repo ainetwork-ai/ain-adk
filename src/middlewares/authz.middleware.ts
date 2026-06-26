@@ -42,35 +42,45 @@ export function createAuthzMiddleware(
 		const userId: string = res.locals.userId ?? "";
 		try {
 			if (match.mode === "list") {
-				const filter = await resolver.listFilter(userId, match.resource);
+				const filters = await resolver.listFilter(userId, match.resource);
 				res.locals.authzChecked = true;
-				if (filter === null) {
+				if (filters === null) {
 					res.locals.authzListAll = true; // unrestricted (admin)
-				} else if (filter !== "deny") {
-					res.locals.authzFilter = filter; // own ∪ this filter
+				} else if (filters.length > 0) {
+					res.locals.authzFilters = filters; // own ∪ these filters
 				}
-				// "deny" → leave both unset → controller returns own docs only
+				// [] → leave both unset → handler returns the caller's own records
 				return next();
 			}
 
-			let attrs: Record<string, string> = {};
 			if (match.mode === "byId") {
+				// Additive: a matching role grants cross-user access (authzChecked).
+				// Otherwise we defer to the handler's own owner check — no hard deny.
 				const loaded = match.loadAttrs ? await match.loadAttrs(req) : null;
-				if (loaded === "skip") {
-					return next(); // not governed → legacy owner check applies
-				}
 				if (loaded === null) {
 					throw new AinHttpError(StatusCodes.NOT_FOUND, "Not found");
 				}
-				attrs = loaded;
-			} else if (match.mode === "fromBody") {
+				if (loaded !== "skip") {
+					const allowed = await resolver.can(
+						userId,
+						match.resource,
+						match.action,
+						loaded,
+					);
+					if (allowed) res.locals.authzChecked = true;
+				}
+				return next();
+			}
+
+			// fromBody / gate: hard gate (403 on deny).
+			let attrs: Record<string, string> = {};
+			if (match.mode === "fromBody") {
 				const body = match.bodyAttrs ? match.bodyAttrs(req) : {};
 				if (body === "skip") {
-					return next(); // not governed → legacy handler
+					return next(); // not a governed resource → handler's own checks
 				}
 				attrs = body;
 			}
-			// "gate" → attrs stays {}
 			const allowed = await resolver.can(
 				userId,
 				match.resource,

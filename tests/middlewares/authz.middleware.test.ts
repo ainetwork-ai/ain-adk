@@ -20,11 +20,11 @@ function mockReq(method: string, baseUrl: string, path: string, body?: unknown):
 }
 
 const routes: RouteRequirement[] = [
-	{ method: "GET", path: "/api/document", resource: "logbook", action: "read", mode: "list" },
+	{ method: "GET", path: "/api/document", resource: "document", action: "read", mode: "list" },
 	{
 		method: "POST",
 		path: "/api/document",
-		resource: "logbook",
+		resource: "document",
 		action: "write",
 		mode: "fromBody",
 		bodyAttrs: (req) => ({ venue: (req.body as any)?.labels?.workplace }),
@@ -32,7 +32,7 @@ const routes: RouteRequirement[] = [
 	{
 		method: "POST",
 		path: "/api/document/update/:id",
-		resource: "logbook",
+		resource: "document",
 		action: "write",
 		mode: "byId",
 		loadAttrs: async (req) => ((req.params as any).id === "missing" ? null : { venue: "seoul" }),
@@ -43,7 +43,7 @@ const routes: RouteRequirement[] = [
 function makeResolver(over: Partial<PermissionResolver>): PermissionResolver {
 	return {
 		can: async () => false,
-		listFilter: async () => null,
+		listFilter: async () => [],
 		...over,
 	};
 }
@@ -56,25 +56,25 @@ describe("createAuthzMiddleware", () => {
 		expect(next).toHaveBeenCalledWith();
 	});
 
-	it("list: sets res.locals.authzFilter from listFilter", async () => {
-		const filter = { labels: { category: "logbook", workplace: ["walkerhill"] } };
-		const mw = createAuthzMiddleware(makeResolver({ listFilter: async () => filter }), routes);
+	it("list: sets res.locals.authzFilters from a non-empty listFilter", async () => {
+		const filters = [{ labels: { category: "logbook", workplace: ["walkerhill"] } }];
+		const mw = createAuthzMiddleware(makeResolver({ listFilter: async () => filters }), routes);
 		const res = mockRes();
 		const next = jest.fn();
 		await mw(mockReq("GET", "/api", "/document"), res, next);
-		expect(res.locals.authzFilter).toEqual(filter);
+		expect(res.locals.authzFilters).toEqual(filters);
 		expect(res.locals.authzChecked).toBe(true);
 		expect(next).toHaveBeenCalledWith();
 	});
 
-	it("list: deny calls next() with no filter/listAll set, authzChecked still true", async () => {
-		const mw = createAuthzMiddleware(makeResolver({ listFilter: async () => "deny" }), routes);
+	it("list: empty array → no filters/listAll set (own only), authzChecked true", async () => {
+		const mw = createAuthzMiddleware(makeResolver({ listFilter: async () => [] }), routes);
 		const res = mockRes();
 		const next = jest.fn();
 		await mw(mockReq("GET", "/api", "/document"), res, next);
 		expect(next).toHaveBeenCalledWith();
 		expect(res._json).toBeUndefined();
-		expect(res.locals.authzFilter).toBeUndefined();
+		expect(res.locals.authzFilters).toBeUndefined();
 		expect(res.locals.authzListAll).toBeUndefined();
 		expect(res.locals.authzChecked).toBe(true);
 	});
@@ -87,16 +87,46 @@ describe("createAuthzMiddleware", () => {
 		expect(next).toHaveBeenCalledWith();
 		expect(res.locals.authzListAll).toBe(true);
 		expect(res.locals.authzChecked).toBe(true);
-		expect(res.locals.authzFilter).toBeUndefined();
+		expect(res.locals.authzFilters).toBeUndefined();
 	});
 
-	it("byId: skip → next() called without authzChecked set, can() not called", async () => {
+	it("byId: can() true → authzChecked set, forwards loaded attrs", async () => {
+		const can = jest.fn(async () => true);
+		const mw = createAuthzMiddleware(makeResolver({ can }), routes);
+		const res = mockRes();
+		const next = jest.fn();
+		await mw(mockReq("POST", "/api", "/document/update/d1"), res, next);
+		expect(can).toHaveBeenCalledWith("", "document", "write", { venue: "seoul" });
+		expect(res.locals.authzChecked).toBe(true);
+		expect(next).toHaveBeenCalledWith();
+	});
+
+	it("byId: can() false → defers (next, no authzChecked, no 403)", async () => {
+		const mw = createAuthzMiddleware(makeResolver({ can: async () => false }), routes);
+		const res = mockRes();
+		const next = jest.fn();
+		await mw(mockReq("POST", "/api", "/document/update/d1"), res, next);
+		expect(next).toHaveBeenCalledWith();
+		expect(res.locals.authzChecked).toBeUndefined();
+	});
+
+	it("byId: 404 when loadAttrs returns null", async () => {
+		const mw = createAuthzMiddleware(makeResolver({ can: async () => true }), routes);
+		const res = mockRes();
+		const next = jest.fn();
+		const req = mockReq("POST", "/api", "/document/update/missing");
+		(req.params as any).id = "missing";
+		await mw(req, res, next);
+		expect(next).toHaveBeenCalledWith(expect.objectContaining({ status: 404 }));
+	});
+
+	it("byId: skip → next() without authzChecked, can() not called", async () => {
 		const can = jest.fn();
 		const skipRoutes: RouteRequirement[] = [
 			{
 				method: "GET",
 				path: "/api/document/:id",
-				resource: "logbook",
+				resource: "document",
 				action: "read",
 				mode: "byId",
 				loadAttrs: async () => "skip",
@@ -111,13 +141,13 @@ describe("createAuthzMiddleware", () => {
 		expect(can).not.toHaveBeenCalled();
 	});
 
-	it("fromBody: skip → next() called without authzChecked set", async () => {
+	it("fromBody: skip → next() without authzChecked", async () => {
 		const can = jest.fn();
 		const skipRoutes: RouteRequirement[] = [
 			{
 				method: "POST",
 				path: "/api/document",
-				resource: "logbook",
+				resource: "document",
 				action: "write",
 				mode: "fromBody",
 				bodyAttrs: () => "skip",
@@ -146,19 +176,9 @@ describe("createAuthzMiddleware", () => {
 		const res = mockRes();
 		const next = jest.fn();
 		await mw(mockReq("POST", "/api", "/document", { labels: { workplace: "walkerhill" } }), res, next);
-		expect(can).toHaveBeenCalledWith("", "logbook", "write", { venue: "walkerhill" });
+		expect(can).toHaveBeenCalledWith("", "document", "write", { venue: "walkerhill" });
 		expect(res.locals.authzChecked).toBe(true);
 		expect(next).toHaveBeenCalledWith();
-	});
-
-	it("byId: 404 when loadAttrs returns null", async () => {
-		const mw = createAuthzMiddleware(makeResolver({ can: async () => true }), routes);
-		const res = mockRes();
-		const next = jest.fn();
-		const req = mockReq("POST", "/api", "/document/update/missing");
-		(req.params as any).id = "missing";
-		await mw(req, res, next);
-		expect(next).toHaveBeenCalledWith(expect.objectContaining({ status: 404 }));
 	});
 
 	it("gate: 403 when can() false, pass when true", async () => {

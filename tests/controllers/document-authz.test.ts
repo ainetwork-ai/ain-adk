@@ -14,18 +14,18 @@ function res(locals: Record<string, unknown>): Response {
 }
 
 describe("DocumentApiController authz", () => {
-	it("list: uses authzFilter — calls listDocuments twice and merges/dedupes results", async () => {
+	it("list: uses authzFilters — own ∪ each filter, merged/deduped", async () => {
 		const ownDoc = { documentId: "own-1", userId: "u1" };
 		const logbookDoc = { documentId: "lb-1", userId: "other" };
 		const sharedDoc = { documentId: "shared", userId: "u1" };
-		// First call (own): returns ownDoc + sharedDoc; second call (logbooks): returns logbookDoc + sharedDoc
+		// First call (own): returns ownDoc + sharedDoc; second call (filter): returns logbookDoc + sharedDoc
 		const listDocuments = jest
 			.fn()
 			.mockResolvedValueOnce([ownDoc, sharedDoc])
 			.mockResolvedValueOnce([logbookDoc, sharedDoc]);
 		const c = makeController(listDocuments, jest.fn());
-		const authzFilter = { labels: { category: "logbook", workplace: ["walkerhill", "seoul"] } };
-		const r = res({ userId: "u1", authzFilter });
+		const authzFilters = [{ labels: { category: "logbook", workplace: ["walkerhill", "seoul"] } }];
+		const r = res({ userId: "u1", authzFilters });
 		await c.handleGetAllDocuments({ query: {} } as Request, r, jest.fn());
 		// First call: own docs
 		expect(listDocuments).toHaveBeenNthCalledWith(1, "u1", expect.objectContaining({}));
