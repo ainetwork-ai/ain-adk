@@ -1,8 +1,7 @@
-import express from "express";
 import request from "supertest";
 import { AINAgent } from "@/index";
-import type { AuthzConfig } from "@/types/authz";
 import type { AuthModule, MemoryModule, ModelModule } from "@/modules";
+import type { AuthzConfig } from "@/types/authz";
 
 function fakeModules() {
 	const authModule = {
@@ -17,11 +16,36 @@ function fakeModules() {
 	return { authModule, modelModule, memoryModule };
 }
 
-describe("AINAgent authz wiring", () => {
-	it("mounts adminRouter under /api/admin guarded by the authorize middleware", async () => {
-		const adminRouter = express.Router();
-		adminRouter.get("/roles", (_req, res) => res.json([{ name: "admin" }]));
+// A gate-mode requirement on an /api path lets us observe the authorize
+// middleware running inside the /api chain without needing a real handler.
+const gateRoute = {
+	method: "GET",
+	path: "/api/agent",
+	resource: "authz",
+	action: "read" as const,
+	mode: "gate" as const,
+};
 
+describe("AINAgent authz wiring", () => {
+	it("runs the authorize middleware on /api routes and denies with 403", async () => {
+		let canCalls = 0;
+		const authz: AuthzConfig = {
+			resolver: {
+				can: async () => {
+					canCalls++;
+					return false;
+				},
+				listFilter: async () => null,
+			},
+			routes: [gateRoute],
+		};
+		const agent = new AINAgent({ name: "t", description: "t" }, { ...fakeModules(), authz });
+		const r = await request(agent.app).get("/api/agent");
+		expect(canCalls).toBe(1);
+		expect(r.status).toBe(403);
+	});
+
+	it("passes the request through when can() allows it", async () => {
 		let canCalls = 0;
 		const authz: AuthzConfig = {
 			resolver: {
@@ -31,35 +55,17 @@ describe("AINAgent authz wiring", () => {
 				},
 				listFilter: async () => null,
 			},
-			routes: [
-				{ method: "GET", path: "/api/admin/roles", resource: "authz", action: "write", mode: "gate" },
-			],
-			adminRouter,
-		};
-
-		const agent = new AINAgent(
-			{ name: "t", description: "t" },
-			{ ...fakeModules(), authz },
-		);
-
-		const r = await request(agent.app).get("/api/admin/roles");
-		expect(r.status).toBe(200);
-		expect(r.body).toEqual([{ name: "admin" }]);
-		expect(canCalls).toBe(1);
-	});
-
-	it("denies admin route with 403 when can() is false", async () => {
-		const adminRouter = express.Router();
-		adminRouter.get("/roles", (_req, res) => res.json([]));
-		const authz: AuthzConfig = {
-			resolver: { can: async () => false, listFilter: async () => null },
-			routes: [
-				{ method: "GET", path: "/api/admin/roles", resource: "authz", action: "write", mode: "gate" },
-			],
-			adminRouter,
+			routes: [gateRoute],
 		};
 		const agent = new AINAgent({ name: "t", description: "t" }, { ...fakeModules(), authz });
-		const r = await request(agent.app).get("/api/admin/roles");
-		expect(r.status).toBe(403);
+		const r = await request(agent.app).get("/api/agent");
+		expect(canCalls).toBe(1);
+		expect(r.status).not.toBe(403);
+	});
+
+	it("does not gate any route when no authz is provided", async () => {
+		const agent = new AINAgent({ name: "t", description: "t" }, { ...fakeModules() });
+		const r = await request(agent.app).get("/api/agent");
+		expect(r.status).not.toBe(403);
 	});
 });

@@ -1,4 +1,4 @@
-import type { Request, Router } from "express";
+import type { Request } from "express";
 import type { DocumentFilter } from "./document.js";
 
 /**
@@ -46,7 +46,4 @@ export interface AuthzConfig {
 	resolver: PermissionResolver;
 	/** Route → requirement bindings. Undeclared routes pass through. */
 	routes: RouteRequirement[];
-	/** Optional admin router (e.g. roles CRUD), mounted under /api/admin and
-	 * guarded by the same authorize middleware. */
-	adminRouter?: Router;
 }

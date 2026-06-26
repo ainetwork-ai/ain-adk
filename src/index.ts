@@ -229,10 +229,6 @@ export class AINAgent {
 			? [auth.middleware(), authorize]
 			: [auth.middleware()];
 
-		if (this.authz?.adminRouter) {
-			this.app.use("/api/admin", ...guards, this.authz.adminRouter);
-		}
-
 		this.app.use("/query", ...guards, createQueryRouter());
 		this.app.use("/intent", ...guards, createIntentRouter());
 		this.app.use("/api", ...guards, createApiRouter());
