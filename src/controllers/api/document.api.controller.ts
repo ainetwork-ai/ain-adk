@@ -32,10 +32,16 @@ export class DocumentApiController {
 	private async getAuthorizedDocument(
 		userId: string,
 		documentId: string,
+		authzChecked = false,
 	): Promise<Document> {
 		const documentMemory = this.memoryModule.getDocumentMemory();
 		const document = await documentMemory?.getDocument(documentId);
-		if (!document || document.userId !== userId) {
+		if (!document) {
+			throw new AinHttpError(StatusCodes.NOT_FOUND, "Document not found");
+		}
+		// When the authorize middleware already granted access, skip the
+		// per-owner check (enables cross-user logbook read/write by role).
+		if (!authzChecked && document.userId !== userId) {
 			throw new AinHttpError(StatusCodes.NOT_FOUND, "Document not found");
 		}
 		return document;
@@ -55,8 +61,21 @@ export class DocumentApiController {
 				source?: DocumentSource;
 				labels?: Record<string, string>;
 			};
-			const filter: DocumentFilter = { workflowId, threadId, source, labels };
-			const documents = await documentMemory?.listDocuments(userId, filter);
+			const authzFilter = res.locals.authzFilter as DocumentFilter | undefined;
+			const mergedLabels = {
+				...(labels ?? {}),
+				...(authzFilter?.labels ?? {}),
+			};
+			const filter: DocumentFilter = {
+				workflowId,
+				threadId,
+				source,
+				labels: Object.keys(mergedLabels).length ? mergedLabels : undefined,
+			};
+			// When authz governs this list, scope by authz filter (cross-user)
+			// instead of forcing the caller's own userId.
+			const listUserId = authzFilter ? undefined : userId;
+			const documents = await documentMemory?.listDocuments(listUserId, filter);
 			res.json(documents ?? []);
 		} catch (error) {
 			next(error);
@@ -71,7 +90,11 @@ export class DocumentApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const { id } = req.params as { id: string };
-			const document = await this.getAuthorizedDocument(userId, id);
+			const document = await this.getAuthorizedDocument(
+				userId,
+				id,
+				res.locals.authzChecked === true,
+			);
 			res.json(document);
 		} catch (error) {
 			next(error);
@@ -86,7 +109,11 @@ export class DocumentApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const { id } = req.params as { id: string };
-			const existing = await this.getAuthorizedDocument(userId, id);
+			const existing = await this.getAuthorizedDocument(
+				userId,
+				id,
+				res.locals.authzChecked === true,
+			);
 
 			const { title, content, slots, labels } = req.body as {
 				title?: string;
@@ -128,7 +155,11 @@ export class DocumentApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const { id } = req.params as { id: string };
-			await this.getAuthorizedDocument(userId, id);
+			await this.getAuthorizedDocument(
+				userId,
+				id,
+				res.locals.authzChecked === true,
+			);
 
 			await this.memoryModule.getDocumentMemory()?.deleteDocument(id);
 			res.status(StatusCodes.OK).send();
@@ -183,7 +214,11 @@ export class DocumentApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const { id, slotId } = req.params as { id: string; slotId: string };
-			await this.getAuthorizedDocument(userId, id);
+			await this.getAuthorizedDocument(
+				userId,
+				id,
+				res.locals.authzChecked === true,
+			);
 
 			const { workflowId, executionVariables } = req.body as {
 				workflowId?: string;
@@ -209,7 +244,11 @@ export class DocumentApiController {
 			userId,
 			logContext: { documentId: id, slotId },
 			setup: async (signal) => {
-				await this.getAuthorizedDocument(userId, id);
+				await this.getAuthorizedDocument(
+					userId,
+					id,
+					res.locals.authzChecked === true,
+				);
 				const { workflowId, executionVariables } = req.body as {
 					workflowId?: string;
 					executionVariables?: Record<string, string>;
@@ -233,7 +272,11 @@ export class DocumentApiController {
 			userId,
 			logContext: { documentId: id },
 			setup: async (signal) => {
-				await this.getAuthorizedDocument(userId, id);
+				await this.getAuthorizedDocument(
+					userId,
+					id,
+					res.locals.authzChecked === true,
+				);
 				const { advicePrompt } = req.body as { advicePrompt?: string };
 				return this.documentAdviceService.generateAdviceStream(
 					id,
