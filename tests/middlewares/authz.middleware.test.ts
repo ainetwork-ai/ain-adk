@@ -67,13 +67,69 @@ describe("createAuthzMiddleware", () => {
 		expect(next).toHaveBeenCalledWith();
 	});
 
-	it("list: responds [] on deny", async () => {
+	it("list: deny calls next() with no filter/listAll set, authzChecked still true", async () => {
 		const mw = createAuthzMiddleware(makeResolver({ listFilter: async () => "deny" }), routes);
 		const res = mockRes();
 		const next = jest.fn();
 		await mw(mockReq("GET", "/api", "/document"), res, next);
-		expect(res._json).toEqual([]);
-		expect(next).not.toHaveBeenCalled();
+		expect(next).toHaveBeenCalledWith();
+		expect(res._json).toBeUndefined();
+		expect(res.locals.authzFilter).toBeUndefined();
+		expect(res.locals.authzListAll).toBeUndefined();
+		expect(res.locals.authzChecked).toBe(true);
+	});
+
+	it("list: null → authzListAll true, authzChecked true, next() called", async () => {
+		const mw = createAuthzMiddleware(makeResolver({ listFilter: async () => null }), routes);
+		const res = mockRes();
+		const next = jest.fn();
+		await mw(mockReq("GET", "/api", "/document"), res, next);
+		expect(next).toHaveBeenCalledWith();
+		expect(res.locals.authzListAll).toBe(true);
+		expect(res.locals.authzChecked).toBe(true);
+		expect(res.locals.authzFilter).toBeUndefined();
+	});
+
+	it("byId: skip → next() called without authzChecked set, can() not called", async () => {
+		const can = jest.fn();
+		const skipRoutes: RouteRequirement[] = [
+			{
+				method: "GET",
+				path: "/api/document/:id",
+				resource: "logbook",
+				action: "read",
+				mode: "byId",
+				loadAttrs: async () => "skip",
+			},
+		];
+		const mw = createAuthzMiddleware(makeResolver({ can }), skipRoutes);
+		const res = mockRes();
+		const next = jest.fn();
+		await mw(mockReq("GET", "/api", "/document/abc"), res, next);
+		expect(next).toHaveBeenCalledWith();
+		expect(res.locals.authzChecked).toBeUndefined();
+		expect(can).not.toHaveBeenCalled();
+	});
+
+	it("fromBody: skip → next() called without authzChecked set", async () => {
+		const can = jest.fn();
+		const skipRoutes: RouteRequirement[] = [
+			{
+				method: "POST",
+				path: "/api/document",
+				resource: "logbook",
+				action: "write",
+				mode: "fromBody",
+				bodyAttrs: () => "skip",
+			},
+		];
+		const mw = createAuthzMiddleware(makeResolver({ can }), skipRoutes);
+		const res = mockRes();
+		const next = jest.fn();
+		await mw(mockReq("POST", "/api", "/document", {}), res, next);
+		expect(next).toHaveBeenCalledWith();
+		expect(res.locals.authzChecked).toBeUndefined();
+		expect(can).not.toHaveBeenCalled();
 	});
 
 	it("fromBody: 403 when can() is false", async () => {

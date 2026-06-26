@@ -61,22 +61,38 @@ export class DocumentApiController {
 				source?: DocumentSource;
 				labels?: Record<string, string>;
 			};
-			const authzFilter = res.locals.authzFilter as DocumentFilter | undefined;
-			const mergedLabels = {
-				...(labels ?? {}),
-				...(authzFilter?.labels ?? {}),
-			};
-			const filter: DocumentFilter = {
+			const baseFilter: DocumentFilter = {
 				workflowId,
 				threadId,
 				source,
-				labels: Object.keys(mergedLabels).length ? mergedLabels : undefined,
+				labels,
 			};
-			// When authz governs this list, scope by authz filter (cross-user)
-			// instead of forcing the caller's own userId.
-			const listUserId = authzFilter ? undefined : userId;
-			const documents = await documentMemory?.listDocuments(listUserId, filter);
-			res.json(documents ?? []);
+			const authzFilter = res.locals.authzFilter as DocumentFilter | undefined;
+
+			let documents: Document[];
+			if (res.locals.authzListAll) {
+				// admin / unrestricted
+				documents =
+					(await documentMemory?.listDocuments(undefined, baseFilter)) ?? [];
+			} else if (authzFilter) {
+				// own documents ∪ logbooks the user may read
+				const own =
+					(await documentMemory?.listDocuments(userId, baseFilter)) ?? [];
+				const logbookFilter: DocumentFilter = {
+					...baseFilter,
+					labels: { ...(labels ?? {}), ...(authzFilter.labels ?? {}) },
+				};
+				const logbooks =
+					(await documentMemory?.listDocuments(undefined, logbookFilter)) ?? [];
+				const byId = new Map<string, Document>();
+				for (const d of [...own, ...logbooks]) byId.set(d.documentId, d);
+				documents = [...byId.values()];
+			} else {
+				// no authz (legacy) or no logbook access → own documents only
+				documents =
+					(await documentMemory?.listDocuments(userId, baseFilter)) ?? [];
+			}
+			res.json(documents);
 		} catch (error) {
 			next(error);
 		}

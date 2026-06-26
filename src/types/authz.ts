@@ -33,10 +33,13 @@ export interface RouteRequirement {
 	resource: string;
 	action: "read" | "write";
 	mode: AuthzMode;
-	/** byId mode: load the target's attributes (e.g. its venue). null → 404. */
-	loadAttrs?: (req: Request) => Promise<Record<string, string> | null>;
-	/** fromBody mode: extract attributes from the request body. */
-	bodyAttrs?: (req: Request) => Record<string, string>;
+	/** byId mode: load the target's attributes (e.g. its venue). Return null →
+	 * 404 (target missing). Return "skip" → not governed by authz (the handler's
+	 * own checks apply). Return attrs → run can(). */
+	loadAttrs?: (req: Request) => Promise<Record<string, string> | null | "skip">;
+	/** fromBody mode: extract attributes from the body. Return "skip" → not
+	 * governed by authz. */
+	bodyAttrs?: (req: Request) => Record<string, string> | "skip";
 }
 
 export interface AuthzConfig {

@@ -43,27 +43,34 @@ export function createAuthzMiddleware(
 		try {
 			if (match.mode === "list") {
 				const filter = await resolver.listFilter(userId, match.resource);
-				if (filter === "deny") {
-					res.json([]);
-					return;
-				}
-				if (filter) res.locals.authzFilter = filter;
 				res.locals.authzChecked = true;
+				if (filter === null) {
+					res.locals.authzListAll = true; // unrestricted (admin)
+				} else if (filter !== "deny") {
+					res.locals.authzFilter = filter; // own ∪ this filter
+				}
+				// "deny" → leave both unset → controller returns own docs only
 				return next();
 			}
 
 			let attrs: Record<string, string> = {};
 			if (match.mode === "byId") {
 				const loaded = match.loadAttrs ? await match.loadAttrs(req) : null;
+				if (loaded === "skip") {
+					return next(); // not governed → legacy owner check applies
+				}
 				if (loaded === null) {
 					throw new AinHttpError(StatusCodes.NOT_FOUND, "Not found");
 				}
 				attrs = loaded;
 			} else if (match.mode === "fromBody") {
-				attrs = match.bodyAttrs ? match.bodyAttrs(req) : {};
+				const body = match.bodyAttrs ? match.bodyAttrs(req) : {};
+				if (body === "skip") {
+					return next(); // not governed → legacy handler
+				}
+				attrs = body;
 			}
-			// "gate" mode: no attrs.
-
+			// "gate" → attrs stays {}
 			const allowed = await resolver.can(
 				userId,
 				match.resource,
