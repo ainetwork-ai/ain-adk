@@ -39,10 +39,13 @@ export function createAuthzMiddleware(
 		);
 		if (!match) return next();
 
-		const userId: string = res.locals.userId ?? "";
+		// Authorization is keyed on the human principal (email/UPN) when the
+		// auth layer provides it, falling back to userId. Document ownership
+		// stays keyed on userId (res.locals.userId) — handled by the controller.
+		const principal: string = res.locals.email ?? res.locals.userId ?? "";
 		try {
 			if (match.mode === "list") {
-				const filters = await resolver.listFilter(userId, match.resource);
+				const filters = await resolver.listFilter(principal, match.resource);
 				res.locals.authzChecked = true;
 				if (filters === null) {
 					res.locals.authzListAll = true; // unrestricted (admin)
@@ -62,7 +65,7 @@ export function createAuthzMiddleware(
 				}
 				if (loaded !== "skip") {
 					const allowed = await resolver.can(
-						userId,
+						principal,
 						match.resource,
 						match.action,
 						loaded,
@@ -82,7 +85,7 @@ export function createAuthzMiddleware(
 				attrs = body;
 			}
 			const allowed = await resolver.can(
-				userId,
+				principal,
 				match.resource,
 				match.action,
 				attrs,
