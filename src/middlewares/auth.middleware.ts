@@ -21,6 +21,7 @@ export class AuthMiddleware {
 				const authRes: AuthResponse = await this.auth.authenticate(req, res);
 				if (authRes.isAuthenticated) {
 					res.locals.userId = authRes.userId;
+					res.locals.email = authRes.email;
 					next();
 				} else {
 					const error: AinHttpError = new AinHttpError(

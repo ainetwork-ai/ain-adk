@@ -9,6 +9,7 @@ import { setManifest } from "./config/manifest";
 import { setModules } from "./config/modules";
 import { setOptions } from "./config/options";
 import { AuthMiddleware } from "./middlewares/auth.middleware";
+import { createAuthzMiddleware } from "./middlewares/authz.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import type {
 	A2AModule,
@@ -20,6 +21,7 @@ import type {
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
 import type { AinAgentManifest, OnIntentFallback } from "./types/agent";
+import type { AuthzConfig } from "./types/authz";
 
 export type {
 	AinAgentManifest,
@@ -65,6 +67,7 @@ export class AINAgent {
 	public authModule?: AuthModule;
 	public a2aModule?: A2AModule;
 	public mcpModule?: MCPModule;
+	public authz?: AuthzConfig;
 
 	/** Optional fallback handler when intent matching fails */
 	public onIntentFallback?: OnIntentFallback;
@@ -90,6 +93,7 @@ export class AINAgent {
 			memoryModule: MemoryModule;
 			a2aModule?: A2AModule;
 			mcpModule?: MCPModule;
+			authz?: AuthzConfig;
 		},
 		options?: {
 			onIntentFallback?: OnIntentFallback;
@@ -112,6 +116,7 @@ export class AINAgent {
 		this.mcpModule = modules.mcpModule;
 		this.memoryModule = modules.memoryModule;
 		this.authModule = modules.authModule;
+		this.authz = modules.authz;
 		this.onIntentFallback = options?.onIntentFallback;
 
 		// Set global modules for easy access
@@ -190,6 +195,9 @@ export class AINAgent {
 	 */
 	private initializeRoutes = (): void => {
 		const auth = new AuthMiddleware(this.authModule);
+		const authorize = this.authz
+			? createAuthzMiddleware(this.authz.resolver, this.authz.routes)
+			: undefined;
 
 		this.app.get("/", async (_, res: Response) => {
 			const { name, description } = this.manifest;
@@ -217,9 +225,13 @@ export class AINAgent {
 			},
 		);
 
-		this.app.use("/query", auth.middleware(), createQueryRouter());
-		this.app.use("/intent", auth.middleware(), createIntentRouter());
-		this.app.use("/api", auth.middleware(), createApiRouter());
+		const guards = authorize
+			? [auth.middleware(), authorize]
+			: [auth.middleware()];
+
+		this.app.use("/query", ...guards, createQueryRouter());
+		this.app.use("/intent", ...guards, createIntentRouter());
+		this.app.use("/api", ...guards, createApiRouter());
 
 		if (isValidUrl(this.manifest.url)) {
 			this.app.use("/a2a", createA2ARouter());

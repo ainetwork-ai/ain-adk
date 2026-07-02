@@ -133,12 +133,13 @@ export interface Document {
 /**
  * Optional filters for listing documents.
  *
- * `labels` is a subset match: every provided key/value must equal the
- * document's corresponding label.
+ * `labels` is a subset match: every provided key must match the document's
+ * corresponding label. A string value matches exactly; a string[] value
+ * matches if the document's label is any of the array (`$in`).
  */
 export type DocumentFilter = {
 	workflowId?: string;
 	threadId?: string;
 	source?: DocumentSource;
-	labels?: Record<string, string>;
+	labels?: Record<string, string | string[]>;
 };
