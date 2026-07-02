@@ -41,8 +41,13 @@ export class DocumentApiController {
 		}
 		// When the authorize middleware already granted access, skip the
 		// per-owner check (enables cross-user logbook read/write by role).
+		// Otherwise this is an authorization failure, not a missing record: the
+		// document exists (reads are open) but the caller may not write it.
 		if (!authzChecked && document.userId !== userId) {
-			throw new AinHttpError(StatusCodes.NOT_FOUND, "Document not found");
+			throw new AinHttpError(
+				StatusCodes.FORBIDDEN,
+				"You do not have permission for this document",
+			);
 		}
 		return document;
 	}

@@ -68,7 +68,7 @@ describe("DocumentApiController authz", () => {
 		expect(r.json).toHaveBeenCalledWith({ documentId: "d1", userId: "other" });
 	});
 
-	it("byId: enforces ownership when not authzChecked (backward compat)", async () => {
+	it("byId: forbids (403) when not owner and not authzChecked", async () => {
 		const getDocument = jest.fn(async () => ({ documentId: "d1", userId: "other" }));
 		const c = makeController(jest.fn(), getDocument);
 		const next = jest.fn();
@@ -77,6 +77,8 @@ describe("DocumentApiController authz", () => {
 			res({ userId: "u1" }),
 			next,
 		);
-		expect(next).toHaveBeenCalledWith(expect.objectContaining({ status: 404 }));
+		// The document exists (reads are open) but the caller may not act on it →
+		// 403, not a misleading 404.
+		expect(next).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
 	});
 });

@@ -66,7 +66,13 @@ export async function streamEventsToSSE(
 	} catch (error: unknown) {
 		const errMsg =
 			(error as Error)?.message || `Failed to handle ${options.logLabel}`;
-		res.write(`event: error\ndata: ${JSON.stringify({ message: errMsg })}\n\n`);
+		// Carry the HTTP status (when the error is an AinHttpError) so the client
+		// can distinguish e.g. 403 (no permission) from a generic failure — the
+		// SSE headers are already sent, so it can't come back as a real status.
+		const status = (error as { status?: number })?.status;
+		res.write(
+			`event: error\ndata: ${JSON.stringify({ message: errMsg, status })}\n\n`,
+		);
 	} finally {
 		clearInterval(keepaliveInterval);
 		res.end();
