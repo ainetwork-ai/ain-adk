@@ -181,6 +181,61 @@ describe("createAuthzMiddleware", () => {
 		expect(next).toHaveBeenCalledWith();
 	});
 
+	// byId write with a target extractor (bodyAttrs) must also gate the *target*
+	// labels, so a caller can't create a personal doc then relabel it into a
+	// governed category/scope they lack a write role for (create-then-relabel).
+	const relabelRoutes: RouteRequirement[] = [
+		{
+			method: "POST",
+			path: "/api/document/update/:id",
+			resource: "document",
+			action: "write",
+			mode: "byId",
+			loadAttrs: async () => ({}), // stored: personal, no category
+			bodyAttrs: (req) => {
+				const category = (req.body as any)?.labels?.category;
+				return category ? { category } : ("skip" as const);
+			},
+		},
+	];
+
+	it("byId write: hard-denies relabel into a governed target the caller can't write", async () => {
+		const can = jest.fn(async () => false); // denies both source and target
+		const mw = createAuthzMiddleware(makeResolver({ can }), relabelRoutes);
+		const res = mockRes();
+		const next = jest.fn();
+		await mw(
+			mockReq("POST", "/api", "/document/update/d1", { labels: { category: "logbook" } }),
+			res,
+			next,
+		);
+		expect(next).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+	});
+
+	it("byId write: allows relabel when the caller can write the target", async () => {
+		const can = jest.fn(async () => true);
+		const mw = createAuthzMiddleware(makeResolver({ can }), relabelRoutes);
+		const res = mockRes();
+		const next = jest.fn();
+		await mw(
+			mockReq("POST", "/api", "/document/update/d1", { labels: { category: "logbook" } }),
+			res,
+			next,
+		);
+		expect(next).toHaveBeenCalledWith();
+		expect(res.locals.authzChecked).toBe(true);
+	});
+
+	it("byId write: no target gate when body has no governed labels (skip) → defers", async () => {
+		const can = jest.fn(async () => false);
+		const mw = createAuthzMiddleware(makeResolver({ can }), relabelRoutes);
+		const res = mockRes();
+		const next = jest.fn();
+		await mw(mockReq("POST", "/api", "/document/update/d1", { title: "x" }), res, next);
+		expect(next).toHaveBeenCalledWith();
+		expect(res.locals.authzChecked).toBeUndefined();
+	});
+
 	it("gate: 403 when can() false, pass when true", async () => {
 		const deny = createAuthzMiddleware(makeResolver({ can: async () => false }), routes);
 		const res1 = mockRes();

@@ -72,6 +72,26 @@ export function createAuthzMiddleware(
 					);
 					if (allowed) res.locals.authzChecked = true;
 				}
+				// Target-state gate: on a write that also carries new attributes
+				// (e.g. an update relabeling the record), require write access to the
+				// *target* state too. Without this, a caller could create a personal
+				// (ungoverned) record and then relabel it into a governed
+				// category/scope they lack a role for — a create-then-relabel bypass.
+				// bodyAttrs returns "skip" when the target isn't governed.
+				if (match.action === "write" && match.bodyAttrs) {
+					const target = match.bodyAttrs(req);
+					if (target !== "skip") {
+						const okTarget = await resolver.can(
+							principal,
+							match.resource,
+							match.action,
+							target,
+						);
+						if (!okTarget) {
+							throw new AinHttpError(StatusCodes.FORBIDDEN, "Forbidden");
+						}
+					}
+				}
 				return next();
 			}
 
