@@ -32,11 +32,22 @@ export class DocumentApiController {
 	private async getAuthorizedDocument(
 		userId: string,
 		documentId: string,
+		authzChecked = false,
 	): Promise<Document> {
 		const documentMemory = this.memoryModule.getDocumentMemory();
 		const document = await documentMemory?.getDocument(documentId);
-		if (!document || document.userId !== userId) {
+		if (!document) {
 			throw new AinHttpError(StatusCodes.NOT_FOUND, "Document not found");
+		}
+		// When the authorize middleware already granted access, skip the
+		// per-owner check (enables cross-user logbook read/write by role).
+		// Otherwise this is an authorization failure, not a missing record: the
+		// document exists (reads are open) but the caller may not write it.
+		if (!authzChecked && document.userId !== userId) {
+			throw new AinHttpError(
+				StatusCodes.FORBIDDEN,
+				"You do not have permission for this document",
+			);
 		}
 		return document;
 	}
@@ -55,9 +66,44 @@ export class DocumentApiController {
 				source?: DocumentSource;
 				labels?: Record<string, string>;
 			};
-			const filter: DocumentFilter = { workflowId, threadId, source, labels };
-			const documents = await documentMemory?.listDocuments(userId, filter);
-			res.json(documents ?? []);
+			const baseFilter: DocumentFilter = {
+				workflowId,
+				threadId,
+				source,
+				labels,
+			};
+			const authzFilters = res.locals.authzFilters as
+				| DocumentFilter[]
+				| undefined;
+
+			let documents: Document[];
+			if (res.locals.authzListAll) {
+				// admin / unrestricted
+				documents =
+					(await documentMemory?.listDocuments(undefined, baseFilter)) ?? [];
+			} else if (authzFilters?.length) {
+				// own documents ∪ records each read-role permits (cross-user)
+				const own =
+					(await documentMemory?.listDocuments(userId, baseFilter)) ?? [];
+				const sets = await Promise.all(
+					authzFilters.map((f) =>
+						documentMemory?.listDocuments(undefined, {
+							...baseFilter,
+							labels: { ...(labels ?? {}), ...(f.labels ?? {}) },
+						}),
+					),
+				);
+				const byId = new Map<string, Document>();
+				for (const d of [own, ...sets].flat()) {
+					if (d) byId.set(d.documentId, d);
+				}
+				documents = [...byId.values()];
+			} else {
+				// no authz (legacy) or no cross-user access → own documents only
+				documents =
+					(await documentMemory?.listDocuments(userId, baseFilter)) ?? [];
+			}
+			res.json(documents);
 		} catch (error) {
 			next(error);
 		}
@@ -71,7 +117,11 @@ export class DocumentApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const { id } = req.params as { id: string };
-			const document = await this.getAuthorizedDocument(userId, id);
+			const document = await this.getAuthorizedDocument(
+				userId,
+				id,
+				res.locals.authzChecked === true,
+			);
 			res.json(document);
 		} catch (error) {
 			next(error);
@@ -86,7 +136,11 @@ export class DocumentApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const { id } = req.params as { id: string };
-			const existing = await this.getAuthorizedDocument(userId, id);
+			const existing = await this.getAuthorizedDocument(
+				userId,
+				id,
+				res.locals.authzChecked === true,
+			);
 
 			const { title, content, slots, labels } = req.body as {
 				title?: string;
@@ -128,7 +182,11 @@ export class DocumentApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const { id } = req.params as { id: string };
-			await this.getAuthorizedDocument(userId, id);
+			await this.getAuthorizedDocument(
+				userId,
+				id,
+				res.locals.authzChecked === true,
+			);
 
 			await this.memoryModule.getDocumentMemory()?.deleteDocument(id);
 			res.status(StatusCodes.OK).send();
@@ -183,7 +241,11 @@ export class DocumentApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const { id, slotId } = req.params as { id: string; slotId: string };
-			await this.getAuthorizedDocument(userId, id);
+			await this.getAuthorizedDocument(
+				userId,
+				id,
+				res.locals.authzChecked === true,
+			);
 
 			const { workflowId, executionVariables } = req.body as {
 				workflowId?: string;
@@ -209,7 +271,11 @@ export class DocumentApiController {
 			userId,
 			logContext: { documentId: id, slotId },
 			setup: async (signal) => {
-				await this.getAuthorizedDocument(userId, id);
+				await this.getAuthorizedDocument(
+					userId,
+					id,
+					res.locals.authzChecked === true,
+				);
 				const { workflowId, executionVariables } = req.body as {
 					workflowId?: string;
 					executionVariables?: Record<string, string>;
@@ -233,7 +299,11 @@ export class DocumentApiController {
 			userId,
 			logContext: { documentId: id },
 			setup: async (signal) => {
-				await this.getAuthorizedDocument(userId, id);
+				await this.getAuthorizedDocument(
+					userId,
+					id,
+					res.locals.authzChecked === true,
+				);
 				const { advicePrompt } = req.body as { advicePrompt?: string };
 				return this.documentAdviceService.generateAdviceStream(
 					id,
