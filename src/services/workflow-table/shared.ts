@@ -124,7 +124,8 @@ export type WorkflowTableRenderResult = {
 export type ResolvedColumnFormat = {
 	kind: WorkflowTableColumnFormatKind;
 	grouping: boolean;
-	decimals: number;
+	/** undefined = preserve the value's own decimal precision (capped). */
+	decimals: number | undefined;
 	prefix: string;
 	suffix: string;
 	nullDisplay: string;
@@ -224,14 +225,26 @@ export function parseRecordCell(
 	return parsed === null ? trimmed : parsed;
 }
 
+/**
+ * Fraction digits cap when a column declares no explicit `decimals`: enough to
+ * keep source precision (values parsed from text round-trip exactly), while
+ * cutting binary float noise from formula-computed cells (100/3 → "33.3333").
+ */
+const MAX_INFERRED_FRACTION_DIGITS = 4;
+
+function inferFractionDigits(value: number): number {
+	const fraction = String(value).split(".")[1] ?? "";
+	return Math.min(fraction.length, MAX_INFERRED_FRACTION_DIGITS);
+}
+
 export function formatNumber(
 	value: number,
-	options: { grouping: boolean; decimals: number },
+	options: { grouping: boolean; decimals: number | undefined },
 ): string {
 	return value.toLocaleString("en-US", {
 		useGrouping: options.grouping,
 		minimumFractionDigits: 0,
-		maximumFractionDigits: options.decimals,
+		maximumFractionDigits: options.decimals ?? inferFractionDigits(value),
 	});
 }
 

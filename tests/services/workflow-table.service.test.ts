@@ -869,6 +869,41 @@ describe("WorkflowTableService", () => {
 		expect(rendered.content).toContain("| 9000176886 | 266개 | 14,904,541원 |");
 	});
 
+	it("preserves source decimal precision when decimals are unspecified", () => {
+		const turnoverBlock: WorkflowTableBlock = {
+			blockId: "turnover",
+			type: "table",
+			layout: "records",
+			title: "회전율",
+			columns: ["구분", "빌수(건)", "회전율(회)"],
+		};
+		const rawContent = JSON.stringify([
+			{ 구분: "주중", "빌수(건)": 238, "회전율(회)": 14.88 },
+			{ 구분: "주말", "빌수(건)": "5,543", "회전율(회)": "13.81" },
+		]);
+
+		const rendered = service.renderTable(turnoverBlock, rawContent);
+
+		expect(rendered.content).toContain("| 주중 | 238 | 14.88 |");
+		expect(rendered.content).toContain("| 주말 | 5,543 | 13.81 |");
+	});
+
+	it("caps unspecified decimals at 4 digits for computed float noise", () => {
+		const ratioBlock: WorkflowTableBlock = {
+			blockId: "ratio",
+			type: "table",
+			layout: "records",
+			title: "비율",
+			columns: ["구분", "a", "b", "ratio"],
+			formulas: ["ratio = a / b"],
+		};
+		const rawContent = JSON.stringify([{ 구분: "주중", a: 100, b: 3 }]);
+
+		const rendered = service.renderTable(ratioBlock, rawContent);
+
+		expect(rendered.content).toContain("| 주중 | 100 | 3 | 33.3333 |");
+	});
+
 	it("keeps numeric JSON values unformatted for text columns", () => {
 		const productBlock: WorkflowTableBlock = {
 			blockId: "product-sales",

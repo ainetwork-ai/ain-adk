@@ -273,7 +273,9 @@ export class WorkflowTableRenderer {
 			},
 			number: {
 				grouping: true,
-				decimals: 0,
+				// undefined = keep the value's own decimal precision; an explicit
+				// columnFormats.decimals still wins below.
+				decimals: undefined,
 				prefix: "",
 				suffix: "",
 				nullDisplay: "-",
