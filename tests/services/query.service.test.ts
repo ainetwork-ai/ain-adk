@@ -135,4 +135,21 @@ describe("QueryService.handleQuery with documentIds", () => {
 		const persisted = h.addMessagesToThread.mock.calls[0][2][0];
 		expect(persisted.metadata.documentIds).toBeUndefined();
 	});
+
+	it("ignores a non-array documentIds value from the request body", async () => {
+		const h = makeHarness();
+		await drain(
+			h.service.handleQuery(
+				{ type: ThreadType.CHAT, userId: "u1", threadId: "t1" },
+				{
+					query: "질문",
+					// simulates a malformed, untyped request body
+					documentIds: "abc" as unknown as string[],
+				},
+			),
+		);
+		expect(h.getThreadMessagesAtFulfill()).toEqual([]);
+		const persisted = h.addMessagesToThread.mock.calls[0][2][0];
+		expect(persisted.metadata.documentIds).toBeUndefined();
+	});
 });

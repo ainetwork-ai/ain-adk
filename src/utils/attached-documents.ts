@@ -42,6 +42,12 @@ export function collectAttachedDocumentIds(
  *
  * Isolation point: if the injection strategy changes (system-prompt
  * grounding, provider-native document parts), only this function changes.
+ *
+ * Authorization: resolution is deliberately read-open — ids are resolved via
+ * `getDocument` without a per-user ownership check, matching the deployment's
+ * role-based read-open document policy (cross-user document conversations are
+ * a supported flow). Deployments that need owner-only attachment must enforce
+ * authorization before passing ids into the query pipeline.
  */
 export async function injectAttachedDocuments(
 	memoryModule: MemoryModule,

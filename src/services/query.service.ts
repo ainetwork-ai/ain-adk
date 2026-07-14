@@ -147,7 +147,13 @@ export class QueryService {
 			title: inputTitle,
 			options,
 		} = threadMetadata;
-		const { displayQuery, documentIds } = queryData;
+		const { displayQuery } = queryData;
+		// Request bodies are untyped; accept only a real array of non-empty strings.
+		const documentIds = Array.isArray(queryData.documentIds)
+			? queryData.documentIds.filter(
+					(id): id is string => typeof id === "string" && id.length > 0,
+				)
+			: undefined;
 		let { query } = queryData;
 		const threadMemory = this.memoryModule.getThreadMemory();
 
