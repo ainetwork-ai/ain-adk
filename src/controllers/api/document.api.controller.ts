@@ -174,6 +174,75 @@ export class DocumentApiController {
 		}
 	};
 
+	/**
+	 * Updates only a single slot's workflow executionVariables (merge, not
+	 * replace). Exists as a separate endpoint so variable edits don't have to
+	 * round-trip the whole document — full-document update payloads can be
+	 * blocked by customer-side network policies (WAF) inspecting the body.
+	 */
+	public handleUpdateSlotVariables = async (
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	) => {
+		try {
+			const userId = res.locals.userId || "";
+			const { id, slotId } = req.params as { id: string; slotId: string };
+			const document = await this.getAuthorizedDocument(
+				userId,
+				id,
+				res.locals.authzChecked === true,
+			);
+
+			const slot = document.slots?.find((s) => s.slotId === slotId);
+			if (!slot) {
+				throw new AinHttpError(
+					StatusCodes.NOT_FOUND,
+					"Document slot not found",
+				);
+			}
+			if (slot.binding?.type !== "WORKFLOW") {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					"Slot has no workflow binding",
+				);
+			}
+
+			const { executionVariables } = req.body as {
+				executionVariables?: Record<string, unknown>;
+			};
+			if (
+				!executionVariables ||
+				typeof executionVariables !== "object" ||
+				Array.isArray(executionVariables) ||
+				Object.values(executionVariables).some((v) => typeof v !== "string")
+			) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					"executionVariables must be a string-valued object",
+				);
+			}
+
+			// Atomic single-slot patch (not a whole-slots rewrite): a concurrent
+			// fill of another slot must not be clobbered by this edit's snapshot.
+			// updateDocumentSlot bumps version/updatedAt in the same write.
+			await this.memoryModule
+				.getDocumentMemory()
+				?.updateDocumentSlot(id, slotId, {
+					binding: {
+						...slot.binding,
+						executionVariables: {
+							...slot.binding.executionVariables,
+							...(executionVariables as Record<string, string>),
+						},
+					},
+				});
+			res.status(StatusCodes.OK).send();
+		} catch (error) {
+			next(error);
+		}
+	};
+
 	public handleDeleteDocument = async (
 		req: Request,
 		res: Response,

@@ -44,6 +44,11 @@ export const createDocumentApiRouter = (): Router => {
 		controller.handleFillSlotStream,
 	);
 	router.post(
+		"/:id/slots/:slotId/variables",
+		checkDocumentMemory,
+		controller.handleUpdateSlotVariables,
+	);
+	router.post(
 		"/:id/advice/stream",
 		checkDocumentMemory,
 		controller.handleGenerateAdviceStream,
