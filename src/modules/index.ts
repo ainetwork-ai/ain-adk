@@ -6,6 +6,7 @@ export type {
 	IDocumentMemory,
 	IIntentMemory,
 	IMemory,
+	IScheduleRunMemory,
 	IThreadMemory,
 	IUserWorkflowMemory,
 	IWorkflowTemplateMemory,

@@ -70,6 +70,23 @@ export interface DocumentSlot {
 }
 
 /**
+ * One-shot automatic slot refresh for a document.
+ * e.g. a logbook is refreshed once, the morning after its date.
+ */
+export interface DocumentAutoRefresh {
+	/** Scheduled execution time (epoch ms). */
+	runAt: number;
+	/** When false the refresh is cancelled (opt-out). */
+	active: boolean;
+	/** Target slots. Defaults to every slot with a binding. */
+	slotIds?: string[];
+	/** Slots already refreshed successfully (accumulated atomically). */
+	doneSlotIds?: string[];
+	/** Set when every target slot is done; a completed job never re-runs. */
+	completedAt?: number;
+}
+
+/**
  * A first-class, mutable document.
  *
  * Documents hold the canonical result of a workflow/query as markdown and are
@@ -105,6 +122,8 @@ export interface Document {
 	advice?: DocumentAdvice;
 	/** Placeholder slots referenced by `{{slot:slotId}}` tokens in `content`. */
 	slots?: DocumentSlot[];
+	/** One-shot automatic slot refresh (null = explicitly cleared). */
+	autoRefresh?: DocumentAutoRefresh | null;
 	/**
 	 * Faceted grouping dimensions, e.g.
 	 * `{ category: "logbook", workplaceId: "123", month: "2026-06" }`.

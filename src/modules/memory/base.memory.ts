@@ -9,6 +9,7 @@ import type {
 	UserWorkflow,
 	WorkflowTemplate,
 } from "@/types/memory";
+import type { ScheduleRun, ScheduleRunFilter } from "@/types/schedule";
 
 /**
  * Memory connection interface - manages the underlying connection
@@ -27,6 +28,10 @@ export interface IMemory {
 	 * implementations that predate documents may omit it.
 	 */
 	getDocumentMemory?(): IDocumentMemory;
+	/**
+	 * Schedule run history. Optional for backward compatibility.
+	 */
+	getScheduleRunMemory?(): IScheduleRunMemory;
 }
 
 /**
@@ -143,4 +148,28 @@ export interface IDocumentMemory {
 	): Promise<void>;
 	deleteDocument(documentId: string): Promise<void>;
 	listDocuments(userId?: string, filter?: DocumentFilter): Promise<Document[]>;
+	/** Documents with an active, incomplete autoRefresh (used by the scheduler). */
+	listAutoRefreshPendingDocuments?(): Promise<Document[]>;
+	/** Atomically append a slot to autoRefresh.doneSlotIds ($addToSet semantics). */
+	markAutoRefreshSlotDone?(documentId: string, slotId: string): Promise<void>;
+	/** Stamp autoRefresh.completedAt (job finished, never re-runs). */
+	completeAutoRefresh?(documentId: string, completedAt: number): Promise<void>;
+}
+
+/**
+ * Schedule run memory interface - execution history of scheduled jobs.
+ */
+export interface IScheduleRunMemory {
+	createScheduleRun(run: ScheduleRun): Promise<void>;
+	updateScheduleRun(runId: string, patch: Partial<ScheduleRun>): Promise<void>;
+	/** Newest first (startedAt desc). */
+	listScheduleRuns(
+		filter?: ScheduleRunFilter,
+		limit?: number,
+	): Promise<ScheduleRun[]>;
+	/**
+	 * Mark runs stuck in "running" (process died mid-run) as failed with
+	 * error "interrupted". Returns the number of runs updated.
+	 */
+	failInterruptedRuns(): Promise<number>;
 }
