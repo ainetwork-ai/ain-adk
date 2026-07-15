@@ -135,58 +135,70 @@ export class SchedulerService {
 	/**
 	 * Executes one scheduled workflow run through the JobRunner and records
 	 * it in schedule_runs. Public for tests and manual triggering.
+	 *
+	 * Never rejects: execution errors are absorbed by the JobRunner, and
+	 * bookkeeping (memory) errors are caught and logged here so that
+	 * fire-and-forget callers (boot catch-up) cannot crash the process
+	 * with an unhandled rejection.
 	 */
 	async runWorkflowJob(
 		workflowId: string,
 		trigger: ScheduleTrigger,
 		scheduledFor: number,
 	): Promise<void> {
-		const scheduleRunMemory = this.memoryModule.getScheduleRunMemory();
-		const runId = randomUUID();
-		const startedAt = Date.now();
-		await scheduleRunMemory?.createScheduleRun({
-			runId,
-			jobType: "WORKFLOW",
-			jobKey: workflowId,
-			trigger,
-			scheduledFor,
-			startedAt,
-			status: "running",
-			attempts: 0,
-		});
-
-		const workflow = await this.userWorkflowService.getWorkflow(workflowId);
-		if (!workflow) {
-			// Deleted since scheduling: stop repeating a doomed job.
-			await this.unscheduleWorkflow(workflowId);
-			await scheduleRunMemory?.updateScheduleRun(runId, {
-				status: "failed",
-				finishedAt: Date.now(),
-				attempts: 1,
-				error: "Workflow not found; unscheduled",
+		try {
+			const scheduleRunMemory = this.memoryModule.getScheduleRunMemory();
+			const runId = randomUUID();
+			const startedAt = Date.now();
+			await scheduleRunMemory?.createScheduleRun({
+				runId,
+				jobType: "WORKFLOW",
+				jobKey: workflowId,
+				trigger,
+				scheduledFor,
+				startedAt,
+				status: "running",
+				attempts: 0,
 			});
-			return;
+
+			const workflow = await this.userWorkflowService.getWorkflow(workflowId);
+			if (!workflow) {
+				// Deleted since scheduling: stop repeating a doomed job.
+				await this.unscheduleWorkflow(workflowId);
+				await scheduleRunMemory?.updateScheduleRun(runId, {
+					status: "failed",
+					finishedAt: Date.now(),
+					attempts: 1,
+					error: "Workflow not found; unscheduled",
+				});
+				return;
+			}
+
+			const outcome = await this.jobRunner.submit({
+				jobKey: workflowId,
+				execute: async () => {
+					await this.workflowExecutionService.executeWorkflow(workflowId);
+				},
+			});
+
+			await scheduleRunMemory?.updateScheduleRun(runId, {
+				status: outcome.status,
+				finishedAt: Date.now(),
+				attempts: outcome.attempts,
+				error: outcome.status === "failed" ? outcome.error : undefined,
+			});
+
+			const nextRun = this.tasks.get(workflowId)?.getNextRun();
+			await this.userWorkflowService.updateWorkflow(workflowId, {
+				userId: workflow.userId,
+				lastRunAt: startedAt,
+				nextRunAt: nextRun ? nextRun.getTime() : undefined,
+			});
+		} catch (error) {
+			loggers.agent.error("Scheduled run bookkeeping failed", {
+				workflowId,
+				error,
+			});
 		}
-
-		const outcome = await this.jobRunner.submit({
-			jobKey: workflowId,
-			execute: async () => {
-				await this.workflowExecutionService.executeWorkflow(workflowId);
-			},
-		});
-
-		await scheduleRunMemory?.updateScheduleRun(runId, {
-			status: outcome.status,
-			finishedAt: Date.now(),
-			attempts: outcome.attempts,
-			error: outcome.status === "failed" ? outcome.error : undefined,
-		});
-
-		const nextRun = this.tasks.get(workflowId)?.getNextRun();
-		await this.userWorkflowService.updateWorkflow(workflowId, {
-			userId: workflow.userId,
-			lastRunAt: startedAt,
-			nextRunAt: nextRun ? nextRun.getTime() : undefined,
-		});
 	}
 }

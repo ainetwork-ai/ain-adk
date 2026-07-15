@@ -1,6 +1,7 @@
 import { JobRunnerService } from "@/services/job-runner.service";
 import { SchedulerService } from "@/services/scheduler.service";
 import type { UserWorkflow } from "@/types/memory";
+import { loggers } from "@/utils/logger";
 
 function makeWorkflow(overrides: Partial<UserWorkflow> = {}): UserWorkflow {
 	return {
@@ -107,6 +108,28 @@ describe("SchedulerService — workflow jobs", () => {
 		expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenCalledWith(
 			expect.any(String),
 			expect.objectContaining({ status: "failed" }),
+		);
+	});
+
+	it("resolves and logs instead of rejecting when run bookkeeping fails", async () => {
+		const m = makeMocks();
+		const errorSpy = jest
+			.spyOn(loggers.agent, "error")
+			.mockImplementation(() => loggers.agent);
+		m.userWorkflowService.getWorkflow.mockResolvedValue(makeWorkflow());
+		m.scheduleRunMemory.createScheduleRun.mockRejectedValueOnce(
+			new Error("mongo down"),
+		);
+
+		// Must not reject: start() fires this call as void (fire-and-forget),
+		// so a rejection here would become an unhandled rejection at boot.
+		await expect(
+			m.scheduler.runWorkflowJob("wf-1", "catchup", Date.now()),
+		).resolves.toBeUndefined();
+
+		expect(errorSpy).toHaveBeenCalledWith(
+			"Scheduled run bookkeeping failed",
+			expect.objectContaining({ workflowId: "wf-1" }),
 		);
 	});
 
