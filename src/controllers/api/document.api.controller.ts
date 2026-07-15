@@ -389,6 +389,10 @@ export class DocumentApiController {
 				slotId,
 				{ workflowId, executionVariables },
 			);
+			// fillDocumentSlot throws on failure, so resolving here means the
+			// manual fill succeeded — reconcile it into the auto-refresh ledger
+			// (never throws) so the badge and boot catch-up stay in sync.
+			await this.schedulerService.reconcileManualSlotFill(id, slotId);
 			res.status(StatusCodes.OK).json(result);
 		} catch (error) {
 			next(error);
@@ -403,6 +407,10 @@ export class DocumentApiController {
 			logLabel: "Document slot fill stream",
 			userId,
 			logContext: { documentId: id, slotId },
+			// Same reconciliation as the non-stream fill path, wired to the
+			// stream's successful completion instead of promise resolution.
+			onComplete: () =>
+				this.schedulerService.reconcileManualSlotFill(id, slotId),
 			setup: async (signal) => {
 				await this.getAuthorizedDocument(
 					userId,

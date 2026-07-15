@@ -11,6 +11,11 @@ export type SSEStreamOptions = {
 		threadId: string,
 		data: Extract<StreamEvent, { event: "thinking_process" }>["data"],
 	) => Promise<void> | void;
+	/**
+	 * Called once the stream has been fully consumed with no error and no
+	 * client-initiated abort — i.e. on successful completion only.
+	 */
+	onComplete?: () => Promise<void> | void;
 	setup: (signal: AbortSignal) => Promise<AsyncIterable<StreamEvent>>;
 };
 
@@ -62,6 +67,9 @@ export async function streamEventsToSSE(
 			res.write(
 				`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`,
 			);
+		}
+		if (!abortController.signal.aborted) {
+			await options.onComplete?.();
 		}
 	} catch (error: unknown) {
 		const errMsg =

@@ -445,3 +445,136 @@ describe("SchedulerService — document auto refresh", () => {
 		);
 	});
 });
+
+describe("SchedulerService — reconcileManualSlotFill", () => {
+	afterEach(async () => {
+		jest.restoreAllMocks();
+	});
+
+	function makeLogbookDocument(overrides: Record<string, unknown> = {}) {
+		return {
+			documentId: "doc-1",
+			userId: "user-1",
+			title: "로그북",
+			format: "MARKDOWN",
+			content: "{{slot:s1}} {{slot:s2}}",
+			slots: [
+				{ slotId: "s1", status: "empty", binding: { type: "WORKFLOW", workflowId: "wf-a" } },
+				{ slotId: "s2", status: "empty", binding: { type: "WORKFLOW", workflowId: "wf-b" } },
+				{ slotId: "no-binding", status: "empty" },
+			],
+			source: "MANUAL",
+			version: 1,
+			createdAt: "",
+			updatedAt: "",
+			autoRefresh: { runAt: Date.now() - 1000, active: true },
+			...overrides,
+		};
+	}
+
+	it("marks the slot done when it's a target of a pending autoRefresh", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(makeLogbookDocument());
+
+		await m.scheduler.reconcileManualSlotFill("doc-1", "s1");
+
+		expect(m.documentMemory.markAutoRefreshSlotDone).toHaveBeenCalledWith(
+			"doc-1",
+			"s1",
+		);
+		expect(m.documentMemory.completeAutoRefresh).not.toHaveBeenCalled();
+	});
+
+	it("completes the auto-refresh and drops the pending entry when it's the last remaining target", async () => {
+		jest.useFakeTimers();
+		const m = makeMocks();
+		const document = makeLogbookDocument({
+			autoRefresh: { runAt: Date.now() - 1000, active: true, doneSlotIds: ["s1"] },
+		});
+		m.documentMemory.getDocument.mockResolvedValue(document);
+		// biome-ignore lint/suspicious/noExplicitAny: test double
+		m.scheduler.notifyDocumentAutoRefresh(document as any);
+
+		await m.scheduler.reconcileManualSlotFill("doc-1", "s2");
+
+		expect(m.documentMemory.markAutoRefreshSlotDone).toHaveBeenCalledWith(
+			"doc-1",
+			"s2",
+		);
+		expect(m.documentMemory.completeAutoRefresh).toHaveBeenCalledWith(
+			"doc-1",
+			expect.any(Number),
+		);
+
+		// Pending entry was dropped: tick must not dispatch anything for doc-1.
+		m.scheduler.startTickForTest();
+		await jest.advanceTimersByTimeAsync(60_000);
+		jest.useRealTimers();
+		await new Promise((r) => setTimeout(r, 10));
+		expect(m.workflowExecutionService.fillDocumentSlot).not.toHaveBeenCalled();
+		await m.scheduler.stop();
+	});
+
+	it("no-ops when autoRefresh is absent", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(
+			makeLogbookDocument({ autoRefresh: undefined }),
+		);
+		await m.scheduler.reconcileManualSlotFill("doc-1", "s1");
+		expect(m.documentMemory.markAutoRefreshSlotDone).not.toHaveBeenCalled();
+	});
+
+	it("no-ops when autoRefresh is inactive", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(
+			makeLogbookDocument({
+				autoRefresh: { runAt: Date.now() - 1000, active: false },
+			}),
+		);
+		await m.scheduler.reconcileManualSlotFill("doc-1", "s1");
+		expect(m.documentMemory.markAutoRefreshSlotDone).not.toHaveBeenCalled();
+	});
+
+	it("no-ops when autoRefresh is already completed", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(
+			makeLogbookDocument({
+				autoRefresh: {
+					runAt: Date.now() - 1000,
+					active: true,
+					completedAt: Date.now(),
+				},
+			}),
+		);
+		await m.scheduler.reconcileManualSlotFill("doc-1", "s1");
+		expect(m.documentMemory.markAutoRefreshSlotDone).not.toHaveBeenCalled();
+	});
+
+	it("no-ops when the slot is not a target of the pending autoRefresh", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(
+			makeLogbookDocument({
+				autoRefresh: { runAt: Date.now() - 1000, active: true, slotIds: ["s1"] },
+			}),
+		);
+		await m.scheduler.reconcileManualSlotFill("doc-1", "s2");
+		expect(m.documentMemory.markAutoRefreshSlotDone).not.toHaveBeenCalled();
+	});
+
+	it("never rejects when getDocument rejects; logs instead", async () => {
+		const m = makeMocks();
+		const errorSpy = jest
+			.spyOn(loggers.agent, "error")
+			.mockImplementation(() => loggers.agent);
+		m.documentMemory.getDocument.mockRejectedValue(new Error("mongo down"));
+
+		await expect(
+			m.scheduler.reconcileManualSlotFill("doc-1", "s1"),
+		).resolves.toBeUndefined();
+
+		expect(errorSpy).toHaveBeenCalledWith(
+			"Manual fill auto-refresh reconciliation failed",
+			expect.objectContaining({ documentId: "doc-1", slotId: "s1" }),
+		);
+	});
+});

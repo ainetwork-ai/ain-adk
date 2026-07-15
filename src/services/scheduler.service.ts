@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import cron, { type ScheduledTask } from "node-cron";
 import type { MemoryModule } from "@/modules/memory/memory.module.js";
-import type { Document } from "@/types/document.js";
+import type { Document, DocumentAutoRefresh } from "@/types/document.js";
 import type { UserWorkflow } from "@/types/memory.js";
 import type {
 	ScheduleRunSlotResult,
@@ -349,12 +349,10 @@ export class SchedulerService {
 			}
 
 			const done = new Set(autoRefresh.doneSlotIds ?? []);
-			const boundSlotIds = (document.slots ?? [])
-				.filter((slot) => slot.binding)
-				.map((slot) => slot.slotId);
-			const targetIds = (autoRefresh.slotIds ?? boundSlotIds).filter(
-				(slotId) => !done.has(slotId),
-			);
+			const targetIds = this.getAutoRefreshTargetSlotIds(
+				document,
+				autoRefresh,
+			).filter((slotId) => !done.has(slotId));
 
 			if (targetIds.length === 0) {
 				await documentMemory.completeAutoRefresh?.(documentId, Date.now());
@@ -445,6 +443,61 @@ export class SchedulerService {
 		} catch (error) {
 			loggers.agent.error("Auto-refresh run bookkeeping failed", {
 				documentId,
+				error,
+			});
+		}
+	}
+
+	/**
+	 * Target slot ids for a document's auto-refresh: an explicit allowlist, or
+	 * (default) every slot with a binding. Shared by {@link runAutoRefreshJob}
+	 * and {@link reconcileManualSlotFill} so the two stay in sync.
+	 */
+	private getAutoRefreshTargetSlotIds(
+		document: Document,
+		autoRefresh: DocumentAutoRefresh,
+	): string[] {
+		const boundSlotIds = (document.slots ?? [])
+			.filter((slot) => slot.binding)
+			.map((slot) => slot.slotId);
+		return autoRefresh.slotIds ?? boundSlotIds;
+	}
+
+	/**
+	 * Reconciles a successful MANUAL slot fill into the auto-refresh ledger.
+	 * If the slot is a target of a pending (active, incomplete) autoRefresh,
+	 * mark it done; if that completes every target, stamp completedAt and drop
+	 * the pending entry. Idempotent; never throws (bookkeeping must not fail
+	 * the fill request).
+	 */
+	async reconcileManualSlotFill(
+		documentId: string,
+		slotId: string,
+	): Promise<void> {
+		try {
+			const documentMemory = this.memoryModule.getDocumentMemory();
+			if (!documentMemory) return;
+
+			const document = await documentMemory.getDocument(documentId);
+			const autoRefresh = document?.autoRefresh;
+			if (!document || !autoRefresh?.active || autoRefresh.completedAt) {
+				return;
+			}
+
+			const targets = this.getAutoRefreshTargetSlotIds(document, autoRefresh);
+			if (!targets.includes(slotId)) return;
+
+			await documentMemory.markAutoRefreshSlotDone?.(documentId, slotId);
+
+			const done = new Set([...(autoRefresh.doneSlotIds ?? []), slotId]);
+			if (targets.every((id) => done.has(id))) {
+				await documentMemory.completeAutoRefresh?.(documentId, Date.now());
+				this.removeDocumentAutoRefresh(documentId);
+			}
+		} catch (error) {
+			loggers.agent.error("Manual fill auto-refresh reconciliation failed", {
+				documentId,
+				slotId,
 				error,
 			});
 		}
