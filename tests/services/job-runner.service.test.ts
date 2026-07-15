@@ -178,6 +178,38 @@ describe("JobRunnerService", () => {
 		expect(Date.now() - started).toBeLessThan(1000);
 	});
 
+	describe("SCHEDULER_MAX_CONCURRENT env guard", () => {
+		const ORIGINAL_ENV = process.env.SCHEDULER_MAX_CONCURRENT;
+
+		afterEach(() => {
+			if (ORIGINAL_ENV === undefined) {
+				delete process.env.SCHEDULER_MAX_CONCURRENT;
+			} else {
+				process.env.SCHEDULER_MAX_CONCURRENT = ORIGINAL_ENV;
+			}
+		});
+
+		it("falls back to 2 and still executes when the env value is not a number", async () => {
+			process.env.SCHEDULER_MAX_CONCURRENT = "abc";
+			const runner = new JobRunnerService();
+			const outcome = await runner.submit({
+				jobKey: "wf-1",
+				execute: async () => {},
+			});
+			expect(outcome).toEqual({ status: "success", attempts: 1 });
+		});
+
+		it("falls back to 2 and still executes when the env value is 0", async () => {
+			process.env.SCHEDULER_MAX_CONCURRENT = "0";
+			const runner = new JobRunnerService();
+			const outcome = await runner.submit({
+				jobKey: "wf-1",
+				execute: async () => {},
+			});
+			expect(outcome).toEqual({ status: "success", attempts: 1 });
+		});
+	});
+
 	it("drain waits for in-flight jobs", async () => {
 		const runner = new JobRunnerService({ maxConcurrent: 2 });
 		const gate = deferred();

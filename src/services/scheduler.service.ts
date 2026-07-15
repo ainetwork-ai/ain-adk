@@ -28,6 +28,9 @@ export class SchedulerService {
 	private pendingAutoRefresh: Map<string, number> = new Map();
 	private tickTimer?: ReturnType<typeof setInterval>;
 	private static readonly TICK_INTERVAL_MS = 60_000;
+	private static readonly MAX_CONSECUTIVE_FAILURES = 3;
+	/** Consecutive failed cron runs per workflowId; reset on success. */
+	private consecutiveFailures: Map<string, number> = new Map();
 
 	constructor(
 		userWorkflowService: UserWorkflowService,
@@ -138,6 +141,7 @@ export class SchedulerService {
 			this.tasks.delete(workflowId);
 			loggers.agent.debug(`Unscheduled workflow: ${workflowId}`);
 		}
+		this.consecutiveFailures.delete(workflowId);
 	}
 
 	async rescheduleWorkflow(workflow: UserWorkflow): Promise<void> {
@@ -195,6 +199,25 @@ export class SchedulerService {
 					await this.workflowExecutionService.executeWorkflow(workflowId);
 				},
 			});
+
+			// Spec §8: a workflow that fails deterministically (broken definition,
+			// etc.) would otherwise fail every cron period forever. Tracked
+			// in-memory only (deliberate, non-destructive): a process restart
+			// re-arms the schedule for one more attempt cycle rather than
+			// permanently stranding a workflow whose definition was fixed but
+			// whose persisted counter was never cleared.
+			if (outcome.status === "failed") {
+				const failures = (this.consecutiveFailures.get(workflowId) ?? 0) + 1;
+				this.consecutiveFailures.set(workflowId, failures);
+				if (failures >= SchedulerService.MAX_CONSECUTIVE_FAILURES) {
+					loggers.agent.warn(
+						`Auto-unscheduled workflow ${workflowId} after ${failures} consecutive failures`,
+					);
+					await this.unscheduleWorkflow(workflowId);
+				}
+			} else if (outcome.status === "success") {
+				this.consecutiveFailures.delete(workflowId);
+			}
 
 			await scheduleRunMemory?.updateScheduleRun(runId, {
 				status: outcome.status,
@@ -369,6 +392,26 @@ export class SchedulerService {
 							);
 						} catch (error) {
 							doneMarkingFailed = true;
+							loggers.agent.error("Auto-refresh slot bookkeeping failed", {
+								documentId,
+								slotId,
+								error,
+							});
+						}
+					} else if (outcome.status === "failed") {
+						// fillDocumentSlotStream throws for several pre-execution
+						// cases (document/slot/binding/workflow/definition gone)
+						// BEFORE ever writing status:"failed" to the slot itself —
+						// only post-start execution errors do that. Without this,
+						// the frontend badge (derived solely from slot.status)
+						// stays stuck "in progress" forever. Idempotent with the
+						// execution-failure path, which already sets this status.
+						try {
+							await documentMemory.updateDocumentSlot(documentId, slotId, {
+								status: "failed",
+								error: outcome.error,
+							});
+						} catch (error) {
 							loggers.agent.error("Auto-refresh slot bookkeeping failed", {
 								documentId,
 								slotId,

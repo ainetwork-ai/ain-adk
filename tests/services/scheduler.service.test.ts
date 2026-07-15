@@ -36,6 +36,7 @@ function makeMocks() {
 		listAutoRefreshPendingDocuments: jest.fn().mockResolvedValue([]),
 		markAutoRefreshSlotDone: jest.fn().mockResolvedValue(undefined),
 		completeAutoRefresh: jest.fn().mockResolvedValue(undefined),
+		updateDocumentSlot: jest.fn().mockResolvedValue(undefined),
 	};
 	const memoryModule = {
 		getScheduleRunMemory: () => scheduleRunMemory,
@@ -149,6 +150,56 @@ describe("SchedulerService — workflow jobs", () => {
 	});
 });
 
+describe("SchedulerService — repeated-failure auto-unschedule", () => {
+	afterEach(async () => {
+		jest.restoreAllMocks();
+	});
+
+	it("auto-unschedules a workflow after 3 consecutive failures, not before", async () => {
+		const m = makeMocks();
+		m.userWorkflowService.getWorkflow.mockResolvedValue(makeWorkflow());
+		m.workflowExecutionService.executeWorkflow.mockRejectedValue(
+			Object.assign(new Error("definition broken"), { status: 400 }),
+		);
+		const unscheduleSpy = jest.spyOn(m.scheduler, "unscheduleWorkflow");
+
+		await m.scheduler.runWorkflowJob("wf-1", "cron", Date.now());
+		expect(unscheduleSpy).not.toHaveBeenCalled();
+
+		await m.scheduler.runWorkflowJob("wf-1", "cron", Date.now());
+		expect(unscheduleSpy).not.toHaveBeenCalled();
+
+		await m.scheduler.runWorkflowJob("wf-1", "cron", Date.now());
+		expect(unscheduleSpy).toHaveBeenCalledTimes(1);
+		expect(unscheduleSpy).toHaveBeenCalledWith("wf-1");
+	});
+
+	it("a success in between resets the consecutive-failure counter", async () => {
+		const m = makeMocks();
+		m.userWorkflowService.getWorkflow.mockResolvedValue(makeWorkflow());
+		const unscheduleSpy = jest.spyOn(m.scheduler, "unscheduleWorkflow");
+		const failure = () =>
+			Promise.reject(Object.assign(new Error("boom"), { status: 400 }));
+
+		m.workflowExecutionService.executeWorkflow.mockImplementationOnce(failure);
+		await m.scheduler.runWorkflowJob("wf-1", "cron", Date.now());
+
+		m.workflowExecutionService.executeWorkflow.mockResolvedValueOnce({
+			threadId: "t-1",
+		});
+		await m.scheduler.runWorkflowJob("wf-1", "cron", Date.now());
+
+		m.workflowExecutionService.executeWorkflow.mockImplementationOnce(failure);
+		await m.scheduler.runWorkflowJob("wf-1", "cron", Date.now());
+
+		m.workflowExecutionService.executeWorkflow.mockImplementationOnce(failure);
+		await m.scheduler.runWorkflowJob("wf-1", "cron", Date.now());
+
+		// Only 2 consecutive failures since the success reset — not yet at 3.
+		expect(unscheduleSpy).not.toHaveBeenCalled();
+	});
+});
+
 describe("SchedulerService — document auto refresh", () => {
 	afterEach(async () => {
 		jest.restoreAllMocks();
@@ -213,9 +264,61 @@ describe("SchedulerService — document auto refresh", () => {
 		expect(m.documentMemory.markAutoRefreshSlotDone).toHaveBeenCalledWith("doc-1", "s1");
 		expect(m.documentMemory.markAutoRefreshSlotDone).not.toHaveBeenCalledWith("doc-1", "s2");
 		expect(m.documentMemory.completeAutoRefresh).not.toHaveBeenCalled();
+		expect(m.documentMemory.updateDocumentSlot).toHaveBeenCalledWith(
+			"doc-1",
+			"s2",
+			expect.objectContaining({ status: "failed" }),
+		);
 		expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenCalledWith(
 			expect.any(String),
 			expect.objectContaining({ status: "failed" }),
+		);
+	});
+
+	it("marks a pre-execution slot failure (document/slot/binding/workflow gone) as failed", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(makeLogbookDocument());
+		m.workflowExecutionService.fillDocumentSlot.mockImplementation(
+			async (_docId: string, slotId: string) => {
+				if (slotId === "s2")
+					throw new Error(`No workflow bound to slot doc-1/${slotId}`);
+				return {};
+			},
+		);
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+
+		expect(m.documentMemory.updateDocumentSlot).toHaveBeenCalledWith(
+			"doc-1",
+			"s2",
+			expect.objectContaining({
+				status: "failed",
+				error: expect.stringContaining("No workflow bound"),
+			}),
+		);
+	});
+
+	it("logs (does not throw) when updateDocumentSlot rejects on slot failure", async () => {
+		const m = makeMocks();
+		const errorSpy = jest
+			.spyOn(loggers.agent, "error")
+			.mockImplementation(() => loggers.agent);
+		m.documentMemory.getDocument.mockResolvedValue(makeLogbookDocument());
+		m.documentMemory.updateDocumentSlot.mockRejectedValue(new Error("mongo down"));
+		m.workflowExecutionService.fillDocumentSlot.mockImplementation(
+			async (_docId: string, slotId: string) => {
+				if (slotId === "s2")
+					throw Object.assign(new Error("boom"), { status: 400 });
+				return {};
+			},
+		);
+
+		await expect(
+			m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now()),
+		).resolves.toBeUndefined();
+
+		expect(errorSpy).toHaveBeenCalledWith(
+			"Auto-refresh slot bookkeeping failed",
+			expect.objectContaining({ documentId: "doc-1", slotId: "s2" }),
 		);
 	});
 

@@ -48,11 +48,34 @@ export class JobRunnerService {
 	private inFlight = new Set<Promise<JobOutcome>>();
 
 	constructor(options?: JobRunnerOptions) {
-		this.maxConcurrent =
-			options?.maxConcurrent ??
-			Number.parseInt(process.env.SCHEDULER_MAX_CONCURRENT ?? "2", 10);
+		this.maxConcurrent = JobRunnerService.resolveMaxConcurrent(
+			options?.maxConcurrent,
+		);
 		this.retryDelaysMs = options?.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
 		this.cooldownMs = options?.cooldownMs ?? 60_000;
+	}
+
+	/**
+	 * A non-finite or <1 maxConcurrent would make `active < maxConcurrent`
+	 * permanently false, deadlocking every submitted job with no error.
+	 * Guard both the explicit option and the env-var fallback against that.
+	 */
+	private static resolveMaxConcurrent(explicit?: number): number {
+		if (explicit !== undefined) {
+			return Number.isFinite(explicit) && explicit >= 1 ? explicit : 2;
+		}
+		const raw = process.env.SCHEDULER_MAX_CONCURRENT;
+		if (raw === undefined) {
+			return 2;
+		}
+		const parsed = Number.parseInt(raw, 10);
+		if (Number.isFinite(parsed) && parsed >= 1) {
+			return parsed;
+		}
+		loggers.agent.warn(
+			`Invalid SCHEDULER_MAX_CONCURRENT="${raw}"; falling back to maxConcurrent=2`,
+		);
+		return 2;
 	}
 
 	async submit(job: Job): Promise<JobOutcome> {
