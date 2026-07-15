@@ -18,6 +18,7 @@ import { A2AService } from "@/services/a2a.service";
 import { DocumentAdviceService } from "@/services/document-advice.service";
 import { IntentFulfillService } from "@/services/intents/fulfill.service";
 import { IntentTriggerService } from "@/services/intents/trigger.service";
+import { JobRunnerService } from "@/services/job-runner.service";
 import { PIIService } from "@/services/pii.service";
 import { QueryService } from "@/services/query.service";
 import { SchedulerService } from "@/services/scheduler.service";
@@ -46,6 +47,7 @@ class Container {
 	private _userWorkflowCoordinatorService?: UserWorkflowCoordinatorService;
 	private _workflowExecutionService?: WorkflowExecutionService;
 	private _workflowVariableResolver?: WorkflowVariableResolver;
+	private _jobRunnerService?: JobRunnerService;
 	private _schedulerService?: SchedulerService;
 	private _documentAdviceService?: DocumentAdviceService;
 
@@ -170,11 +172,20 @@ class Container {
 		return this._workflowVariableResolver;
 	}
 
+	getJobRunnerService(): JobRunnerService {
+		if (!this._jobRunnerService) {
+			this._jobRunnerService = new JobRunnerService();
+		}
+		return this._jobRunnerService;
+	}
+
 	getSchedulerService(): SchedulerService {
 		if (!this._schedulerService) {
 			this._schedulerService = new SchedulerService(
 				this.getUserWorkflowService(),
 				this.getWorkflowExecutionService(),
+				this.getJobRunnerService(),
+				getMemoryModule(),
 			);
 		}
 		return this._schedulerService;
@@ -282,6 +293,7 @@ class Container {
 		this._userWorkflowCoordinatorService = undefined;
 		this._workflowExecutionService = undefined;
 		this._workflowVariableResolver = undefined;
+		this._jobRunnerService = undefined;
 		this._schedulerService = undefined;
 		this._documentAdviceService = undefined;
 

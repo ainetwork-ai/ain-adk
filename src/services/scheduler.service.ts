@@ -1,46 +1,70 @@
+import { randomUUID } from "node:crypto";
 import cron, { type ScheduledTask } from "node-cron";
+import type { MemoryModule } from "@/modules/memory/memory.module.js";
 import type { UserWorkflow } from "@/types/memory.js";
+import type { ScheduleTrigger } from "@/types/schedule.js";
 import { loggers } from "@/utils/logger.js";
+import type { JobRunnerService } from "./job-runner.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
 import type { WorkflowExecutionService } from "./workflow-execution.service.js";
 
 /**
- * Cron-based scheduler that automatically executes user workflows.
- *
- * Loads all active scheduled workflows from memory on start, registers cron tasks,
- * and manages the lifecycle of scheduled executions.
+ * Cron-based scheduler for user workflows plus one-shot document auto
+ * refreshes. Triggering (node-cron / minute tick) is separated from
+ * execution: every run goes through the JobRunner, which owns concurrency,
+ * retries and the rate-limit cooldown. This service owns run history and
+ * schedule state (nextRunAt, autoRefresh bookkeeping).
  */
 export class SchedulerService {
 	private userWorkflowService: UserWorkflowService;
 	private workflowExecutionService: WorkflowExecutionService;
+	private jobRunner: JobRunnerService;
+	private memoryModule: MemoryModule;
 	private tasks: Map<string, ScheduledTask> = new Map();
 
 	constructor(
 		userWorkflowService: UserWorkflowService,
 		workflowExecutionService: WorkflowExecutionService,
+		jobRunner: JobRunnerService,
+		memoryModule: MemoryModule,
 	) {
 		this.userWorkflowService = userWorkflowService;
 		this.workflowExecutionService = workflowExecutionService;
+		this.jobRunner = jobRunner;
+		this.memoryModule = memoryModule;
 	}
 
-	/**
-	 * Starts the scheduler by loading all active scheduled workflows and registering cron tasks.
-	 */
 	async start(): Promise<void> {
+		const scheduleRunMemory = this.memoryModule.getScheduleRunMemory();
+		if (scheduleRunMemory) {
+			const interrupted = await scheduleRunMemory.failInterruptedRuns();
+			if (interrupted > 0) {
+				loggers.agent.warn(
+					`Marked ${interrupted} interrupted schedule run(s) as failed`,
+				);
+			}
+		}
+
 		const activeWorkflows =
 			await this.userWorkflowService.listActiveScheduledWorkflows();
 		loggers.agent.info(
 			`Scheduler starting with ${activeWorkflows.length} active workflow(s)`,
 		);
-
 		for (const workflow of activeWorkflows) {
+			// Catch-up BEFORE scheduleWorkflow refreshes nextRunAt.
+			const overdue =
+				workflow.nextRunAt !== undefined && workflow.nextRunAt <= Date.now();
 			await this.scheduleWorkflow(workflow);
+			if (overdue) {
+				void this.runWorkflowJob(
+					workflow.workflowId,
+					"catchup",
+					workflow.nextRunAt ?? Date.now(),
+				);
+			}
 		}
 	}
 
-	/**
-	 * Stops all scheduled tasks.
-	 */
 	async stop(): Promise<void> {
 		loggers.agent.info(
 			`Scheduler stopping, clearing ${this.tasks.size} task(s)`,
@@ -50,20 +74,16 @@ export class SchedulerService {
 			loggers.agent.debug(`Stopped scheduled task: ${workflowId}`);
 		}
 		this.tasks.clear();
+		await this.jobRunner.drain();
 	}
 
-	/**
-	 * Registers a single workflow with the cron scheduler.
-	 */
 	async scheduleWorkflow(workflow: UserWorkflow): Promise<void> {
 		if (!workflow.schedule) {
 			return;
 		}
-
 		if (this.tasks.has(workflow.workflowId)) {
 			await this.unscheduleWorkflow(workflow.workflowId);
 		}
-
 		if (!cron.validate(workflow.schedule)) {
 			loggers.agent.error(
 				`Invalid cron expression for workflow ${workflow.workflowId}: ${workflow.schedule}`,
@@ -77,35 +97,25 @@ export class SchedulerService {
 				loggers.agent.info(
 					`Cron triggered workflow: ${workflow.title} (${workflow.workflowId})`,
 				);
-				try {
-					const result = await this.workflowExecutionService.executeWorkflow(
-						workflow.workflowId,
-					);
-					loggers.agent.info(
-						`Workflow ${workflow.workflowId} completed, threadId: ${result.threadId}`,
-					);
-				} catch (error) {
-					loggers.agent.error(
-						`Workflow ${workflow.workflowId} execution failed`,
-						{ error },
-					);
-				}
+				await this.runWorkflowJob(workflow.workflowId, "cron", Date.now());
 			},
 			{
 				timezone: workflow.timezone,
 				name: workflow.workflowId,
 			},
 		);
-
 		this.tasks.set(workflow.workflowId, task);
+
+		const nextRun = task.getNextRun();
+		await this.userWorkflowService.updateWorkflow(workflow.workflowId, {
+			userId: workflow.userId,
+			nextRunAt: nextRun ? nextRun.getTime() : undefined,
+		});
 		loggers.agent.info(
 			`Scheduled workflow: ${workflow.title} (${workflow.workflowId}) with cron "${workflow.schedule}"${workflow.timezone ? ` [${workflow.timezone}]` : ""}`,
 		);
 	}
 
-	/**
-	 * Removes a workflow from the cron scheduler.
-	 */
 	async unscheduleWorkflow(workflowId: string): Promise<void> {
 		const task = this.tasks.get(workflowId);
 		if (task) {
@@ -115,13 +125,68 @@ export class SchedulerService {
 		}
 	}
 
-	/**
-	 * Reschedules a workflow (removes old schedule, adds new one if active and has schedule).
-	 */
 	async rescheduleWorkflow(workflow: UserWorkflow): Promise<void> {
 		await this.unscheduleWorkflow(workflow.workflowId);
 		if (workflow.active && workflow.schedule) {
 			await this.scheduleWorkflow(workflow);
 		}
+	}
+
+	/**
+	 * Executes one scheduled workflow run through the JobRunner and records
+	 * it in schedule_runs. Public for tests and manual triggering.
+	 */
+	async runWorkflowJob(
+		workflowId: string,
+		trigger: ScheduleTrigger,
+		scheduledFor: number,
+	): Promise<void> {
+		const scheduleRunMemory = this.memoryModule.getScheduleRunMemory();
+		const runId = randomUUID();
+		const startedAt = Date.now();
+		await scheduleRunMemory?.createScheduleRun({
+			runId,
+			jobType: "WORKFLOW",
+			jobKey: workflowId,
+			trigger,
+			scheduledFor,
+			startedAt,
+			status: "running",
+			attempts: 0,
+		});
+
+		const workflow = await this.userWorkflowService.getWorkflow(workflowId);
+		if (!workflow) {
+			// Deleted since scheduling: stop repeating a doomed job.
+			await this.unscheduleWorkflow(workflowId);
+			await scheduleRunMemory?.updateScheduleRun(runId, {
+				status: "failed",
+				finishedAt: Date.now(),
+				attempts: 1,
+				error: "Workflow not found; unscheduled",
+			});
+			return;
+		}
+
+		const outcome = await this.jobRunner.submit({
+			jobKey: workflowId,
+			execute: async () => {
+				await this.workflowExecutionService.executeWorkflow(workflowId);
+			},
+		});
+
+		await scheduleRunMemory?.updateScheduleRun(runId, {
+			status: outcome.status,
+			finishedAt: Date.now(),
+			attempts: outcome.attempts,
+			error: outcome.status === "failed" ? outcome.error : undefined,
+		});
+
+		const nextRun = this.tasks.get(workflowId)?.getNextRun();
+		await this.userWorkflowService.updateWorkflow(workflowId, {
+			userId: workflow.userId,
+			lastRunAt: startedAt,
+			nextRunAt: nextRun ? nextRun.getTime() : undefined,
+		});
 	}
 }
