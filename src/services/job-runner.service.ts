@@ -73,10 +73,15 @@ export class JobRunnerService {
 
 	/** Waits for in-flight jobs to settle (graceful shutdown). */
 	async drain(timeoutMs = 30_000): Promise<void> {
-		await Promise.race([
-			Promise.allSettled([...this.inFlight]),
-			sleep(timeoutMs),
-		]);
+		let timeoutHandle: NodeJS.Timeout | undefined;
+		const timeout = new Promise<void>((resolve) => {
+			timeoutHandle = setTimeout(resolve, timeoutMs);
+		});
+		try {
+			await Promise.race([Promise.allSettled([...this.inFlight]), timeout]);
+		} finally {
+			clearTimeout(timeoutHandle);
+		}
 	}
 
 	private async run(job: Job): Promise<JobOutcome> {

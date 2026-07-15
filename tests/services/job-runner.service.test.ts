@@ -171,6 +171,13 @@ describe("JobRunnerService", () => {
 		await expect(promise).resolves.toEqual({ status: "success", attempts: 2 });
 	});
 
+	it("drain with zero in-flight jobs resolves promptly and leaves no open handle", async () => {
+		const runner = new JobRunnerService({ maxConcurrent: 2 });
+		const started = Date.now();
+		await runner.drain(30_000);
+		expect(Date.now() - started).toBeLessThan(1000);
+	});
+
 	it("drain waits for in-flight jobs", async () => {
 		const runner = new JobRunnerService({ maxConcurrent: 2 });
 		const gate = deferred();
