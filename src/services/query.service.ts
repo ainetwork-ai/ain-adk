@@ -13,6 +13,7 @@ import {
 	ThreadType,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream";
+import { injectAttachedDocuments } from "@/utils/attached-documents.js";
 import { loggers } from "@/utils/logger.js";
 import { persistTextMessage } from "@/utils/thread-messages.js";
 import { sanitizeThinkingData } from "@/utils/tool-args.js";
@@ -135,6 +136,7 @@ export class QueryService {
 		queryData: {
 			query: string;
 			displayQuery?: string;
+			documentIds?: string[];
 		},
 		isA2A?: boolean,
 	): AsyncGenerator<StreamEvent> {
@@ -146,6 +148,12 @@ export class QueryService {
 			options,
 		} = threadMetadata;
 		const { displayQuery } = queryData;
+		// Request bodies are untyped; accept only a real array of non-empty strings.
+		const documentIds = Array.isArray(queryData.documentIds)
+			? queryData.documentIds.filter(
+					(id): id is string => typeof id === "string" && id.length > 0,
+				)
+			: undefined;
 		let { query } = queryData;
 		const threadMemory = this.memoryModule.getThreadMemory();
 
@@ -221,7 +229,23 @@ export class QueryService {
 						subquery: intent.subquery,
 					})),
 				query: !displayQuery ? undefined : query,
+				documentIds: documentIds?.length ? documentIds : undefined,
 			},
+		);
+
+		// Attached documents: resolve fresh content and expose it to fulfillment
+		// only. Injected in-memory (never persisted); triggering above ran on the
+		// short query so the body is immune to subquery rewriting.
+		const piiService = this.piiService;
+		const maskFilter =
+			piiService && piiService.getMode() === PIIFilterMode.MASK
+				? (text: string) => piiService.filterText(text)
+				: undefined;
+		await injectAttachedDocuments(
+			this.memoryModule,
+			thread,
+			documentIds,
+			maskFilter,
 		);
 
 		// 3. intent fulfillment (with rewrite step)

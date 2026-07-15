@@ -22,13 +22,14 @@ export class QueryController {
 			title,
 			message: query,
 			displayMessage: displayQuery,
+			documentIds,
 		} = req.body;
 		const userId = res.locals.userId;
 
 		try {
 			const stream = this.queryService.handleQuery(
 				{ type, userId, threadId, workflowId, title },
-				{ query, displayQuery },
+				{ query, displayQuery, documentIds },
 			);
 
 			let content = "";
@@ -60,6 +61,7 @@ export class QueryController {
 			title,
 			message: query,
 			displayMessage: displayQuery,
+			documentIds,
 		} = req.body;
 		const userId = res.locals.userId;
 
@@ -69,7 +71,7 @@ export class QueryController {
 			setup: async () =>
 				this.queryService.handleQuery(
 					{ type, userId, threadId, workflowId, title },
-					{ query, displayQuery },
+					{ query, displayQuery, documentIds },
 				),
 			onThinkingProcess: async (currentThreadId, data) => {
 				// a2a 호출에 대해서는 데이터베이스에 추가하지 않기 위해 여기서 thread message에 기록
