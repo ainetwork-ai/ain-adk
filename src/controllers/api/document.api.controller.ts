@@ -3,30 +3,36 @@ import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { MemoryModule } from "@/modules/index.js";
 import type { DocumentAdviceService } from "@/services/document-advice.service.js";
+import type { SchedulerService } from "@/services/scheduler.service.js";
 import type { WorkflowExecutionService } from "@/services/workflow-execution.service.js";
 import { AinHttpError } from "@/types/agent.js";
 import {
 	type Document,
+	type DocumentAutoRefresh,
 	type DocumentFilter,
 	DocumentFormat,
 	type DocumentSlot,
 	DocumentSource,
 } from "@/types/document.js";
+import { parseAutoRefreshPayload } from "@/utils/auto-refresh-payload.js";
 import { streamEventsToSSE } from "@/utils/sse-stream.js";
 
 export class DocumentApiController {
 	private memoryModule: MemoryModule;
 	private workflowExecutionService: WorkflowExecutionService;
 	private documentAdviceService: DocumentAdviceService;
+	private schedulerService: SchedulerService;
 
 	constructor(
 		memoryModule: MemoryModule,
 		workflowExecutionService: WorkflowExecutionService,
 		documentAdviceService: DocumentAdviceService,
+		schedulerService: SchedulerService,
 	) {
 		this.memoryModule = memoryModule;
 		this.workflowExecutionService = workflowExecutionService;
 		this.documentAdviceService = documentAdviceService;
+		this.schedulerService = schedulerService;
 	}
 
 	private async getAuthorizedDocument(
@@ -258,6 +264,7 @@ export class DocumentApiController {
 			);
 
 			await this.memoryModule.getDocumentMemory()?.deleteDocument(id);
+			this.schedulerService.removeDocumentAutoRefresh(id);
 			res.status(StatusCodes.OK).send();
 		} catch (error) {
 			next(error);
@@ -272,13 +279,15 @@ export class DocumentApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const documentMemory = this.memoryModule.getDocumentMemory();
-			const { title, content, slots, labels, format } = req.body as {
-				title?: string;
-				content?: string;
-				slots?: DocumentSlot[];
-				labels?: Record<string, string>;
-				format?: DocumentFormat;
-			};
+			const { title, content, slots, labels, format, autoRefresh } =
+				req.body as {
+					title?: string;
+					content?: string;
+					slots?: DocumentSlot[];
+					labels?: Record<string, string>;
+					format?: DocumentFormat;
+					autoRefresh?: unknown;
+				};
 
 			const now = new Date().toISOString();
 			const document: Document = {
@@ -294,9 +303,64 @@ export class DocumentApiController {
 				createdAt: now,
 				updatedAt: now,
 			};
+			if (autoRefresh !== undefined) {
+				try {
+					document.autoRefresh = parseAutoRefreshPayload({ autoRefresh });
+				} catch (error) {
+					throw new AinHttpError(
+						StatusCodes.BAD_REQUEST,
+						(error as Error).message,
+					);
+				}
+			}
 
 			const created = await documentMemory?.createDocument(document);
+			// Only notify when an auto-refresh was actually set: skip the
+			// scheduler call on the (default) create-without-autoRefresh path,
+			// since removeDocumentAutoRefresh's no-op branch would otherwise run
+			// on every single document creation for no reason.
+			if (document.autoRefresh) {
+				this.schedulerService.notifyDocumentAutoRefresh(created ?? document);
+			}
 			res.status(StatusCodes.CREATED).json(created ?? document);
+		} catch (error) {
+			next(error);
+		}
+	};
+
+	public handleSetAutoRefresh = async (
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	) => {
+		try {
+			const userId = res.locals.userId || "";
+			const { id } = req.params as { id: string };
+			await this.getAuthorizedDocument(
+				userId,
+				id,
+				res.locals.authzChecked === true,
+			);
+
+			let autoRefresh: DocumentAutoRefresh | null;
+			try {
+				autoRefresh = parseAutoRefreshPayload(req.body);
+			} catch (error) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					(error as Error).message,
+				);
+			}
+
+			const documentMemory = this.memoryModule.getDocumentMemory();
+			await documentMemory?.updateDocument(id, {
+				autoRefresh,
+			} as Partial<Document>);
+			const updated = await documentMemory?.getDocument(id);
+			if (updated) {
+				this.schedulerService.notifyDocumentAutoRefresh(updated);
+			}
+			res.status(StatusCodes.OK).json(updated?.autoRefresh ?? null);
 		} catch (error) {
 			next(error);
 		}

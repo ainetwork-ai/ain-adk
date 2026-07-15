@@ -273,6 +273,7 @@ class Container {
 				getMemoryModule(),
 				this.getWorkflowExecutionService(),
 				this.getDocumentAdviceService(),
+				this.getSchedulerService(),
 			);
 		}
 		return this._documentApiController;
