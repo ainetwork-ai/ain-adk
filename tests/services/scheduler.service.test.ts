@@ -205,6 +205,11 @@ describe("SchedulerService — document auto refresh", () => {
 		jest.restoreAllMocks();
 	});
 
+	// Slots default to status "resolved": done-marking re-reads the document
+	// after each successful fill and requires the persisted status to be
+	// "resolved" (a "no content produced" fill resolves without throwing but
+	// persists "failed"). The single getDocument mock serves both the initial
+	// read and the post-fill re-read, so the fixture models the post-fill state.
 	function makeLogbookDocument(overrides: Record<string, unknown> = {}) {
 		return {
 			documentId: "doc-1",
@@ -213,8 +218,8 @@ describe("SchedulerService — document auto refresh", () => {
 			format: "MARKDOWN",
 			content: "{{slot:s1}} {{slot:s2}}",
 			slots: [
-				{ slotId: "s1", status: "empty", binding: { type: "WORKFLOW", workflowId: "wf-a" } },
-				{ slotId: "s2", status: "empty", binding: { type: "WORKFLOW", workflowId: "wf-b" } },
+				{ slotId: "s1", status: "resolved", binding: { type: "WORKFLOW", workflowId: "wf-a" } },
+				{ slotId: "s2", status: "resolved", binding: { type: "WORKFLOW", workflowId: "wf-b" } },
 				{ slotId: "no-binding", status: "empty" },
 			],
 			source: "MANUAL",
@@ -334,6 +339,40 @@ describe("SchedulerService — document auto refresh", () => {
 		expect(m.workflowExecutionService.fillDocumentSlot).toHaveBeenCalledWith("doc-1", "s2");
 	});
 
+	it("treats a resolving fill whose slot persisted 'failed' as a failed slot (no content produced)", async () => {
+		const m = makeMocks();
+		// fillDocumentSlot resolves for BOTH slots, but s2's persisted status is
+		// "failed" — the fill produced no content, wrote status:"failed", and
+		// returned without throwing.
+		m.documentMemory.getDocument.mockResolvedValue(
+			makeLogbookDocument({
+				slots: [
+					{ slotId: "s1", status: "resolved", binding: { type: "WORKFLOW", workflowId: "wf-a" } },
+					{ slotId: "s2", status: "failed", error: "No content produced", binding: { type: "WORKFLOW", workflowId: "wf-b" } },
+				],
+			}),
+		);
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+
+		expect(m.documentMemory.markAutoRefreshSlotDone).toHaveBeenCalledWith("doc-1", "s1");
+		expect(m.documentMemory.markAutoRefreshSlotDone).not.toHaveBeenCalledWith("doc-1", "s2");
+		expect(m.documentMemory.completeAutoRefresh).not.toHaveBeenCalled();
+		expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({
+				status: "failed",
+				slotResults: expect.arrayContaining([
+					expect.objectContaining({ slotId: "s1", status: "success" }),
+					expect.objectContaining({
+						slotId: "s2",
+						status: "failed",
+						error: "No content produced",
+					}),
+				]),
+			}),
+		);
+	});
+
 	it("records failed run when the document is gone", async () => {
 		const m = makeMocks();
 		m.documentMemory.getDocument.mockResolvedValue(undefined);
@@ -451,6 +490,10 @@ describe("SchedulerService — reconcileManualSlotFill", () => {
 		jest.restoreAllMocks();
 	});
 
+	// Slots default to status "resolved": reconciliation reads the document
+	// AFTER the manual fill persisted its result, and only a slot whose
+	// persisted status is "resolved" may be ledgered as done (a "no content
+	// produced" fill resolves without throwing but persists "failed").
 	function makeLogbookDocument(overrides: Record<string, unknown> = {}) {
 		return {
 			documentId: "doc-1",
@@ -459,8 +502,8 @@ describe("SchedulerService — reconcileManualSlotFill", () => {
 			format: "MARKDOWN",
 			content: "{{slot:s1}} {{slot:s2}}",
 			slots: [
-				{ slotId: "s1", status: "empty", binding: { type: "WORKFLOW", workflowId: "wf-a" } },
-				{ slotId: "s2", status: "empty", binding: { type: "WORKFLOW", workflowId: "wf-b" } },
+				{ slotId: "s1", status: "resolved", binding: { type: "WORKFLOW", workflowId: "wf-a" } },
+				{ slotId: "s2", status: "resolved", binding: { type: "WORKFLOW", workflowId: "wf-b" } },
 				{ slotId: "no-binding", status: "empty" },
 			],
 			source: "MANUAL",
@@ -559,6 +602,30 @@ describe("SchedulerService — reconcileManualSlotFill", () => {
 		);
 		await m.scheduler.reconcileManualSlotFill("doc-1", "s2");
 		expect(m.documentMemory.markAutoRefreshSlotDone).not.toHaveBeenCalled();
+	});
+
+	it("does not mark done (or complete) when the slot's persisted status is not 'resolved'", async () => {
+		const m = makeMocks();
+		// A "no content produced" fill resolves without throwing but persists
+		// status:"failed" on the slot — it must NOT be ledgered as done.
+		m.documentMemory.getDocument.mockResolvedValue(
+			makeLogbookDocument({
+				slots: [
+					{ slotId: "s1", status: "failed", error: "No content produced", binding: { type: "WORKFLOW", workflowId: "wf-a" } },
+					{ slotId: "s2", status: "resolved", binding: { type: "WORKFLOW", workflowId: "wf-b" } },
+				],
+				autoRefresh: {
+					runAt: Date.now() - 1000,
+					active: true,
+					doneSlotIds: ["s2"],
+				},
+			}),
+		);
+
+		await m.scheduler.reconcileManualSlotFill("doc-1", "s1");
+
+		expect(m.documentMemory.markAutoRefreshSlotDone).not.toHaveBeenCalled();
+		expect(m.documentMemory.completeAutoRefresh).not.toHaveBeenCalled();
 	});
 
 	it("never rejects when getDocument rejects; logs instead", async () => {

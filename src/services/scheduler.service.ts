@@ -384,6 +384,25 @@ export class SchedulerService {
 						// completion is withheld so the next catch-up redoes the
 						// (idempotent) done-marking.
 						try {
+							// The fill resolving is not proof the slot resolved: a
+							// "no content produced" fill persists status:"failed" on
+							// the slot and returns without throwing. Re-read the
+							// document and require the fresh persisted status to be
+							// "resolved" before ledgering the slot as done —
+							// otherwise record it as a failed slot so the run
+							// aggregates to failed, completion is withheld, and the
+							// boot catch-up retries it.
+							const fresh = await documentMemory.getDocument(documentId);
+							const freshSlot = fresh?.slots?.find((s) => s.slotId === slotId);
+							if (freshSlot?.status !== "resolved") {
+								slotResults.push({
+									slotId,
+									status: "failed",
+									attempts: outcome.attempts,
+									error: freshSlot?.error ?? "No content produced",
+								});
+								return;
+							}
 							await documentMemory.markAutoRefreshSlotDone?.(
 								documentId,
 								slotId,
@@ -486,6 +505,19 @@ export class SchedulerService {
 
 			const targets = this.getAutoRefreshTargetSlotIds(document, autoRefresh);
 			if (!targets.includes(slotId)) return;
+
+			// The fill call resolving is not proof the slot resolved: a "no
+			// content produced" fill persists status:"failed" on the slot and
+			// returns without throwing. Only a slot whose persisted status is
+			// "resolved" may be ledgered as done.
+			const slot = document.slots?.find((s) => s.slotId === slotId);
+			if (slot?.status !== "resolved") {
+				loggers.agent.debug(
+					"Manual fill reconciliation skipped: slot not resolved",
+					{ documentId, slotId, status: slot?.status },
+				);
+				return;
+			}
 
 			await documentMemory.markAutoRefreshSlotDone?.(documentId, slotId);
 
