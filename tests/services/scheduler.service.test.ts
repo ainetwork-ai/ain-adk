@@ -241,7 +241,7 @@ describe("SchedulerService — document auto refresh", () => {
 		);
 	});
 
-	it("notifyDocumentAutoRefresh adds/removes pending entries and tick dispatches due jobs", async () => {
+	it("notifyDocumentAutoRefresh adds a pending entry and tick dispatches due jobs", async () => {
 		jest.useFakeTimers();
 		const m = makeMocks();
 		m.documentMemory.getDocument.mockResolvedValue(makeLogbookDocument());
@@ -253,6 +253,74 @@ describe("SchedulerService — document auto refresh", () => {
 		await new Promise((r) => setTimeout(r, 10));
 		expect(m.workflowExecutionService.fillDocumentSlot).toHaveBeenCalled();
 		await m.scheduler.stop();
+	});
+
+	it("notifyDocumentAutoRefresh with inactive autoRefresh removes the pending entry", async () => {
+		jest.useFakeTimers();
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(makeLogbookDocument());
+		// biome-ignore lint/suspicious/noExplicitAny: test double
+		m.scheduler.notifyDocumentAutoRefresh(makeLogbookDocument() as any);
+		m.scheduler.notifyDocumentAutoRefresh(
+			makeLogbookDocument({
+				autoRefresh: { runAt: Date.now() - 1000, active: false },
+				// biome-ignore lint/suspicious/noExplicitAny: test double
+			}) as any,
+		);
+		m.scheduler.startTickForTest();
+		await jest.advanceTimersByTimeAsync(60_000);
+		jest.useRealTimers();
+		await new Promise((r) => setTimeout(r, 10));
+		expect(m.workflowExecutionService.fillDocumentSlot).not.toHaveBeenCalled();
+		expect(m.scheduleRunMemory.createScheduleRun).not.toHaveBeenCalled();
+		await m.scheduler.stop();
+	});
+
+	it("removeDocumentAutoRefresh drops a pending entry so tick dispatches nothing", async () => {
+		jest.useFakeTimers();
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(makeLogbookDocument());
+		// biome-ignore lint/suspicious/noExplicitAny: test double
+		m.scheduler.notifyDocumentAutoRefresh(makeLogbookDocument() as any);
+		m.scheduler.removeDocumentAutoRefresh("doc-1");
+		m.scheduler.startTickForTest();
+		await jest.advanceTimersByTimeAsync(60_000);
+		jest.useRealTimers();
+		await new Promise((r) => setTimeout(r, 10));
+		expect(m.workflowExecutionService.fillDocumentSlot).not.toHaveBeenCalled();
+		expect(m.scheduleRunMemory.createScheduleRun).not.toHaveBeenCalled();
+		await m.scheduler.stop();
+	});
+
+	it("still records the run when markAutoRefreshSlotDone rejects; does NOT complete", async () => {
+		const m = makeMocks();
+		const errorSpy = jest
+			.spyOn(loggers.agent, "error")
+			.mockImplementation(() => loggers.agent);
+		m.documentMemory.getDocument.mockResolvedValue(makeLogbookDocument());
+		m.documentMemory.markAutoRefreshSlotDone.mockRejectedValue(
+			new Error("mongo down"),
+		);
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+
+		// The fill itself succeeded for both slots, so they count as slot
+		// successes — but done-marking failed, so completion is skipped and
+		// the next catch-up redoes the (idempotent) bookkeeping.
+		expect(m.documentMemory.completeAutoRefresh).not.toHaveBeenCalled();
+		expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({
+				finishedAt: expect.any(Number),
+				slotResults: expect.arrayContaining([
+					expect.objectContaining({ slotId: "s1", status: "success" }),
+					expect.objectContaining({ slotId: "s2", status: "success" }),
+				]),
+			}),
+		);
+		expect(errorSpy).toHaveBeenCalledWith(
+			"Auto-refresh slot bookkeeping failed",
+			expect.objectContaining({ documentId: "doc-1", slotId: "s1" }),
+		);
 	});
 
 	it("resolves and logs instead of rejecting when auto-refresh bookkeeping fails", async () => {

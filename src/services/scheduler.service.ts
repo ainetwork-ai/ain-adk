@@ -344,6 +344,7 @@ export class SchedulerService {
 			}
 
 			const slotResults: ScheduleRunSlotResult[] = [];
+			let doneMarkingFailed = false;
 			await Promise.all(
 				targetIds.map(async (slotId) => {
 					const outcome = await this.jobRunner.submit({
@@ -356,7 +357,24 @@ export class SchedulerService {
 						},
 					});
 					if (outcome.status === "success") {
-						await documentMemory.markAutoRefreshSlotDone?.(documentId, slotId);
+						// A rejection here must not fail-fast the Promise.all and
+						// skip the aggregate run bookkeeping below. The fill itself
+						// succeeded, so the slot still counts as success; only
+						// completion is withheld so the next catch-up redoes the
+						// (idempotent) done-marking.
+						try {
+							await documentMemory.markAutoRefreshSlotDone?.(
+								documentId,
+								slotId,
+							);
+						} catch (error) {
+							doneMarkingFailed = true;
+							loggers.agent.error("Auto-refresh slot bookkeeping failed", {
+								documentId,
+								slotId,
+								error,
+							});
+						}
 					}
 					slotResults.push({
 						slotId,
@@ -368,7 +386,7 @@ export class SchedulerService {
 			);
 
 			const failed = slotResults.filter((r) => r.status !== "success");
-			if (failed.length === 0) {
+			if (failed.length === 0 && !doneMarkingFailed) {
 				await documentMemory.completeAutoRefresh?.(documentId, Date.now());
 			}
 			await scheduleRunMemory?.updateScheduleRun(runId, {
