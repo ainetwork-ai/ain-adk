@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
 import cron, { type ScheduledTask } from "node-cron";
 import type { MemoryModule } from "@/modules/memory/memory.module.js";
+import type { Document } from "@/types/document.js";
 import type { UserWorkflow } from "@/types/memory.js";
-import type { ScheduleTrigger } from "@/types/schedule.js";
+import type {
+	ScheduleRunSlotResult,
+	ScheduleTrigger,
+} from "@/types/schedule.js";
 import { loggers } from "@/utils/logger.js";
 import type { JobRunnerService } from "./job-runner.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
@@ -21,6 +25,9 @@ export class SchedulerService {
 	private jobRunner: JobRunnerService;
 	private memoryModule: MemoryModule;
 	private tasks: Map<string, ScheduledTask> = new Map();
+	private pendingAutoRefresh: Map<string, number> = new Map();
+	private tickTimer?: ReturnType<typeof setInterval>;
+	private static readonly TICK_INTERVAL_MS = 60_000;
 
 	constructor(
 		userWorkflowService: UserWorkflowService,
@@ -63,6 +70,10 @@ export class SchedulerService {
 				);
 			}
 		}
+
+		await this.loadAutoRefreshDocuments();
+		this.startTick();
+		this.tick(); // 부팅 즉시 1회 — runAt이 이미 지난 문서의 catch-up
 	}
 
 	async stop(): Promise<void> {
@@ -74,6 +85,10 @@ export class SchedulerService {
 			loggers.agent.debug(`Stopped scheduled task: ${workflowId}`);
 		}
 		this.tasks.clear();
+		if (this.tickTimer) {
+			clearInterval(this.tickTimer);
+			this.tickTimer = undefined;
+		}
 		await this.jobRunner.drain();
 	}
 
@@ -197,6 +212,178 @@ export class SchedulerService {
 		} catch (error) {
 			loggers.agent.error("Scheduled run bookkeeping failed", {
 				workflowId,
+				error,
+			});
+		}
+	}
+
+	/** Reflects a created/updated document in the pending auto-refresh list. */
+	notifyDocumentAutoRefresh(document: Document): void {
+		const autoRefresh = document.autoRefresh;
+		if (autoRefresh?.active && !autoRefresh.completedAt) {
+			this.pendingAutoRefresh.set(document.documentId, autoRefresh.runAt);
+		} else {
+			this.pendingAutoRefresh.delete(document.documentId);
+		}
+	}
+
+	/** Drops a (deleted) document from the pending list. */
+	removeDocumentAutoRefresh(documentId: string): void {
+		this.pendingAutoRefresh.delete(documentId);
+	}
+
+	/** Exposed for tests: starts the minute tick without full start(). */
+	startTickForTest(): void {
+		this.startTick();
+	}
+
+	private startTick(): void {
+		if (this.tickTimer) return;
+		this.tickTimer = setInterval(
+			() => this.tick(),
+			SchedulerService.TICK_INTERVAL_MS,
+		);
+		this.tickTimer.unref?.();
+	}
+
+	private async loadAutoRefreshDocuments(): Promise<void> {
+		const documentMemory = this.memoryModule.getDocumentMemory();
+		if (!documentMemory?.listAutoRefreshPendingDocuments) {
+			return;
+		}
+		const documents = await documentMemory.listAutoRefreshPendingDocuments();
+		for (const document of documents) {
+			this.notifyDocumentAutoRefresh(document);
+		}
+		loggers.agent.info(
+			`Scheduler loaded ${this.pendingAutoRefresh.size} pending auto-refresh document(s)`,
+		);
+	}
+
+	private tick(): void {
+		const now = Date.now();
+		for (const [documentId, runAt] of this.pendingAutoRefresh) {
+			if (runAt <= now) {
+				this.pendingAutoRefresh.delete(documentId);
+				const trigger: ScheduleTrigger =
+					runAt <= now - SchedulerService.TICK_INTERVAL_MS ? "catchup" : "once";
+				void this.runAutoRefreshJob(documentId, trigger, runAt);
+			}
+		}
+	}
+
+	/**
+	 * Expands a document auto refresh into per-slot jobs (the JobRunner
+	 * throttles them), accumulates doneSlotIds, and completes the refresh
+	 * only when every target slot succeeded. Failed slots stay pending so
+	 * the next boot catch-up retries ONLY them.
+	 *
+	 * Never rejects: slot execution failures are absorbed by the JobRunner
+	 * (submit() never rejects), and bookkeeping (memory) errors are caught
+	 * and logged here so that fire-and-forget callers (tick) cannot crash
+	 * the process with an unhandled rejection.
+	 */
+	async runAutoRefreshJob(
+		documentId: string,
+		trigger: ScheduleTrigger,
+		scheduledFor: number,
+	): Promise<void> {
+		try {
+			const documentMemory = this.memoryModule.getDocumentMemory();
+			const scheduleRunMemory = this.memoryModule.getScheduleRunMemory();
+			if (!documentMemory) return;
+
+			const runId = randomUUID();
+			await scheduleRunMemory?.createScheduleRun({
+				runId,
+				jobType: "SLOT_REFRESH",
+				jobKey: documentId,
+				trigger,
+				scheduledFor,
+				startedAt: Date.now(),
+				status: "running",
+				attempts: 0,
+			});
+
+			const document = await documentMemory.getDocument(documentId);
+			if (!document) {
+				await scheduleRunMemory?.updateScheduleRun(runId, {
+					status: "failed",
+					finishedAt: Date.now(),
+					attempts: 1,
+					error: "Document not found",
+				});
+				return;
+			}
+			const autoRefresh = document.autoRefresh;
+			if (!autoRefresh?.active || autoRefresh.completedAt) {
+				await scheduleRunMemory?.updateScheduleRun(runId, {
+					status: "success",
+					finishedAt: Date.now(),
+					attempts: 0,
+				});
+				return;
+			}
+
+			const done = new Set(autoRefresh.doneSlotIds ?? []);
+			const boundSlotIds = (document.slots ?? [])
+				.filter((slot) => slot.binding)
+				.map((slot) => slot.slotId);
+			const targetIds = (autoRefresh.slotIds ?? boundSlotIds).filter(
+				(slotId) => !done.has(slotId),
+			);
+
+			if (targetIds.length === 0) {
+				await documentMemory.completeAutoRefresh?.(documentId, Date.now());
+				await scheduleRunMemory?.updateScheduleRun(runId, {
+					status: "success",
+					finishedAt: Date.now(),
+					attempts: 0,
+				});
+				return;
+			}
+
+			const slotResults: ScheduleRunSlotResult[] = [];
+			await Promise.all(
+				targetIds.map(async (slotId) => {
+					const outcome = await this.jobRunner.submit({
+						jobKey: `${documentId}:${slotId}`,
+						execute: async () => {
+							await this.workflowExecutionService.fillDocumentSlot(
+								documentId,
+								slotId,
+							);
+						},
+					});
+					if (outcome.status === "success") {
+						await documentMemory.markAutoRefreshSlotDone?.(documentId, slotId);
+					}
+					slotResults.push({
+						slotId,
+						status: outcome.status,
+						attempts: outcome.attempts,
+						error: outcome.status === "failed" ? outcome.error : undefined,
+					});
+				}),
+			);
+
+			const failed = slotResults.filter((r) => r.status !== "success");
+			if (failed.length === 0) {
+				await documentMemory.completeAutoRefresh?.(documentId, Date.now());
+			}
+			await scheduleRunMemory?.updateScheduleRun(runId, {
+				status: failed.length === 0 ? "success" : "failed",
+				finishedAt: Date.now(),
+				attempts: 1,
+				error:
+					failed.length > 0
+						? `${failed.length}/${slotResults.length} slot(s) failed`
+						: undefined,
+				slotResults,
+			});
+		} catch (error) {
+			loggers.agent.error("Auto-refresh run bookkeeping failed", {
+				documentId,
 				error,
 			});
 		}
