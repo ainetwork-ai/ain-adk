@@ -43,10 +43,16 @@ export class UserWorkflowCoordinatorService {
 		await this.userWorkflowService.updateWorkflow(workflowId, updates);
 		const updatedWorkflow =
 			await this.userWorkflowService.getWorkflow(workflowId);
-		if (updatedWorkflow) {
-			await this.schedulerService.rescheduleWorkflow(updatedWorkflow);
+		if (!updatedWorkflow) {
+			return undefined;
 		}
-		return updatedWorkflow;
+		await this.schedulerService.rescheduleWorkflow(updatedWorkflow);
+		// rescheduleWorkflow가 nextRunAt을 다시 계산해 저장하므로, 호출자(API 응답)가
+		// 최신 스케줄 상태를 받도록 재조회해서 돌려준다.
+		return (
+			(await this.userWorkflowService.getWorkflow(workflowId)) ??
+			updatedWorkflow
+		);
 	}
 
 	async deleteWorkflow(workflowId: string, userId: string): Promise<void> {
