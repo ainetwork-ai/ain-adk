@@ -6,7 +6,7 @@ function makeController(listDocuments: jest.Mock, getDocument: jest.Mock) {
 	const memoryModule = {
 		getDocumentMemory: () => ({ listDocuments, getDocument }),
 	} as unknown as MemoryModule;
-	return new DocumentApiController(memoryModule, {} as any, {} as any);
+	return new DocumentApiController(memoryModule, {} as any, {} as any, {} as any);
 }
 
 function res(locals: Record<string, unknown>): Response {

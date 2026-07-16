@@ -11,22 +11,22 @@ This is the AI Network Agent Development Kit (AIN-ADK), a TypeScript library for
 ### Development
 ```bash
 # Install dependencies
-yarn install
+pnpm install
 
 # Build the project (dual ESM/CJS output)
-yarn build
-yarn build:esm  # ESM only
-yarn build:cjs  # CJS only
+pnpm build
+pnpm build:esm  # ESM only
+pnpm build:cjs  # CJS only
 
 # Run tests
-yarn test
+pnpm test
 
 # Code quality
-yarn biome        # Check code
-yarn biome:write  # Check and auto-fix
+pnpm biome        # Check code
+pnpm biome:write  # Check and auto-fix
 
 # Development mode
-yarn dev        # Run TypeScript directly with tsx
+pnpm dev        # Run TypeScript directly with tsx
 ```
 
 ## Architecture Overview

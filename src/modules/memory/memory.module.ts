@@ -3,6 +3,7 @@ import type {
 	IDocumentMemory,
 	IIntentMemory,
 	IMemory,
+	IScheduleRunMemory,
 	IThreadMemory,
 	IUserWorkflowMemory,
 	IWorkflowTemplateMemory,
@@ -51,5 +52,9 @@ export class MemoryModule {
 	 */
 	public getDocumentMemory(): IDocumentMemory | undefined {
 		return this.memory.getDocumentMemory?.();
+	}
+
+	public getScheduleRunMemory(): IScheduleRunMemory | undefined {
+		return this.memory.getScheduleRunMemory?.();
 	}
 }

@@ -95,12 +95,17 @@ export class UserWorkflowApiController {
 			const { id } = req.params as { id: string };
 			await this.getAuthorizedWorkflow(userId, id);
 			const updates = req.body as Partial<UserWorkflow>;
-			await this.userWorkflowCoordinatorService.updateWorkflow(id, {
-				...updates,
-				userId,
-			});
+			const updated = await this.userWorkflowCoordinatorService.updateWorkflow(
+				id,
+				{
+					...updates,
+					userId,
+				},
+			);
 
-			res.status(StatusCodes.OK).send();
+			// 갱신된 워크플로우(재스케줄 후 nextRunAt 포함)를 돌려줘야 클라이언트가
+			// 재조회 없이 예약 상태를 갱신할 수 있다. (기존: 빈 200 응답)
+			res.status(StatusCodes.OK).json(updated ?? null);
 		} catch (error) {
 			next(error);
 		}

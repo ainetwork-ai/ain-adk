@@ -11,6 +11,7 @@ function fakeModules() {
 	const memoryModule = {
 		getDocumentMemory: () => undefined,
 		getUserWorkflowMemory: () => undefined,
+		getScheduleRunMemory: () => undefined,
 		initialize: async () => undefined,
 	} as unknown as MemoryModule;
 	return { authModule, modelModule, memoryModule };

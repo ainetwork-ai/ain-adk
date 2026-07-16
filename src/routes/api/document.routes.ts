@@ -34,6 +34,11 @@ export const createDocumentApiRouter = (): Router => {
 	router.get("/:id", checkDocumentMemory, controller.handleGetDocument);
 	router.post("/", checkDocumentMemory, controller.handleCreateDocument);
 	router.post(
+		"/:id/auto-refresh",
+		checkDocumentMemory,
+		controller.handleSetAutoRefresh,
+	);
+	router.post(
 		"/:id/slots/:slotId/fill",
 		checkDocumentMemory,
 		controller.handleFillSlot,
