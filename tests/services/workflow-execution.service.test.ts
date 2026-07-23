@@ -3,8 +3,24 @@ import { WorkflowExecutionService } from "@/services/workflow-execution.service"
 import type { ToolCallingService } from "@/services/tool-calling.service";
 import type { UserWorkflowService } from "@/services/user-workflow.service";
 import type { WorkflowVariableResolver } from "@/services/workflow-variable-resolver.service";
-import { ThreadType, type WorkflowTaskResult } from "@/types/memory";
+import { type Document, DocumentFormat } from "@/types/document";
+import {
+	ThreadType,
+	type WorkflowDefinition,
+	type WorkflowRenderedBlock,
+	type WorkflowTaskResult,
+	type WorkflowTemplate,
+} from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
+
+const minimalDefinition: WorkflowDefinition = {
+	tasks: [{ taskId: "t1", title: "분석", prompt: "분석해줘" }],
+	response: {
+		blocks: [
+			{ blockId: "b1", type: "text", prompt: "요약", sourceTaskIds: ["t1"] },
+		],
+	},
+};
 
 async function collectEvents<T>(
 	stream: AsyncGenerator<T, unknown, unknown>,
@@ -532,5 +548,178 @@ describe("WorkflowExecutionService", () => {
 		await expect(stream.next()).rejects.toThrow(
 			/no valid structured definition/,
 		);
+	});
+});
+
+function buildAdviceService(overrides: {
+	document?: Partial<Document> | null;
+	template?: Partial<WorkflowTemplate> | null;
+	renderResult?: {
+		finalContent: string;
+		renderedBlocks: WorkflowRenderedBlock[];
+		executionError?: Error;
+	};
+	renderEvents?: StreamEvent[];
+}) {
+	const updateDocument = jest.fn(async () => {});
+	const document =
+		overrides.document === null
+			? undefined
+			: {
+					documentId: "d1",
+					userId: "u1",
+					title: "6월 로그북",
+					format: DocumentFormat.MARKDOWN,
+					content: "## 매출\n오늘 매출 100만원",
+					version: 1,
+					createdAt: "2026-07-01T00:00:00.000Z",
+					updatedAt: "2026-07-01T00:00:00.000Z",
+					...overrides.document,
+				};
+	const template =
+		overrides.template === null
+			? undefined
+			: {
+					templateId: "wf-advice",
+					title: "advice workflow",
+					description: "",
+					active: true,
+					content: "advice",
+					definition: minimalDefinition,
+					...overrides.template,
+				};
+	const memoryModule = {
+		getDocumentMemory: () => ({
+			getDocument: jest.fn(async () => document),
+			updateDocument,
+		}),
+		getWorkflowTemplateMemory: () => ({
+			getTemplate: jest.fn(async () => template),
+		}),
+	} as unknown as MemoryModule;
+	const userWorkflowService = {
+		getWorkflow: jest.fn(async () => undefined), // 템플릿 폴백 경로 사용
+	} as unknown as UserWorkflowService;
+	const resolver = {
+		resolveForDocumentFill: jest.fn(() => ({
+			query: "q",
+			displayQuery: "dq",
+			definition: template?.definition,
+		})),
+	} as unknown as WorkflowVariableResolver;
+	const service = new WorkflowExecutionService(
+		userWorkflowService,
+		resolver,
+		{} as unknown as ModelModule,
+		memoryModule,
+		{} as unknown as ToolCallingService,
+	);
+	const renderSpy = jest
+		.spyOn(
+			service as unknown as {
+				renderStructuredDefinition: (
+					...args: unknown[]
+				) => AsyncGenerator<StreamEvent>;
+			},
+			"renderStructuredDefinition",
+		)
+		.mockImplementation(async function* () {
+			for (const event of overrides.renderEvents ?? []) {
+				yield event;
+			}
+			return (
+				overrides.renderResult ?? {
+					finalContent: "",
+					renderedBlocks: [],
+					executionError: undefined,
+				}
+			);
+		});
+	return { service, updateDocument, renderSpy, resolver };
+}
+
+describe("generateDocumentAdviceStream", () => {
+	it("streams events and caches finalContent on document.advice", async () => {
+		const { service, updateDocument } = buildAdviceService({
+			renderEvents: [{ event: "text_chunk", data: { delta: "조언입니다" } }],
+			renderResult: {
+				finalContent: "조언입니다",
+				renderedBlocks: [],
+				executionError: undefined,
+			},
+		});
+		const events: StreamEvent[] = [];
+		for await (const e of service.generateDocumentAdviceStream("d1", {
+			workflowId: "wf-advice",
+		})) {
+			events.push(e);
+		}
+		expect(events).toEqual([
+			{ event: "text_chunk", data: { delta: "조언입니다" } },
+		]);
+		expect(updateDocument).toHaveBeenCalledWith("d1", {
+			advice: expect.objectContaining({ content: "조언입니다" }),
+		});
+	});
+
+	it("injects rendered document content into the definition", async () => {
+		const { service, renderSpy } = buildAdviceService({
+			template: {
+				definition: {
+					tasks: [
+						{ taskId: "t1", title: "분석", prompt: "문서: {{document}}" },
+					],
+					response: {
+						blocks: [
+							{ blockId: "b1", type: "text", prompt: "요약", sourceTaskIds: ["t1"] },
+						],
+					},
+				},
+			},
+			renderResult: {
+				finalContent: "ok",
+				renderedBlocks: [],
+				executionError: undefined,
+			},
+		});
+		for await (const _ of service.generateDocumentAdviceStream("d1", {
+			workflowId: "wf-advice",
+		})) {
+			// drain
+		}
+		const passedDefinition = renderSpy.mock
+			.calls[0][0] as WorkflowDefinition;
+		expect(passedDefinition.tasks[0].prompt).toContain("오늘 매출 100만원");
+		expect(passedDefinition.tasks[0].prompt).not.toContain("{{document}}");
+	});
+
+	it("propagates execution errors without caching advice", async () => {
+		const { service, updateDocument } = buildAdviceService({
+			renderResult: {
+				finalContent: "",
+				renderedBlocks: [],
+				executionError: new Error("task failed"),
+			},
+		});
+		const stream = service.generateDocumentAdviceStream("d1", {
+			workflowId: "wf-advice",
+		});
+		// .rejects는 Promise를 받아야 하므로 즉시 실행해 넘긴다
+		await expect(
+			(async () => {
+				for await (const _ of stream) {
+					// drain
+				}
+			})(),
+		).rejects.toThrow("task failed");
+		expect(updateDocument).not.toHaveBeenCalled();
+	});
+
+	it("throws when workflow is not found", async () => {
+		const { service } = buildAdviceService({ template: null });
+		const stream = service.generateDocumentAdviceStream("d1", {
+			workflowId: "nope",
+		});
+		await expect(stream.next()).rejects.toThrow(/not found/);
 	});
 });

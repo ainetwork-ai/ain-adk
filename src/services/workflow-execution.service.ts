@@ -19,11 +19,13 @@ import {
 	type WorkflowTemplate,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream.js";
+import { renderDocument } from "@/utils/document-render.js";
 import { loggers } from "@/utils/logger.js";
 import {
 	appendRichMessageToThread,
 	appendTextMessageToThread,
 } from "@/utils/thread-messages.js";
+import { injectDocumentContext } from "@/utils/workflow-document-context.js";
 import type { ToolCallingService } from "./tool-calling.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
 import { WorkflowResponseComposer } from "./workflow-response-composer.service.js";
@@ -423,6 +425,95 @@ export class WorkflowExecutionService {
 		}
 
 		return { finalContent, renderedBlocks, executionError };
+	}
+
+	/**
+	 * Generates AI advice for a document by running the bound advice workflow
+	 * over the document's rendered content, then caches the result on
+	 * `document.advice`. Mirrors {@link fillDocumentSlotStream}: ephemeral
+	 * non-persisted thread — the advice field is the only artifact.
+	 */
+	async *generateDocumentAdviceStream(
+		documentId: string,
+		options: {
+			workflowId: string;
+			executionVariables?: Record<string, string>;
+		},
+		signal?: AbortSignal,
+	): AsyncGenerator<StreamEvent> {
+		const documentMemory = this.memoryModule.getDocumentMemory();
+		if (!documentMemory) {
+			throw new Error("Document memory is not initialized");
+		}
+		const document = await documentMemory.getDocument(documentId);
+		if (!document) {
+			throw new Error(`Document not found: ${documentId}`);
+		}
+
+		const workflow = await this.getFillableWorkflow(options.workflowId);
+		if (!workflow) {
+			throw new Error(
+				`User workflow or template not found: ${options.workflowId}`,
+			);
+		}
+
+		const { definition } = this.workflowVariableResolver.resolveForDocumentFill(
+			workflow,
+			options.executionVariables,
+		);
+		if (!definition) {
+			throw new Error(
+				`Workflow ${options.workflowId} has no valid structured definition; cannot generate advice`,
+			);
+		}
+
+		const renderedContent = renderDocument(document);
+		const definitionWithDocument = injectDocumentContext(
+			definition,
+			renderedContent,
+		);
+
+		// Ephemeral, non-persisted thread: carries threadId for A2A correlation
+		// and task context, but is never written to the thread store.
+		const thread: ThreadObject = {
+			type: ThreadType.WORKFLOW,
+			userId: document.userId,
+			threadId: randomUUID(),
+			title: workflow.title,
+			workflowId: options.workflowId,
+			messages: [],
+		};
+
+		const { finalContent, executionError } =
+			yield* this.renderStructuredDefinition(
+				definitionWithDocument,
+				thread,
+				options.workflowId,
+				signal,
+			);
+
+		if (executionError) {
+			throw executionError;
+		}
+		if (!finalContent.trim()) {
+			return;
+		}
+
+		try {
+			// Persist only the advice (metadata); do NOT bump version off a
+			// pre-stream read, which could clobber a concurrent edit (lost update).
+			await documentMemory.updateDocument(documentId, {
+				advice: {
+					content: finalContent,
+					generatedAt: new Date().toISOString(),
+				},
+			});
+		} catch (saveError) {
+			loggers.agent.error("Failed to cache document advice", {
+				documentId,
+				error: saveError,
+			});
+		}
 	}
 
 	/**
