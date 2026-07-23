@@ -426,6 +426,11 @@ export interface WorkflowTemplate {
 	definition?: WorkflowDefinition;
 	/** Variable schema definitions (type, label, options) for UI rendering */
 	variables?: Record<string, WorkflowVariable>;
+	/**
+	 * Hidden templates are excluded from list responses by default
+	 * (e.g. document-advice-only workflows). Fetch-by-id is unaffected.
+	 */
+	hidden?: boolean;
 }
 
 /**

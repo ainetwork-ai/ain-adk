@@ -11,14 +11,15 @@ export class WorkflowTemplateApiController {
 	}
 
 	public handleGetAllTemplates = async (
-		_req: Request,
+		req: Request,
 		res: Response,
 		next: NextFunction,
 	) => {
 		try {
+			const includeHidden = req.query.includeHidden === "true";
 			const templateMemory = this.memoryModule.getWorkflowTemplateMemory();
 			const templates = await templateMemory.listTemplates();
-			res.json(templates);
+			res.json(includeHidden ? templates : templates.filter((t) => !t.hidden));
 		} catch (error) {
 			next(error);
 		}
