@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { MemoryModule } from "@/modules/index.js";
+import { AinHttpError } from "@/types/agent.js";
 import type { WorkflowTemplate } from "@/types/memory";
 
 export class WorkflowTemplateApiController {
@@ -51,6 +52,12 @@ export class WorkflowTemplateApiController {
 	) => {
 		try {
 			const template = req.body as WorkflowTemplate;
+			if (!template.definition) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					"definition is required",
+				);
+			}
 			const templateMemory = this.memoryModule.getWorkflowTemplateMemory();
 			const created = await templateMemory.createTemplate(template);
 			res.status(StatusCodes.CREATED).json(created);

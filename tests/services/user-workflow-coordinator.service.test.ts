@@ -1,4 +1,14 @@
 import { UserWorkflowCoordinatorService } from "@/services/user-workflow-coordinator.service";
+import type { WorkflowDefinition } from "@/types/memory";
+
+const minimalDefinition: WorkflowDefinition = {
+	tasks: [{ taskId: "t1", title: "분석", prompt: "분석해줘" }],
+	response: {
+		blocks: [
+			{ blockId: "b1", type: "text", prompt: "요약", sourceTaskIds: ["t1"] },
+		],
+	},
+};
 
 describe("UserWorkflowCoordinatorService cron validation", () => {
 	const userWorkflowService = {
@@ -27,6 +37,7 @@ describe("UserWorkflowCoordinatorService cron validation", () => {
 				title: "t",
 				active: true,
 				content: "",
+				definition: minimalDefinition,
 				schedule: "not a cron",
 			}),
 		).rejects.toThrow(/Invalid cron/);

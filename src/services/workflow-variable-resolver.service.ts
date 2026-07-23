@@ -639,7 +639,7 @@ export class WorkflowVariableResolver {
 		definition?: WorkflowDefinition;
 	} {
 		let { content, title } = workflow;
-		let { definition } = workflow;
+		let definition: WorkflowDefinition | undefined = workflow.definition;
 		const normalizedVariables = normalizeWorkflowVariablesRecord(
 			workflow.variables,
 		);
@@ -724,7 +724,7 @@ export class WorkflowVariableResolver {
 		const { timezone } = workflow;
 		let query = workflow.content;
 		let displayQuery = workflow.title;
-		let definition = workflow.definition;
+		let definition: WorkflowDefinition | undefined = workflow.definition;
 		const normalizedVariables = normalizeWorkflowVariablesRecord(
 			workflow.variables,
 		);

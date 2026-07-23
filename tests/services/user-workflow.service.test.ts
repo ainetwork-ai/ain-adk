@@ -1,8 +1,21 @@
 import type { MemoryModule } from "@/modules";
 import type { IUserWorkflowMemory } from "@/modules/memory/base.memory";
-import type { UserWorkflow, WorkflowVariable } from "@/types/memory";
+import type {
+	UserWorkflow,
+	WorkflowDefinition,
+	WorkflowVariable,
+} from "@/types/memory";
 import { UserWorkflowService } from "@/services/user-workflow.service";
 import type { WorkflowVariableResolver } from "@/services/workflow-variable-resolver.service";
+
+const minimalDefinition: WorkflowDefinition = {
+	tasks: [{ taskId: "t1", title: "분석", prompt: "분석해줘" }],
+	response: {
+		blocks: [
+			{ blockId: "b1", type: "text", prompt: "요약", sourceTaskIds: ["t1"] },
+		],
+	},
+};
 
 describe("UserWorkflowService", () => {
 	it("defaults content to title when content is missing", async () => {
@@ -35,6 +48,7 @@ describe("UserWorkflowService", () => {
 			title: "일일 매출 분석",
 			content: "" as unknown as string,
 			active: true,
+			definition: minimalDefinition,
 		});
 
 		expect(workflowVariableResolver.resolveForCreation).toHaveBeenCalledWith(
@@ -96,6 +110,7 @@ describe("UserWorkflowService", () => {
 			title: "업장 리포트",
 			content: "업장 리포트",
 			active: true,
+			definition: minimalDefinition,
 			variables: {
 				store: {
 					id: "store",
@@ -123,5 +138,31 @@ describe("UserWorkflowService", () => {
 				},
 			}),
 		);
+	});
+
+	it("rejects creation when resolver returns no valid definition", async () => {
+		const memoryModule = {
+			getUserWorkflowMemory: () => ({ createUserWorkflow: jest.fn() }),
+		} as unknown as MemoryModule;
+		const resolver = {
+			normalizeVariables: jest.fn((v) => v),
+			resolveForCreation: jest.fn(() => ({
+				content: "c",
+				title: "t",
+				definition: undefined, // validateWorkflowDefinition이 거부한 경우
+			})),
+		} as unknown as WorkflowVariableResolver;
+		const service = new UserWorkflowService(memoryModule, resolver);
+
+		await expect(
+			service.createWorkflow({
+				workflowId: "",
+				userId: "u1",
+				title: "t",
+				content: "c",
+				active: true,
+				definition: { tasks: [], response: { blocks: [] } },
+			}),
+		).rejects.toThrow(/definition/i);
 	});
 });

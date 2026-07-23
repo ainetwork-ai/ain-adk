@@ -41,3 +41,20 @@ describe("handleGetAllTemplates", () => {
 		expect(json).toHaveBeenCalledWith([visible, hiddenTemplate]);
 	});
 });
+
+describe("handleCreateTemplate", () => {
+	it("rejects template creation without definition", async () => {
+		const controller = buildController([]);
+		const status = jest.fn().mockReturnThis();
+		const next = jest.fn();
+		await controller.handleCreateTemplate(
+			{ body: { templateId: "t1", title: "제목", content: "c" } } as never,
+			{ status, json: jest.fn(), send: jest.fn() } as never,
+			next,
+		);
+		// AinHttpError는 `status` 프로퍼티를 쓴다 (src/types/agent.ts:43-49)
+		expect(next).toHaveBeenCalledWith(
+			expect.objectContaining({ status: 400 }),
+		);
+	});
+});

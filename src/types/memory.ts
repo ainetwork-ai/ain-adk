@@ -422,8 +422,8 @@ export interface WorkflowTemplate {
 	category?: string;
 	/** The prompt/instruction template with {{variable}} placeholders */
 	content: string;
-	/** Structured workflow definition. If omitted, legacy content execution is used. */
-	definition?: WorkflowDefinition;
+	/** Structured workflow definition (tasks → response blocks). Required. */
+	definition: WorkflowDefinition;
 	/** Variable schema definitions (type, label, options) for UI rendering */
 	variables?: Record<string, WorkflowVariable>;
 	/**
@@ -455,8 +455,8 @@ export interface UserWorkflow {
 	templateId?: string;
 	/** The prompt/instruction content with {{variable}} placeholders */
 	content: string;
-	/** Structured workflow definition. If omitted, legacy content execution is used. */
-	definition?: WorkflowDefinition;
+	/** Structured workflow definition (tasks → response blocks). Required. */
+	definition: WorkflowDefinition;
 	/** Variable schema definitions (copied from template, used for UI rendering) */
 	variables?: Record<string, WorkflowVariable>;
 	/** User-provided variable values (can contain template variables like {{today}}) */

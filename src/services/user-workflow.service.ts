@@ -32,6 +32,11 @@ export class UserWorkflowService {
 		};
 		const { content, title, definition } =
 			this.workflowVariableResolver.resolveForCreation(normalizedWorkflow);
+		if (!definition) {
+			throw new Error(
+				"Workflow definition is required: structured definition missing or invalid",
+			);
+		}
 
 		const newWorkflow: UserWorkflow = {
 			...normalizedWorkflow,
