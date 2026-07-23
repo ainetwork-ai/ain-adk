@@ -12,6 +12,7 @@ import {
 	type WorkflowTemplate,
 } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
+import { loggers } from "@/utils/logger";
 
 const minimalDefinition: WorkflowDefinition = {
 	tasks: [{ taskId: "t1", title: "분석", prompt: "분석해줘" }],
@@ -721,5 +722,76 @@ describe("generateDocumentAdviceStream", () => {
 			workflowId: "nope",
 		});
 		await expect(stream.next()).rejects.toThrow(/not found/);
+	});
+
+	it("throws when resolveForDocumentFill yields no structured definition", async () => {
+		const { service, resolver } = buildAdviceService({});
+		(resolver.resolveForDocumentFill as jest.Mock).mockReturnValue({
+			query: "q",
+			displayQuery: "dq",
+			definition: undefined,
+		});
+
+		const stream = service.generateDocumentAdviceStream("d1", {
+			workflowId: "wf-advice",
+		});
+		await expect(stream.next()).rejects.toThrow(
+			/no valid structured definition/,
+		);
+	});
+
+	it("returns quietly without caching when finalContent is whitespace-only", async () => {
+		const { service, updateDocument } = buildAdviceService({
+			renderResult: {
+				finalContent: "   ",
+				renderedBlocks: [],
+				executionError: undefined,
+			},
+		});
+
+		const events: StreamEvent[] = [];
+		for await (const e of service.generateDocumentAdviceStream("d1", {
+			workflowId: "wf-advice",
+		})) {
+			events.push(e);
+		}
+
+		expect(events).toEqual([]);
+		expect(updateDocument).not.toHaveBeenCalled();
+	});
+
+	it("swallows cache-save failures and still completes the stream", async () => {
+		const errorSpy = jest
+			.spyOn(loggers.agent, "error")
+			.mockImplementation(() => loggers.agent);
+		const { service, updateDocument } = buildAdviceService({
+			renderEvents: [{ event: "text_chunk", data: { delta: "조언입니다" } }],
+			renderResult: {
+				finalContent: "조언입니다",
+				renderedBlocks: [],
+				executionError: undefined,
+			},
+		});
+		updateDocument.mockImplementation(async () => {
+			throw new Error("mongo down");
+		});
+
+		const events: StreamEvent[] = [];
+		await expect(
+			(async () => {
+				for await (const e of service.generateDocumentAdviceStream("d1", {
+					workflowId: "wf-advice",
+				})) {
+					events.push(e);
+				}
+			})(),
+		).resolves.toBeUndefined();
+
+		expect(events).toEqual([
+			{ event: "text_chunk", data: { delta: "조언입니다" } },
+		]);
+		expect(updateDocument).toHaveBeenCalledTimes(1);
+
+		errorSpy.mockRestore();
 	});
 });
