@@ -129,6 +129,51 @@ describe("WorkflowVariableResolver", () => {
 		);
 	});
 
+	it("rejects tasks missing a prompt", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [{ taskId: "fetch", title: "조회" }],
+			response: { blocks: [] },
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			AinHttpError,
+		);
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			'Task "fetch" must use a non-empty prompt string.',
+		);
+	});
+
+	it("rejects tasks missing a title", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [{ taskId: "fetch", prompt: "데이터를 조회한다." }],
+			response: { blocks: [] },
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			AinHttpError,
+		);
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			'Task "fetch" must use a non-empty title string.',
+		);
+	});
+
+	it("rejects tasks missing a taskId", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [{ title: "조회", prompt: "데이터를 조회한다." }],
+			response: { blocks: [] },
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			AinHttpError,
+		);
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			"Workflow task at index 0 must use a non-empty taskId string.",
+		);
+	});
+
 	it("applies stored execution-time variableValues and lets executionVariables override them", () => {
 		const resolver = new WorkflowVariableResolver();
 

@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { MemoryModule } from "@/modules/index.js";
+import { validateWorkflowDefinition } from "@/services/workflow-variable-resolver.service.js";
 import { AinHttpError } from "@/types/agent.js";
 import type { WorkflowTemplate } from "@/types/memory";
 
@@ -58,6 +59,7 @@ export class WorkflowTemplateApiController {
 					"definition is required",
 				);
 			}
+			validateWorkflowDefinition(template.definition);
 			const templateMemory = this.memoryModule.getWorkflowTemplateMemory();
 			const created = await templateMemory.createTemplate(template);
 			res.status(StatusCodes.CREATED).json(created);
@@ -74,6 +76,15 @@ export class WorkflowTemplateApiController {
 		try {
 			const { id } = req.params as { id: string };
 			const template = req.body as Partial<WorkflowTemplate>;
+			if (Object.hasOwn(template, "definition")) {
+				if (!template.definition) {
+					throw new AinHttpError(
+						StatusCodes.BAD_REQUEST,
+						"definition is required",
+					);
+				}
+				validateWorkflowDefinition(template.definition);
+			}
 			const templateMemory = this.memoryModule.getWorkflowTemplateMemory();
 			await templateMemory.updateTemplate(id, template);
 			res.status(StatusCodes.OK).send();

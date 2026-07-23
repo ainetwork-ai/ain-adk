@@ -315,7 +315,7 @@ function resolveWorkflowVariables(
 	return applyReplacements(input, replacements, resolveAt);
 }
 
-function validateWorkflowDefinition(
+export function validateWorkflowDefinition(
 	definition?: WorkflowDefinition,
 ): WorkflowDefinition | undefined {
 	if (!definition) {
@@ -327,6 +327,29 @@ function validateWorkflowDefinition(
 			StatusCodes.BAD_REQUEST,
 			"Workflow definition.tasks must be an array.",
 		);
+	}
+
+	for (const [index, task] of definition.tasks.entries()) {
+		if (typeof task.taskId !== "string" || !task.taskId.trim()) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Workflow task at index ${index} must use a non-empty taskId string.`,
+			);
+		}
+
+		if (typeof task.title !== "string" || !task.title.trim()) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Task "${task.taskId}" must use a non-empty title string.`,
+			);
+		}
+
+		if (typeof task.prompt !== "string" || !task.prompt.trim()) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Task "${task.taskId}" must use a non-empty prompt string.`,
+			);
+		}
 	}
 
 	if (!Array.isArray(definition.response?.blocks)) {
