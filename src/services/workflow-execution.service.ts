@@ -24,7 +24,6 @@ import {
 	appendRichMessageToThread,
 	appendTextMessageToThread,
 } from "@/utils/thread-messages.js";
-import type { QueryService } from "./query.service.js";
 import type { ToolCallingService } from "./tool-calling.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
 import { WorkflowResponseComposer } from "./workflow-response-composer.service.js";
@@ -39,7 +38,6 @@ type WorkflowExecutionResult = {
 
 export class WorkflowExecutionService {
 	private userWorkflowService: UserWorkflowService;
-	private queryService: QueryService;
 	private workflowVariableResolver: WorkflowVariableResolver;
 	private memoryModule: MemoryModule;
 	private workflowTaskRunner: WorkflowTaskRunner;
@@ -47,7 +45,6 @@ export class WorkflowExecutionService {
 
 	constructor(
 		userWorkflowService: UserWorkflowService,
-		queryService: QueryService,
 		workflowVariableResolver: WorkflowVariableResolver,
 		modelModule: ModelModule,
 		memoryModule: MemoryModule,
@@ -55,7 +52,6 @@ export class WorkflowExecutionService {
 		a2aModule?: A2AModule,
 	) {
 		this.userWorkflowService = userWorkflowService;
-		this.queryService = queryService;
 		this.workflowVariableResolver = workflowVariableResolver;
 		this.memoryModule = memoryModule;
 		this.workflowTaskRunner = new WorkflowTaskRunner(
@@ -110,8 +106,9 @@ export class WorkflowExecutionService {
 			);
 
 		if (!definition) {
-			yield* this.executeLegacyWorkflowStream(workflow, query, displayQuery);
-			return;
+			throw new Error(
+				`Workflow ${workflowId} has no valid structured definition; legacy content execution is no longer supported`,
+			);
 		}
 
 		loggers.agent.info(
@@ -582,41 +579,6 @@ export class WorkflowExecutionService {
 		patch: Partial<DocumentSlot>,
 	): Promise<void> {
 		await documentMemory.updateDocumentSlot(document.documentId, slotId, patch);
-	}
-
-	private async *executeLegacyWorkflowStream(
-		workflow: UserWorkflow,
-		query: string,
-		displayQuery: string,
-	): AsyncGenerator<StreamEvent> {
-		loggers.agent.info(`Executing legacy user workflow: ${workflow.title}`, {
-			workflowId: workflow.workflowId,
-			resolvedQuery: query,
-		});
-
-		let threadId: string | undefined;
-		const stream = this.queryService.handleQuery(
-			{
-				type: ThreadType.WORKFLOW,
-				userId: workflow.userId,
-				workflowId: workflow.workflowId,
-				title: workflow.title,
-			},
-			{ query, displayQuery },
-		);
-
-		for await (const event of stream) {
-			if (event.event === "thread_id") {
-				threadId = event.data.threadId;
-			}
-			yield event;
-		}
-
-		await this.userWorkflowService.updateWorkflow(workflow.workflowId, {
-			userId: workflow.userId,
-			lastRunAt: Date.now(),
-			lastThreadId: threadId,
-		});
 	}
 
 	/**

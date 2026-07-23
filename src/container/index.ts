@@ -154,7 +154,6 @@ class Container {
 		if (!this._workflowExecutionService) {
 			this._workflowExecutionService = new WorkflowExecutionService(
 				this.getUserWorkflowService(),
-				this.getQueryService(),
 				this.getWorkflowVariableResolver(),
 				getModelModule(),
 				getMemoryModule(),

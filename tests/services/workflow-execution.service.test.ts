@@ -1,6 +1,5 @@
 import type { MemoryModule, ModelModule } from "@/modules";
 import { WorkflowExecutionService } from "@/services/workflow-execution.service";
-import type { QueryService } from "@/services/query.service";
 import type { ToolCallingService } from "@/services/tool-calling.service";
 import type { UserWorkflowService } from "@/services/user-workflow.service";
 import type { WorkflowVariableResolver } from "@/services/workflow-variable-resolver.service";
@@ -48,7 +47,6 @@ describe("WorkflowExecutionService", () => {
 			getWorkflow: jest.fn(async () => workflow),
 			updateWorkflow: jest.fn(async () => undefined),
 		} as unknown as UserWorkflowService;
-		const queryService = {} as QueryService;
 		const workflowVariableResolver = {
 			resolveForExecution: jest.fn(() => ({
 				query: workflow.content,
@@ -79,7 +77,6 @@ describe("WorkflowExecutionService", () => {
 
 		const service = new WorkflowExecutionService(
 			userWorkflowService,
-			queryService,
 			workflowVariableResolver,
 			modelModule,
 			memoryModule,
@@ -175,7 +172,6 @@ describe("WorkflowExecutionService", () => {
 			getWorkflow: jest.fn(async () => workflow),
 			updateWorkflow: jest.fn(async () => undefined),
 		} as unknown as UserWorkflowService;
-		const queryService = {} as QueryService;
 		const workflowVariableResolver = {
 			resolveForExecution: jest.fn(() => ({
 				query: workflow.content,
@@ -209,7 +205,6 @@ describe("WorkflowExecutionService", () => {
 
 		const service = new WorkflowExecutionService(
 			userWorkflowService,
-			queryService,
 			workflowVariableResolver,
 			modelModule,
 			memoryModule,
@@ -293,7 +288,6 @@ describe("WorkflowExecutionService", () => {
 			getWorkflow: jest.fn(async () => workflow),
 			updateWorkflow: jest.fn(async () => undefined),
 		} as unknown as UserWorkflowService;
-		const queryService = {} as QueryService;
 		const workflowVariableResolver = {
 			resolveForExecution: jest.fn(() => ({
 				query: workflow.content,
@@ -339,7 +333,6 @@ describe("WorkflowExecutionService", () => {
 
 		const service = new WorkflowExecutionService(
 			userWorkflowService,
-			queryService,
 			workflowVariableResolver,
 			modelModule,
 			memoryModule,
@@ -417,7 +410,6 @@ describe("WorkflowExecutionService", () => {
 			getWorkflow: jest.fn(async () => undefined),
 			updateWorkflow: jest.fn(async () => undefined),
 		} as unknown as UserWorkflowService;
-		const queryService = {} as QueryService;
 		const getTemplate = jest.fn(async () => template);
 		const resolveForDocumentFill = jest.fn(() => ({
 			query: template.content,
@@ -459,7 +451,6 @@ describe("WorkflowExecutionService", () => {
 
 		const service = new WorkflowExecutionService(
 			userWorkflowService,
-			queryService,
 			workflowVariableResolver,
 			{} as ModelModule,
 			memoryModule,
@@ -510,5 +501,36 @@ describe("WorkflowExecutionService", () => {
 			content: "## Summary\n\n",
 			source: { type: "WORKFLOW", workflowId: "template-1" },
 		});
+	});
+
+	it("throws when the workflow has no valid structured definition", async () => {
+		const userWorkflowService = {
+			getWorkflow: jest.fn(async () => ({
+				workflowId: "w1",
+				userId: "u1",
+				title: "레거시",
+				content: "옛날 프롬프트",
+				active: true,
+			})),
+		} as unknown as UserWorkflowService;
+		const resolver = {
+			resolveForExecution: jest.fn(() => ({
+				query: "옛날 프롬프트",
+				displayQuery: "레거시",
+				definition: undefined,
+			})),
+		} as unknown as WorkflowVariableResolver;
+		const service = new WorkflowExecutionService(
+			userWorkflowService,
+			resolver,
+			{} as unknown as ModelModule,
+			{} as unknown as MemoryModule,
+			{} as unknown as ToolCallingService,
+		);
+
+		const stream = service.executeWorkflowStream("w1");
+		await expect(stream.next()).rejects.toThrow(
+			/no valid structured definition/,
+		);
 	});
 });
