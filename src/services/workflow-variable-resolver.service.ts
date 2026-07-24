@@ -717,6 +717,10 @@ export class WorkflowVariableResolver {
 	 * regardless of each variable's declared `resolveAt`, then built-in template
 	 * tokens (e.g. `{{today}}`) are resolved. This does NOT change how standalone
 	 * workflow execution resolves variables.
+	 *
+	 * Empty/whitespace-only values mean "not entered" (slot bindings persist
+	 * such keys for display) and are dropped here so they don't override the
+	 * workflow's own `variableValues` defaults with blanks.
 	 */
 	resolveForDocumentFill(
 		workflow: WorkflowTextFields,
@@ -726,7 +730,14 @@ export class WorkflowVariableResolver {
 		displayQuery: string;
 		definition?: WorkflowDefinition;
 	} {
-		return this.resolveExecutionLike(workflow, providedVariables, true);
+		const nonEmptyVariables = providedVariables
+			? Object.fromEntries(
+					Object.entries(providedVariables).filter(
+						([, value]) => value.trim() !== "",
+					),
+				)
+			: undefined;
+		return this.resolveExecutionLike(workflow, nonEmptyVariables, true);
 	}
 
 	/**

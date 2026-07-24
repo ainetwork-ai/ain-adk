@@ -264,6 +264,37 @@ describe("WorkflowVariableResolver", () => {
 			);
 		});
 
+		it("treats empty and whitespace-only provided values as not provided so workflow defaults survive", () => {
+			const resolver = new WorkflowVariableResolver();
+
+			const result = resolver.resolveForDocumentFill(
+				{
+					title: "리포트",
+					content: "매장 {{workplace}} 품목 {{plu}} 채널 {{channel}}",
+					timezone: "Asia/Seoul",
+					variables: {
+						plu: {
+							id: "plu",
+							label: "품목",
+							type: "text",
+							resolveAt: "execution",
+						},
+						channel: {
+							id: "channel",
+							label: "채널",
+							type: "text",
+							resolveAt: "execution",
+						},
+					},
+					variableValues: { plu: "0000", channel: "전체" },
+					definition: { tasks: [], response: { blocks: [] } },
+				},
+				{ workplace: "온달", plu: "", channel: "   " },
+			);
+
+			expect(result.query).toBe("매장 온달 품목 0000 채널 전체");
+		});
+
 		it("still resolves built-in template tokens in the workflow body", () => {
 			const resolver = new WorkflowVariableResolver();
 
