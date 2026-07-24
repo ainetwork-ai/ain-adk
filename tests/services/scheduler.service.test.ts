@@ -1,7 +1,16 @@
 import { JobRunnerService } from "@/services/job-runner.service";
 import { SchedulerService } from "@/services/scheduler.service";
-import type { UserWorkflow } from "@/types/memory";
+import type { UserWorkflow, WorkflowDefinition } from "@/types/memory";
 import { loggers } from "@/utils/logger";
+
+const minimalDefinition: WorkflowDefinition = {
+	tasks: [{ taskId: "t1", title: "분석", prompt: "분석해줘" }],
+	response: {
+		blocks: [
+			{ blockId: "b1", type: "text", prompt: "요약", sourceTaskIds: ["t1"] },
+		],
+	},
+};
 
 function makeWorkflow(overrides: Partial<UserWorkflow> = {}): UserWorkflow {
 	return {
@@ -10,6 +19,7 @@ function makeWorkflow(overrides: Partial<UserWorkflow> = {}): UserWorkflow {
 		title: "테스트 워크플로우",
 		active: true,
 		content: "",
+		definition: minimalDefinition,
 		schedule: "0 9 * * *",
 		...overrides,
 	};

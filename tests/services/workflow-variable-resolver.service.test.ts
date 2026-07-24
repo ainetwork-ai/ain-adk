@@ -129,6 +129,51 @@ describe("WorkflowVariableResolver", () => {
 		);
 	});
 
+	it("rejects tasks missing a prompt", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [{ taskId: "fetch", title: "조회" }],
+			response: { blocks: [] },
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			AinHttpError,
+		);
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			'Task "fetch" must use a non-empty prompt string.',
+		);
+	});
+
+	it("rejects tasks missing a title", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [{ taskId: "fetch", prompt: "데이터를 조회한다." }],
+			response: { blocks: [] },
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			AinHttpError,
+		);
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			'Task "fetch" must use a non-empty title string.',
+		);
+	});
+
+	it("rejects tasks missing a taskId", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [{ title: "조회", prompt: "데이터를 조회한다." }],
+			response: { blocks: [] },
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			AinHttpError,
+		);
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			"Workflow task at index 0 must use a non-empty taskId string.",
+		);
+	});
+
 	it("applies stored execution-time variableValues and lets executionVariables override them", () => {
 		const resolver = new WorkflowVariableResolver();
 
@@ -217,6 +262,37 @@ describe("WorkflowVariableResolver", () => {
 			expect(result.definition?.tasks[0].prompt).toBe(
 				"매장 온달 일자 2026-06-16 품목 1234",
 			);
+		});
+
+		it("treats empty and whitespace-only provided values as not provided so workflow defaults survive", () => {
+			const resolver = new WorkflowVariableResolver();
+
+			const result = resolver.resolveForDocumentFill(
+				{
+					title: "리포트",
+					content: "매장 {{workplace}} 품목 {{plu}} 채널 {{channel}}",
+					timezone: "Asia/Seoul",
+					variables: {
+						plu: {
+							id: "plu",
+							label: "품목",
+							type: "text",
+							resolveAt: "execution",
+						},
+						channel: {
+							id: "channel",
+							label: "채널",
+							type: "text",
+							resolveAt: "execution",
+						},
+					},
+					variableValues: { plu: "0000", channel: "전체" },
+					definition: { tasks: [], response: { blocks: [] } },
+				},
+				{ workplace: "온달", plu: "", channel: "   " },
+			);
+
+			expect(result.query).toBe("매장 온달 품목 0000 채널 전체");
 		});
 
 		it("still resolves built-in template tokens in the workflow body", () => {

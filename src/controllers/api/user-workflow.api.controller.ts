@@ -74,6 +74,12 @@ export class UserWorkflowApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const workflowData = req.body as UserWorkflow;
+			if (!workflowData.definition) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					"definition is required",
+				);
+			}
 			const created = await this.userWorkflowCoordinatorService.createWorkflow({
 				...workflowData,
 				userId,

@@ -315,7 +315,7 @@ function resolveWorkflowVariables(
 	return applyReplacements(input, replacements, resolveAt);
 }
 
-function validateWorkflowDefinition(
+export function validateWorkflowDefinition(
 	definition?: WorkflowDefinition,
 ): WorkflowDefinition | undefined {
 	if (!definition) {
@@ -327,6 +327,29 @@ function validateWorkflowDefinition(
 			StatusCodes.BAD_REQUEST,
 			"Workflow definition.tasks must be an array.",
 		);
+	}
+
+	for (const [index, task] of definition.tasks.entries()) {
+		if (typeof task.taskId !== "string" || !task.taskId.trim()) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Workflow task at index ${index} must use a non-empty taskId string.`,
+			);
+		}
+
+		if (typeof task.title !== "string" || !task.title.trim()) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Task "${task.taskId}" must use a non-empty title string.`,
+			);
+		}
+
+		if (typeof task.prompt !== "string" || !task.prompt.trim()) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Task "${task.taskId}" must use a non-empty prompt string.`,
+			);
+		}
 	}
 
 	if (!Array.isArray(definition.response?.blocks)) {
@@ -639,7 +662,7 @@ export class WorkflowVariableResolver {
 		definition?: WorkflowDefinition;
 	} {
 		let { content, title } = workflow;
-		let { definition } = workflow;
+		let definition: WorkflowDefinition | undefined = workflow.definition;
 		const normalizedVariables = normalizeWorkflowVariablesRecord(
 			workflow.variables,
 		);
@@ -694,6 +717,10 @@ export class WorkflowVariableResolver {
 	 * regardless of each variable's declared `resolveAt`, then built-in template
 	 * tokens (e.g. `{{today}}`) are resolved. This does NOT change how standalone
 	 * workflow execution resolves variables.
+	 *
+	 * Empty/whitespace-only values mean "not entered" (slot bindings persist
+	 * such keys for display) and are dropped here so they don't override the
+	 * workflow's own `variableValues` defaults with blanks.
 	 */
 	resolveForDocumentFill(
 		workflow: WorkflowTextFields,
@@ -703,7 +730,14 @@ export class WorkflowVariableResolver {
 		displayQuery: string;
 		definition?: WorkflowDefinition;
 	} {
-		return this.resolveExecutionLike(workflow, providedVariables, true);
+		const nonEmptyVariables = providedVariables
+			? Object.fromEntries(
+					Object.entries(providedVariables).filter(
+						([, value]) => value.trim() !== "",
+					),
+				)
+			: undefined;
+		return this.resolveExecutionLike(workflow, nonEmptyVariables, true);
 	}
 
 	/**
@@ -724,7 +758,7 @@ export class WorkflowVariableResolver {
 		const { timezone } = workflow;
 		let query = workflow.content;
 		let displayQuery = workflow.title;
-		let definition = workflow.definition;
+		let definition: WorkflowDefinition | undefined = workflow.definition;
 		const normalizedVariables = normalizeWorkflowVariablesRecord(
 			workflow.variables,
 		);

@@ -445,7 +445,19 @@ export class DocumentApiController {
 					id,
 					res.locals.authzChecked === true,
 				);
-				const { advicePrompt } = req.body as { advicePrompt?: string };
+				const { advicePrompt, adviceWorkflowId, executionVariables } =
+					req.body as {
+						advicePrompt?: string;
+						adviceWorkflowId?: string;
+						executionVariables?: Record<string, string>;
+					};
+				if (adviceWorkflowId) {
+					return this.workflowExecutionService.generateDocumentAdviceStream(
+						id,
+						{ workflowId: adviceWorkflowId, executionVariables },
+						signal,
+					);
+				}
 				return this.documentAdviceService.generateAdviceStream(
 					id,
 					{ advicePrompt },
