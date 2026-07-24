@@ -26,6 +26,7 @@ import {
 	appendTextMessageToThread,
 } from "@/utils/thread-messages.js";
 import { injectDocumentContext } from "@/utils/workflow-document-context.js";
+import { workflowTaskLabel } from "@/utils/workflow-task-results.js";
 import type { ToolCallingService } from "./tool-calling.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
 import { WorkflowResponseComposer } from "./workflow-response-composer.service.js";
@@ -269,7 +270,7 @@ export class WorkflowExecutionService {
 				if (firstFailedTaskId) {
 					taskResults[task.taskId] = {
 						taskId: task.taskId,
-						title: task.title,
+						title: workflowTaskLabel(task),
 						agent: task.agent,
 						status: "skipped",
 						content: "",
@@ -280,7 +281,7 @@ export class WorkflowExecutionService {
 					yield {
 						event: "thinking_process",
 						data: {
-							title: `[워크플로우] 작업 건너뜀: ${task.title}`,
+							title: `[워크플로우] 작업 건너뜀: ${workflowTaskLabel(task)}`,
 							description: `이전 작업(${firstFailedTaskId}) 실패로 인해 건너뜁니다.`,
 							metadata: {
 								phase: "task_skipped",
@@ -294,7 +295,7 @@ export class WorkflowExecutionService {
 				}
 
 				loggers.agent.debug(
-					`Workflow task starting (${i + 1}/${definition.tasks.length}): ${task.title}`,
+					`Workflow task starting (${i + 1}/${definition.tasks.length}): ${workflowTaskLabel(task)}`,
 					{
 						workflowId,
 						threadId: thread.threadId,
@@ -318,7 +319,7 @@ export class WorkflowExecutionService {
 								workflowId,
 								threadId: thread.threadId,
 								taskId: task.taskId,
-								taskTitle: task.title,
+								taskTitle: workflowTaskLabel(task),
 								deltaPreview: result.value.data.delta.slice(0, 200),
 							},
 						);
@@ -329,7 +330,7 @@ export class WorkflowExecutionService {
 				}
 				taskResults[task.taskId] = result.value;
 				loggers.agent.debug(
-					`Workflow task finished (${i + 1}/${definition.tasks.length}): ${task.title}`,
+					`Workflow task finished (${i + 1}/${definition.tasks.length}): ${workflowTaskLabel(task)}`,
 					{
 						workflowId,
 						threadId: thread.threadId,

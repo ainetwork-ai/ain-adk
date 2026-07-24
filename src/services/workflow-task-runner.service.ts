@@ -7,7 +7,10 @@ import {
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream.js";
 import { loggers } from "@/utils/logger.js";
-import { serializeTaskResults } from "@/utils/workflow-task-results.js";
+import {
+	serializeTaskResults,
+	workflowTaskLabel,
+} from "@/utils/workflow-task-results.js";
 import type { ToolCallingService } from "./tool-calling.service.js";
 
 export class WorkflowTaskRunner {
@@ -34,7 +37,7 @@ export class WorkflowTaskRunner {
 		yield {
 			event: "thinking_process",
 			data: {
-				title: `[워크플로우] 작업 실행: ${task.title}`,
+				title: `[워크플로우] 작업 실행: ${workflowTaskLabel(task)}`,
 				description: task.agent
 					? `${task.agent.connectorName} 에이전트에 작업을 위임합니다.`
 					: "로컬에서 작업을 실행합니다.",
@@ -54,7 +57,7 @@ export class WorkflowTaskRunner {
 
 			taskResult = {
 				taskId: task.taskId,
-				title: task.title,
+				title: workflowTaskLabel(task),
 				agent: task.agent,
 				status: "completed",
 				content,
@@ -67,7 +70,7 @@ export class WorkflowTaskRunner {
 			loggers.agent.error(`Workflow task failed: ${task.taskId}`, { error });
 			taskResult = {
 				taskId: task.taskId,
-				title: task.title,
+				title: workflowTaskLabel(task),
 				agent: task.agent,
 				status: "failed",
 				content: "",
@@ -81,7 +84,7 @@ export class WorkflowTaskRunner {
 			event: "task_result",
 			data: {
 				taskId: task.taskId,
-				title: task.title,
+				title: workflowTaskLabel(task),
 				status: taskResult.status,
 				agent: task.agent?.connectorName,
 				error: taskResult.error,
@@ -195,7 +198,7 @@ ${task.prompt}`;
 			event: "task_output",
 			data: {
 				taskId: task.taskId,
-				title: task.title,
+				title: workflowTaskLabel(task),
 				delta,
 				agent: task.agent?.connectorName,
 			},

@@ -189,7 +189,8 @@ export interface WorkflowTaskAgent {
 
 export interface WorkflowTask {
 	taskId: string;
-	title: string;
+	/** Display label; falls back to taskId in progress events and logs. */
+	title?: string;
 	prompt: string;
 	agent?: WorkflowTaskAgent;
 }
