@@ -473,6 +473,15 @@ export class WorkflowExecutionService {
 			renderedContent,
 		);
 
+		const startedAt = Date.now();
+		loggers.agent.info("Generating document advice via workflow", {
+			documentId,
+			workflowId: options.workflowId,
+			workflowTitle: workflow.title,
+			taskCount: definition.tasks.length,
+			contentLength: renderedContent.length,
+		});
+
 		// Ephemeral, non-persisted thread: carries threadId for A2A correlation
 		// and task context, but is never written to the thread store.
 		const thread: ThreadObject = {
@@ -493,9 +502,22 @@ export class WorkflowExecutionService {
 			);
 
 		if (executionError) {
+			// renderStructuredDefinition already logged the task-level failure;
+			// this ties it to the advice request before the SSE layer reports it.
+			loggers.agent.error("Document advice workflow failed", {
+				documentId,
+				workflowId: options.workflowId,
+				durationMs: Date.now() - startedAt,
+				error: executionError.message,
+			});
 			throw executionError;
 		}
 		if (!finalContent.trim()) {
+			loggers.agent.warn("Document advice workflow produced no content", {
+				documentId,
+				workflowId: options.workflowId,
+				durationMs: Date.now() - startedAt,
+			});
 			return;
 		}
 
@@ -514,6 +536,13 @@ export class WorkflowExecutionService {
 				error: saveError,
 			});
 		}
+
+		loggers.agent.info("Document advice generated via workflow", {
+			documentId,
+			workflowId: options.workflowId,
+			adviceLength: finalContent.length,
+			durationMs: Date.now() - startedAt,
+		});
 	}
 
 	/**

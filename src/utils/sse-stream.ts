@@ -78,6 +78,15 @@ export async function streamEventsToSSE(
 		// can distinguish e.g. 403 (no permission) from a generic failure — the
 		// SSE headers are already sent, so it can't come back as a real status.
 		const status = (error as { status?: number })?.status;
+		// The error only reaches the client as an SSE event; without this log a
+		// failed stream leaves no server-side trace at all.
+		loggers.intentStream.error(`${options.logLabel} failed`, {
+			userId: options.userId,
+			threadId: currentThreadId,
+			status,
+			error: errMsg,
+			...options.logContext,
+		});
 		res.write(
 			`event: error\ndata: ${JSON.stringify({ message: errMsg, status })}\n\n`,
 		);

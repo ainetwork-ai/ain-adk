@@ -640,6 +640,19 @@ function buildAdviceService(overrides: {
 }
 
 describe("generateDocumentAdviceStream", () => {
+	// Silence the advice progress/outcome logs so test output stays clean.
+	let logSpies: jest.SpyInstance[] = [];
+	beforeEach(() => {
+		logSpies = (["info", "warn", "error"] as const).map((level) =>
+			jest.spyOn(loggers.agent, level).mockImplementation(() => loggers.agent),
+		);
+	});
+	afterEach(() => {
+		for (const spy of logSpies) {
+			spy.mockRestore();
+		}
+	});
+
 	it("streams events and caches finalContent on document.advice", async () => {
 		const { service, updateDocument } = buildAdviceService({
 			renderEvents: [{ event: "text_chunk", data: { delta: "조언입니다" } }],

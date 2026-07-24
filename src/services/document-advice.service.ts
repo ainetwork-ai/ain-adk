@@ -33,9 +33,16 @@ export class DocumentAdviceService {
 		}
 
 		const renderedContent = renderDocument(document);
+		const customPrompt = options?.advicePrompt?.trim();
 		const systemPrompt =
-			options?.advicePrompt?.trim() ||
-			(await documentAdvicePrompt(this.memoryModule));
+			customPrompt || (await documentAdvicePrompt(this.memoryModule));
+
+		const startedAt = Date.now();
+		loggers.agent.info("Generating document advice (single inference)", {
+			documentId,
+			promptSource: customPrompt ? "template" : "default",
+			contentLength: renderedContent.length,
+		});
 
 		const model = this.modelModule.getModel();
 		const modelOptions = this.modelModule.getModelOptions();
@@ -61,6 +68,10 @@ export class DocumentAdviceService {
 		}
 
 		if (!content.trim()) {
+			loggers.agent.warn("Document advice generation produced no content", {
+				documentId,
+				durationMs: Date.now() - startedAt,
+			});
 			return;
 		}
 
@@ -76,5 +87,11 @@ export class DocumentAdviceService {
 				error: saveError,
 			});
 		}
+
+		loggers.agent.info("Document advice generated", {
+			documentId,
+			adviceLength: content.length,
+			durationMs: Date.now() - startedAt,
+		});
 	}
 }
