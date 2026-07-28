@@ -1071,4 +1071,19 @@ describe("WorkflowTableService", () => {
 			"- REV(원): return a raw number or null, without currency symbols or display formatting.",
 		);
 	});
+
+	it("rejects rowFormats on record layout tables", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "store-sales-rowfmt",
+			type: "table",
+			layout: "records",
+			title: "매장별 매출",
+			columns: ["store", "grossSales"],
+			rowFormats: { store: { decimals: 0 } },
+		};
+
+		expect(() => service.renderTable(block, JSON.stringify([]))).toThrow(
+			'Record table block "store-sales-rowfmt" does not support rowFormats because record rows are extracted data.',
+		);
+	});
 });
