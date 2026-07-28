@@ -144,10 +144,20 @@ describe("WorkflowVariableResolver", () => {
 		);
 	});
 
-	it("rejects tasks missing a title", () => {
+	it("accepts tasks without a title", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition: WorkflowDefinition = {
+			tasks: [{ taskId: "fetch", prompt: "데이터를 조회한다." }],
+			response: { blocks: [] },
+		};
+
+		expect(resolver.normalizeDefinition(definition)).toEqual(definition);
+	});
+
+	it("rejects tasks with a non-string title", () => {
 		const resolver = new WorkflowVariableResolver();
 		const definition = {
-			tasks: [{ taskId: "fetch", prompt: "데이터를 조회한다." }],
+			tasks: [{ taskId: "fetch", title: 123, prompt: "데이터를 조회한다." }],
 			response: { blocks: [] },
 		} as unknown as WorkflowDefinition;
 
@@ -155,7 +165,7 @@ describe("WorkflowVariableResolver", () => {
 			AinHttpError,
 		);
 		expect(() => resolver.normalizeDefinition(definition)).toThrow(
-			'Task "fetch" must use a non-empty title string.',
+			'Task "fetch" title must be a string.',
 		);
 	});
 

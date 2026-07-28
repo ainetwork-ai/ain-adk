@@ -337,10 +337,10 @@ export function validateWorkflowDefinition(
 			);
 		}
 
-		if (typeof task.title !== "string" || !task.title.trim()) {
+		if (task.title !== undefined && typeof task.title !== "string") {
 			throw new AinHttpError(
 				StatusCodes.BAD_REQUEST,
-				`Task "${task.taskId}" must use a non-empty title string.`,
+				`Task "${task.taskId}" title must be a string.`,
 			);
 		}
 
