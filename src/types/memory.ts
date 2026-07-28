@@ -148,6 +148,11 @@ export interface Intent {
 	 * - "auto": LLM decides (default)
 	 */
 	toolChoice?: IntentToolChoice;
+	/** When set, fulfilling this intent runs the mapped workflow instead of
+	 * the prompt-based inference loop. Accepts a user workflow id or a
+	 * workflow template id (user workflow wins), like document slot bindings.
+	 */
+	workflowId?: string;
 }
 
 export type TriggeredIntent = {
