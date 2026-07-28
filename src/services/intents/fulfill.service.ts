@@ -17,6 +17,7 @@ import { PIIFilterMode, type PIIService } from "../pii.service";
 import fulfillPrompt from "../prompts/fulfill";
 import toolSelectPrompt from "../prompts/tool-select";
 import type { ToolCallingService } from "../tool-calling.service";
+import type { WorkflowExecutionService } from "../workflow-execution.service";
 import { AggregateService } from "./aggregate.service";
 
 export class IntentFulfillService {
@@ -26,6 +27,7 @@ export class IntentFulfillService {
 	private aggregateService: AggregateService;
 	private piiService?: PIIService;
 	private toolCallingService: ToolCallingService;
+	private workflowExecutionService?: WorkflowExecutionService;
 
 	constructor(
 		modelModule: ModelModule,
@@ -33,6 +35,7 @@ export class IntentFulfillService {
 		toolCallingService: ToolCallingService,
 		onIntentFallback?: OnIntentFallback,
 		piiService?: PIIService,
+		workflowExecutionService?: WorkflowExecutionService,
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
@@ -40,6 +43,7 @@ export class IntentFulfillService {
 		this.onIntentFallback = onIntentFallback;
 		this.aggregateService = new AggregateService(modelModule, memoryModule);
 		this.piiService = piiService;
+		this.workflowExecutionService = workflowExecutionService;
 	}
 
 	/**
@@ -124,7 +128,59 @@ export class IntentFulfillService {
 			}
 		}
 
+		if (intent?.workflowId && this.workflowExecutionService) {
+			return this.intentWorkflowFulfilling(triggeredIntent, thread);
+		}
+
 		return this.intentFulfilling(subquery, thread, intent);
+	}
+
+	/**
+	 * Fulfills an intent by running its mapped workflow. If the workflow
+	 * fails before producing any event (unknown id, missing definition),
+	 * falls back to the prompt-based fulfillment path so a stale mapping
+	 * never disables the intent. Failures after streaming started are
+	 * rethrown to avoid duplicating a partial response.
+	 */
+	private async *intentWorkflowFulfilling(
+		triggeredIntent: TriggeredIntent,
+		thread: ThreadObject,
+	): AsyncGenerator<StreamEvent> {
+		const { subquery = "", intent } = triggeredIntent;
+		const workflowId = intent?.workflowId;
+		if (!workflowId || !this.workflowExecutionService) {
+			yield* this.intentFulfilling(subquery, thread, intent);
+			return;
+		}
+
+		loggers.intent.info("Fulfilling intent via mapped workflow", {
+			intentName: intent?.name,
+			workflowId,
+		});
+
+		let yielded = false;
+		try {
+			const stream = this.workflowExecutionService.executeIntentWorkflowStream(
+				workflowId,
+				thread,
+				subquery,
+			);
+			for await (const event of stream) {
+				yielded = true;
+				yield event;
+			}
+			return;
+		} catch (error) {
+			if (yielded) {
+				throw error;
+			}
+			loggers.intent.warn(
+				"Intent workflow unavailable, falling back to prompt fulfillment",
+				{ intentName: intent?.name, workflowId, error },
+			);
+		}
+
+		yield* this.intentFulfilling(subquery, thread, intent);
 	}
 
 	/**

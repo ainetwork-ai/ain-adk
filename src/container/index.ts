@@ -105,6 +105,7 @@ class Container {
 				this.getToolCallingService(),
 				getOnIntentFallback(),
 				this.getPIIService(),
+				this.getWorkflowExecutionService(),
 			);
 		}
 		return this._intentFulfillService;
