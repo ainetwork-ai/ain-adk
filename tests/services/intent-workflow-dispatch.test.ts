@@ -152,4 +152,31 @@ describe("getIntentStream workflow dispatch", () => {
 		).rejects.toThrow("task failed");
 		expect(promptSpy).not.toHaveBeenCalled();
 	});
+
+	it("uses prompt path when workflowExecutionService is not wired", async () => {
+		const service = new IntentFulfillService(
+			{} as unknown as ModelModule,
+			{} as unknown as MemoryModule,
+			{} as unknown as ToolCallingService,
+			undefined,
+			undefined,
+		);
+		const promptSpy = jest
+			.spyOn(service as never, "intentFulfilling" as never)
+			.mockImplementation(async function* () {
+				yield { event: "text_chunk", data: { delta: "프롬프트 응답" } };
+			} as never);
+
+		const events = await collect(
+			getStream(service, {
+				subquery: SUBQUERY,
+				intent: { ...BASE_INTENT, workflowId: "wf-1" },
+			}),
+		);
+
+		expect(promptSpy).toHaveBeenCalled();
+		expect(events).toEqual([
+			{ event: "text_chunk", data: { delta: "프롬프트 응답" } },
+		]);
+	});
 });
