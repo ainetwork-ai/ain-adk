@@ -111,4 +111,20 @@ describe("extractFromQuery", () => {
 			.toBeUndefined();
 		expect(fetch).not.toHaveBeenCalled();
 	});
+
+	it("fails open on malformed variable spec (options not array)", async () => {
+		const { service, fetch } = build({ content: "{}" });
+		const malformed = {
+			bad: {
+				id: "bad",
+				label: "업장",
+				type: "dropdown",
+				options: "강남점",
+			} as never,
+		};
+		await expect(
+			service.extractFromQuery(malformed, "매출 분석해줘"),
+		).resolves.toBeUndefined();
+		expect(fetch).not.toHaveBeenCalled();
+	});
 });

@@ -103,17 +103,17 @@ export class WorkflowVariableExtractionService {
 			return undefined;
 		}
 
-		const effectiveTimezone = timezone || "Asia/Seoul";
-		const today = new Date().toLocaleDateString("en-CA", {
-			timeZone: effectiveTimezone,
-		});
-		const systemPrompt = buildExtractionPrompt(
-			specs.map(describeVariable).join("\n"),
-			today,
-			effectiveTimezone,
-		);
-
 		try {
+			const effectiveTimezone = timezone || "Asia/Seoul";
+			const today = new Date().toLocaleDateString("en-CA", {
+				timeZone: effectiveTimezone,
+			});
+			const systemPrompt = buildExtractionPrompt(
+				specs.map(describeVariable).join("\n"),
+				today,
+				effectiveTimezone,
+			);
+
 			const modelInstance = this.modelModule.getModel();
 			const messages = modelInstance.generateMessages({
 				query: `User request: """${query}"""`,
