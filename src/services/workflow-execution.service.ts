@@ -32,6 +32,7 @@ import type { UserWorkflowService } from "./user-workflow.service.js";
 import { WorkflowResponseComposer } from "./workflow-response-composer.service.js";
 import { WorkflowTableService } from "./workflow-table.service.js";
 import { WorkflowTaskRunner } from "./workflow-task-runner.service.js";
+import { WorkflowVariableExtractionService } from "./workflow-variable-extraction.service.js";
 import type { WorkflowVariableResolver } from "./workflow-variable-resolver.service.js";
 
 type WorkflowExecutionResult = {
@@ -45,6 +46,7 @@ export class WorkflowExecutionService {
 	private memoryModule: MemoryModule;
 	private workflowTaskRunner: WorkflowTaskRunner;
 	private workflowResponseComposer: WorkflowResponseComposer;
+	private workflowVariableExtraction: WorkflowVariableExtractionService;
 
 	constructor(
 		userWorkflowService: UserWorkflowService,
@@ -65,6 +67,9 @@ export class WorkflowExecutionService {
 		this.workflowResponseComposer = new WorkflowResponseComposer(
 			modelModule,
 			new WorkflowTableService(),
+		);
+		this.workflowVariableExtraction = new WorkflowVariableExtractionService(
+			modelModule,
 		);
 	}
 
@@ -216,6 +221,86 @@ export class WorkflowExecutionService {
 				error: updateError,
 			});
 		}
+
+		if (executionError) {
+			throw executionError;
+		}
+	}
+
+	/**
+	 * Runs an intent-mapped workflow and streams its progress into the chat
+	 * stream. Unlike {@link executeWorkflowStream}, this does NOT create or
+	 * persist a workflow thread, document, or lastRunAt bookkeeping — the
+	 * chat thread (persisted by the intent fulfillment path) is the only
+	 * artifact. Accepts a user workflow id or a template id, like slot
+	 * bindings. Variable values are extracted from the subquery via one LLM
+	 * call and merged over the workflow's stored variableValues. Setup
+	 * failures (unknown id, no definition) throw before the first yield so
+	 * callers can fall back; task failures throw after streaming.
+	 */
+	async *executeIntentWorkflowStream(
+		workflowId: string,
+		chatThread: ThreadObject,
+		subquery: string,
+		signal?: AbortSignal,
+	): AsyncGenerator<StreamEvent> {
+		const workflow = await this.getFillableWorkflow(workflowId);
+		if (!workflow) {
+			throw new Error(`User workflow or template not found: ${workflowId}`);
+		}
+
+		const variables = this.workflowVariableResolver.normalizeVariables(
+			workflow.variables,
+		);
+		let extractedVariables: Record<string, string> | undefined;
+		if (variables && Object.keys(variables).length > 0) {
+			extractedVariables =
+				await this.workflowVariableExtraction.extractFromQuery(
+					variables,
+					subquery,
+					"timezone" in workflow ? workflow.timezone : undefined,
+				);
+		}
+
+		// Document-fill semantics: an intent-mapped run has no creation step,
+		// so every provided value applies regardless of its declared
+		// resolveAt; values the model couldn't extract fall back to the
+		// workflow's stored variableValues.
+		const { definition } = this.workflowVariableResolver.resolveForDocumentFill(
+			workflow,
+			extractedVariables,
+		);
+		if (!definition) {
+			throw new Error(
+				`Workflow ${workflowId} has no valid structured definition; cannot fulfill intent`,
+			);
+		}
+
+		loggers.agent.info("Executing intent-mapped workflow", {
+			workflowId,
+			workflowTitle: workflow.title,
+			taskCount: definition.tasks.length,
+			chatThreadId: chatThread.threadId,
+			extractedVariableIds: Object.keys(extractedVariables ?? {}),
+		});
+
+		// Ephemeral, non-persisted thread: carries threadId for A2A correlation
+		// and task context, but is never written to the thread store.
+		const thread: ThreadObject = {
+			type: ThreadType.WORKFLOW,
+			userId: chatThread.userId,
+			threadId: randomUUID(),
+			title: workflow.title,
+			workflowId,
+			messages: [],
+		};
+
+		const { executionError } = yield* this.renderStructuredDefinition(
+			definition,
+			thread,
+			workflowId,
+			signal,
+		);
 
 		if (executionError) {
 			throw executionError;
