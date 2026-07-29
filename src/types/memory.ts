@@ -282,6 +282,8 @@ export interface WorkflowTableBlock {
 	sourceTaskIds?: string[];
 	prompt?: string;
 	columnFormats?: Record<string, WorkflowTableColumnFormat>;
+	/** Matrix-only: per-row format overrides, merged field-by-field over columnFormats. */
+	rowFormats?: Record<string, WorkflowTableColumnFormat>;
 }
 
 export type WorkflowResponseBlock =
@@ -318,6 +320,7 @@ export interface WorkflowRenderedTableSpec {
 	hiddenColumns?: string[];
 	formulas?: string[];
 	columnFormats?: Record<string, WorkflowTableColumnFormat>;
+	rowFormats?: Record<string, WorkflowTableColumnFormat>;
 }
 
 export interface WorkflowRenderedTableGridRow {

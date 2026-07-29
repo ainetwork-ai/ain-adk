@@ -91,6 +91,7 @@ export type MatrixDefinition = {
 	columns: string[];
 	visibleColumns: string[];
 	columnFormats: Record<string, WorkflowTableColumnFormat>;
+	rowFormats: Record<string, WorkflowTableColumnFormat>;
 	sourceRows: string[];
 	sourceColumns: string[];
 	computedRowTargets: Set<string>;
