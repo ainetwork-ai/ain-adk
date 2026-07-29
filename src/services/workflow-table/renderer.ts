@@ -66,6 +66,7 @@ export class WorkflowTableRenderer {
 					: {}),
 				formulas: block.formulas,
 				columnFormats: definition.columnFormats,
+				rowFormats: definition.rowFormats,
 			},
 			...(block.unit ? { metadata: { unit: block.unit } } : {}),
 			table: {
@@ -141,6 +142,7 @@ export class WorkflowTableRenderer {
 			const values = definition.visibleColumns.map((column) =>
 				this.formatNumericCell(
 					matrix[row]?.[column] ?? null,
+					definition.rowFormats[row],
 					definition.columnFormats[column],
 					definition.percentRows.has(row) ||
 						definition.percentColumns.has(column),
@@ -208,10 +210,11 @@ export class WorkflowTableRenderer {
 
 	private formatNumericCell(
 		value: NumericCellValue,
+		rowFormat: WorkflowTableColumnFormat | undefined,
 		columnFormat: WorkflowTableColumnFormat | undefined,
 		isPercent: boolean,
 	): string {
-		return this.formatNumericValue(value, columnFormat, isPercent);
+		return this.formatNumericValue(value, rowFormat, columnFormat, isPercent);
 	}
 
 	private formatRecordCell(
@@ -220,24 +223,34 @@ export class WorkflowTableRenderer {
 		isPercent: boolean,
 	): string {
 		if (value === null) {
-			return this.resolveColumnFormat(columnFormat, isPercent).nullDisplay;
+			return this.resolveCellFormat(undefined, columnFormat, isPercent)
+				.nullDisplay;
 		}
-		const resolvedFormat = this.resolveColumnFormat(columnFormat, isPercent);
+		const resolvedFormat = this.resolveCellFormat(
+			undefined,
+			columnFormat,
+			isPercent,
+		);
 		if (resolvedFormat.kind === "text") {
 			return String(value);
 		}
 		if (typeof value === "number") {
-			return this.formatNumericValue(value, columnFormat, isPercent);
+			return this.formatNumericValue(value, undefined, columnFormat, isPercent);
 		}
 		return value;
 	}
 
 	private formatNumericValue(
 		value: NumericCellValue,
+		rowFormat: WorkflowTableColumnFormat | undefined,
 		columnFormat: WorkflowTableColumnFormat | undefined,
 		isPercent: boolean,
 	): string {
-		const resolvedFormat = this.resolveColumnFormat(columnFormat, isPercent);
+		const resolvedFormat = this.resolveCellFormat(
+			rowFormat,
+			columnFormat,
+			isPercent,
+		);
 		if (value === null) {
 			return resolvedFormat.nullDisplay;
 		}
@@ -249,16 +262,18 @@ export class WorkflowTableRenderer {
 		return `${resolvedFormat.prefix}${formatted}${resolvedFormat.suffix}`;
 	}
 
-	private resolveColumnFormat(
+	private resolveCellFormat(
+		rowFormat: WorkflowTableColumnFormat | undefined,
 		columnFormat: WorkflowTableColumnFormat | undefined,
 		isPercent: boolean,
 	): ResolvedColumnFormat {
-		const kind =
-			columnFormat?.kind && columnFormat.kind !== "auto"
-				? columnFormat.kind
-				: isPercent
-					? "percent"
-					: "number";
+		const explicitKind =
+			rowFormat?.kind && rowFormat.kind !== "auto"
+				? rowFormat.kind
+				: columnFormat?.kind && columnFormat.kind !== "auto"
+					? columnFormat.kind
+					: undefined;
+		const kind = explicitKind ?? (isPercent ? "percent" : "number");
 
 		const defaults: Record<
 			Exclude<WorkflowTableColumnFormatKind, "auto">,
@@ -299,11 +314,16 @@ export class WorkflowTableRenderer {
 		const fallback = defaults[kind];
 		return {
 			kind,
-			grouping: columnFormat?.grouping ?? fallback.grouping,
-			decimals: columnFormat?.decimals ?? fallback.decimals,
-			prefix: columnFormat?.prefix ?? fallback.prefix,
-			suffix: columnFormat?.suffix ?? fallback.suffix,
-			nullDisplay: columnFormat?.nullDisplay ?? fallback.nullDisplay,
+			grouping:
+				rowFormat?.grouping ?? columnFormat?.grouping ?? fallback.grouping,
+			decimals:
+				rowFormat?.decimals ?? columnFormat?.decimals ?? fallback.decimals,
+			prefix: rowFormat?.prefix ?? columnFormat?.prefix ?? fallback.prefix,
+			suffix: rowFormat?.suffix ?? columnFormat?.suffix ?? fallback.suffix,
+			nullDisplay:
+				rowFormat?.nullDisplay ??
+				columnFormat?.nullDisplay ??
+				fallback.nullDisplay,
 		};
 	}
 

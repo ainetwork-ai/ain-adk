@@ -484,4 +484,73 @@ describe("WorkflowVariableResolver", () => {
 			},
 		});
 	});
+
+	it("accepts matrix table blocks with valid rowFormats unchanged", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition: WorkflowDefinition = {
+			tasks: [],
+			response: {
+				blocks: [
+					{
+						blockId: "share-format",
+						type: "table",
+						layout: "matrix",
+						rowHeader: "구분",
+						rows: ["매출", "비중"],
+						columns: ["1월", "합계"],
+						formulas: ["비중 = row_share(매출, 합계)"],
+						rowFormats: { 비중: { decimals: 0 } },
+					},
+				],
+			},
+		};
+
+		expect(resolver.normalizeDefinition(definition)).toEqual(definition);
+	});
+
+	it("rejects rowFormats on non-matrix table blocks", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [],
+			response: {
+				blocks: [
+					{
+						blockId: "store-sales",
+						type: "table",
+						layout: "records",
+						columns: ["store"],
+						rowFormats: { store: { decimals: 0 } },
+					},
+				],
+			},
+		} as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			'Table block "store-sales" supports rowFormats only with layout: matrix.',
+		);
+	});
+
+	it("rejects rowFormats entries with invalid shape", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [],
+			response: {
+				blocks: [
+					{
+						blockId: "share-format",
+						type: "table",
+						layout: "matrix",
+						rowHeader: "구분",
+						rows: ["비중"],
+						columns: ["1월"],
+						rowFormats: { 비중: { kind: "money" } },
+					},
+				],
+			},
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			'Table block "share-format" rowFormats.비중.kind is invalid.',
+		);
+	});
 });

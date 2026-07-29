@@ -82,6 +82,7 @@ describe("WorkflowTableService", () => {
 			],
 			formulas: matrixBlock.formulas,
 			columnFormats: {},
+			rowFormats: {},
 		});
 		expect(rendered.data.metadata).toEqual({ unit: "원" });
 		expect(rendered.data.table.headers).toEqual([
@@ -1070,5 +1071,82 @@ describe("WorkflowTableService", () => {
 		expect(prompt).toContain(
 			"- REV(원): return a raw number or null, without currency symbols or display formatting.",
 		);
+	});
+
+	it("rejects rowFormats on record layout tables", () => {
+		const block: WorkflowTableBlock = {
+			blockId: "store-sales-rowfmt",
+			type: "table",
+			layout: "records",
+			title: "매장별 매출",
+			columns: ["store", "grossSales"],
+			rowFormats: { store: { decimals: 0 } },
+		};
+
+		expect(() => service.renderTable(block, JSON.stringify([]))).toThrow(
+			'Record table block "store-sales-rowfmt" does not support rowFormats because record rows are extracted data.',
+		);
+	});
+
+	describe("matrix rowFormats", () => {
+		const shareBlock: WorkflowTableBlock = {
+			blockId: "share-format",
+			type: "table",
+			layout: "matrix",
+			rowHeader: "구분",
+			rows: ["매출", "비중"],
+			columns: ["1월", "2월", "합계"],
+			formulas: [
+				"합계 = col_sum(1월, 2월)",
+				"비중 = row_share(매출, 합계)",
+			],
+		};
+		const rawContent = JSON.stringify({
+			매출: { "1월": 100, "2월": 200 },
+		});
+
+		it("applies row decimals over the percent default and column decimals", () => {
+			const block: WorkflowTableBlock = {
+				...shareBlock,
+				columnFormats: {
+					"1월": { decimals: 1 },
+					"2월": { decimals: 1 },
+					합계: { decimals: 1 },
+				},
+				rowFormats: { 비중: { decimals: 0 } },
+			};
+
+			const rendered = service.renderTable(block, rawContent);
+
+			expect(rendered.content).toContain("| 매출 | 100 | 200 | 300 |");
+			expect(rendered.content).toContain("| 비중 | 33% | 67% | 100% |");
+			expect(rendered.data.spec.rowFormats).toEqual({ 비중: { decimals: 0 } });
+		});
+
+		it("falls back to column format for fields the row format omits", () => {
+			const block: WorkflowTableBlock = {
+				...shareBlock,
+				columnFormats: { "1월": { decimals: 2 } },
+				rowFormats: { 비중: { suffix: "pp" } },
+			};
+
+			const rendered = service.renderTable(block, rawContent);
+
+			// 비중.1월: decimals는 열(2), suffix는 행("pp")
+			expect(rendered.content).toContain("| 비중 | 33.33pp |");
+			// 매출.1월: 열 decimals 2는 상한이므로 정수는 그대로
+			expect(rendered.content).toContain("| 매출 | 100 |");
+		});
+
+		it("lets row kind override percent auto-detection", () => {
+			const block: WorkflowTableBlock = {
+				...shareBlock,
+				rowFormats: { 비중: { kind: "number", decimals: 2 } },
+			};
+
+			const rendered = service.renderTable(block, rawContent);
+
+			expect(rendered.content).toContain("| 비중 | 33.33 | 66.67 | 100 |");
+		});
 	});
 });

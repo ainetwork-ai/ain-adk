@@ -141,6 +141,7 @@ export class WorkflowTableDefinitionBuilder {
 			columns,
 			visibleColumns: columns.filter((column) => !hiddenColumns.has(column)),
 			columnFormats: block.columnFormats || {},
+			rowFormats: block.rowFormats || {},
 			sourceRows: rows.filter((row) => !computedRowTargets.has(row)),
 			sourceColumns: columns.filter(
 				(column) => !computedColumnTargets.has(column),
@@ -170,6 +171,11 @@ export class WorkflowTableDefinitionBuilder {
 		if (block.hiddenRows?.length) {
 			throw new Error(
 				`Record table block "${block.blockId}" does not support hiddenRows because record rows are extracted data.`,
+			);
+		}
+		if (block.rowFormats && Object.keys(block.rowFormats).length) {
+			throw new Error(
+				`Record table block "${block.blockId}" does not support rowFormats because record rows are extracted data.`,
 			);
 		}
 		const formulas = (block.formulas || []).map((formula) =>
