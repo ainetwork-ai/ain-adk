@@ -112,6 +112,54 @@ describe("extractFromQuery", () => {
 		expect(fetch).not.toHaveBeenCalled();
 	});
 
+	// Regression: real templates key the variables record differently from the
+	// spec's id field (e.g. key "workplace_id", id "업장명"). The resolver looks
+	// values up by RECORD KEY, so extraction must key its output by record key
+	// or substitution silently misses every {{record_key}} token.
+	const MISMATCHED_VARIABLES: Record<string, WorkflowVariable> = {
+		workplace_id: {
+			id: "업장명",
+			label: "분석할 매장을 선택해주세요",
+			type: "dropdown",
+			options: ["강남점", "홍대점"],
+		},
+		date_range: {
+			id: "대상기간",
+			label: "분석 기간",
+			type: "date_range",
+		},
+	};
+
+	it("keys extracted values by the variables record key, not the spec id", async () => {
+		const { service } = build({
+			content: JSON.stringify({
+				workplace_id: "강남점",
+				date_range: "{{today-7}} ~ {{yesterday}}",
+			}),
+		});
+		await expect(
+			service.extractFromQuery(MISMATCHED_VARIABLES, "지난주 강남점 매출 알려줘"),
+		).resolves.toEqual({
+			workplace_id: "강남점",
+			date_range: "{{today-7}} ~ {{yesterday}}",
+		});
+	});
+
+	it("re-keys values the model returned under the spec id to the record key", async () => {
+		const { service } = build({
+			content: JSON.stringify({
+				업장명: "강남점",
+				대상기간: "{{today-7}} ~ {{yesterday}}",
+			}),
+		});
+		await expect(
+			service.extractFromQuery(MISMATCHED_VARIABLES, "지난주 강남점 매출 알려줘"),
+		).resolves.toEqual({
+			workplace_id: "강남점",
+			date_range: "{{today-7}} ~ {{yesterday}}",
+		});
+	});
+
 	it("fails open on malformed variable spec (options not array)", async () => {
 		const { service, fetch } = build({ content: "{}" });
 		const malformed = {

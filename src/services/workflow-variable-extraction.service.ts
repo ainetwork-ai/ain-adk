@@ -2,8 +2,13 @@ import type { ModelModule } from "@/modules";
 import type { WorkflowVariable } from "@/types/memory";
 import { loggers } from "@/utils/logger";
 
-function describeVariable(spec: WorkflowVariable): string {
-	const lines = [`- id: "${spec.id}" (${spec.type}) — ${spec.label}`];
+function describeVariable(key: string, spec: WorkflowVariable): string {
+	// The JSON key MUST be the variables-record key: the resolver looks
+	// values up by record key (and only then derives {{key}}/{{id}} tokens),
+	// so values keyed by spec.id alone never substitute {{record_key}} tokens.
+	const alias =
+		spec.id && spec.id !== key ? `, also known as "${spec.id}"` : "";
+	const lines = [`- key: "${key}" (${spec.type}) — ${spec.label}${alias}`];
 	if (
 		(spec.type === "dropdown" || spec.type === "select") &&
 		spec.options?.length
@@ -55,7 +60,7 @@ Only when the request names dates the tokens cannot express (e.g.
 dates against today's date and output "YYYY-MM-DD" literals. Never invent
 token names beyond the list above.
 
-Respond with a single JSON object mapping variable ids to string values.
+Respond with a single JSON object mapping variable keys to string values.
 Rules:
 - Include a variable ONLY if its value is clearly stated or derivable from the request. If unsure, OMIT the key entirely — never guess.
 - All values must be strings in the format specified per variable.
@@ -98,8 +103,8 @@ export class WorkflowVariableExtractionService {
 		query: string,
 		timezone?: string,
 	): Promise<Record<string, string> | undefined> {
-		const specs = Object.values(variables);
-		if (specs.length === 0) {
+		const entries = Object.entries(variables);
+		if (entries.length === 0) {
 			return undefined;
 		}
 
@@ -109,7 +114,7 @@ export class WorkflowVariableExtractionService {
 				timeZone: effectiveTimezone,
 			});
 			const systemPrompt = buildExtractionPrompt(
-				specs.map(describeVariable).join("\n"),
+				entries.map(([key, spec]) => describeVariable(key, spec)).join("\n"),
 				today,
 				effectiveTimezone,
 			);
@@ -129,8 +134,10 @@ export class WorkflowVariableExtractionService {
 
 			const parsed = JSON.parse(response.content) as Record<string, unknown>;
 			const values: Record<string, string> = {};
-			for (const spec of specs) {
-				const value = parsed[spec.id];
+			for (const [key, spec] of entries) {
+				// Prefer the record key; accept the spec id as a fallback in case
+				// the model answered with the alias.
+				const value = parsed[key] ?? parsed[spec.id];
 				if (typeof value !== "string" || !value.trim()) {
 					continue;
 				}
@@ -144,7 +151,7 @@ export class WorkflowVariableExtractionService {
 				) {
 					continue;
 				}
-				values[spec.id] = value.trim();
+				values[key] = value.trim();
 			}
 
 			if (Object.keys(values).length === 0) {
