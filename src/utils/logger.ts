@@ -17,6 +17,19 @@ export const injectRequestContext = winston.format((info) => {
 	return info;
 });
 
+// Error objects passed as meta ({ error }) JSON.stringify to "{}" because
+// message/stack are non-enumerable — the log would record nothing. Convert
+// them to their stack string (which starts with "Error: <message>").
+export const serializeErrorValues = winston.format((info) => {
+	for (const key of Object.keys(info)) {
+		const value = info[key];
+		if (value instanceof Error) {
+			info[key] = value.stack ?? `${value.name}: ${value.message}`;
+		}
+	}
+	return info;
+});
+
 export const textLogFormat = printf(
 	({ level, message, timestamp, service, stack, requestId, ...meta }) => {
 		const reqTag = requestId ? ` [req:${String(requestId).slice(0, 8)}]` : "";
@@ -50,6 +63,7 @@ const buildFormat = (output: LogOutput) => {
 	if (resolveLogFormat(output) === "json") {
 		return combine(
 			errors({ stack: true }),
+			serializeErrorValues(),
 			injectRequestContext(),
 			timestamp(),
 			json(),
@@ -57,6 +71,7 @@ const buildFormat = (output: LogOutput) => {
 	}
 	return combine(
 		errors({ stack: true }),
+		serializeErrorValues(),
 		injectRequestContext(),
 		...(output === "console" ? [colorize()] : []),
 		timestamp({

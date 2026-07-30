@@ -2,6 +2,7 @@ import {
 	injectRequestContext,
 	logFileExtension,
 	resolveLogFormat,
+	serializeErrorValues,
 	textLogFormat,
 } from "@/utils/logger";
 import { runWithRequestContext } from "@/utils/request-context";
@@ -84,6 +85,30 @@ describe("textLogFormat", () => {
 			service: "Intent",
 		});
 		expect(info[MESSAGE]).toBe("12:00:00 [Intent] info: hello");
+	});
+});
+
+describe("serializeErrorValues", () => {
+	it("turns Error meta values into their stack string instead of {}", () => {
+		const info = transform(serializeErrorValues(), {
+			level: "error",
+			message: "Error communicating with agent:",
+			error: new Error("stream idle timeout"),
+		});
+		expect(typeof info.error).toBe("string");
+		expect(info.error).toContain("stream idle timeout");
+		expect(info.error).toContain("at "); // stack frames survive
+	});
+
+	it("leaves non-Error values untouched", () => {
+		const info = transform(serializeErrorValues(), {
+			level: "info",
+			message: "hello",
+			error: "already a string",
+			count: 3,
+		});
+		expect(info.error).toBe("already a string");
+		expect(info.count).toBe(3);
 	});
 });
 
