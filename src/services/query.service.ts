@@ -15,6 +15,7 @@ import {
 import type { StreamEvent } from "@/types/stream";
 import { injectAttachedDocuments } from "@/utils/attached-documents.js";
 import { loggers } from "@/utils/logger.js";
+import { updateRequestContext } from "@/utils/request-context.js";
 import { persistTextMessage } from "@/utils/thread-messages.js";
 import { sanitizeThinkingData } from "@/utils/tool-args.js";
 import type { IntentFulfillService } from "./intents/fulfill.service";
@@ -183,6 +184,8 @@ export class QueryService {
 		}
 
 		threadId ??= randomUUID();
+		// From here on every log line in this request carries the threadId.
+		updateRequestContext({ threadId });
 		if (!thread) {
 			const title =
 				type === ThreadType.WORKFLOW && inputTitle
