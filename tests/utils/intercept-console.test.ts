@@ -62,6 +62,25 @@ describe("interceptConsole", () => {
 		expect(console.log).toBe(patched);
 	});
 
+	it("does not recurse when the mirror path itself writes to the console", () => {
+		process.env.LOG_FILE_PATH = "/tmp/ain-adk-test-log";
+		const consoleLogger = interceptConsole();
+		if (!consoleLogger) throw new Error("unreachable");
+
+		// Simulate winston/transport error handling calling console.error
+		// from inside the mirror write — without a guard this recurses
+		// until the stack overflows.
+		const errorSpy = jest
+			.spyOn(consoleLogger, "error")
+			.mockImplementation((() => {
+				console.error("transport failure");
+				return consoleLogger;
+			}) as never);
+
+		expect(() => console.error("original failure")).not.toThrow();
+		expect(errorSpy).toHaveBeenCalledTimes(1);
+	});
+
 	it("restoreConsole puts the original console back", () => {
 		process.env.LOG_FILE_PATH = "/tmp/ain-adk-test-log";
 		interceptConsole();

@@ -237,8 +237,12 @@ export class A2AModule {
 	 * Sends a message through the connector, retrying once on communication
 	 * failure (network error, stream timeout, connection reset). A failed
 	 * attempt may have left a broken task mapping for the thread, so it is
-	 * dropped to let the retry start a fresh task. Throws the last error
-	 * when every attempt failed.
+	 * dropped to let the retry start a fresh task.
+	 *
+	 * Retries ONLY when the failed attempt delivered no events: once the
+	 * consumer has seen output, the remote agent is already executing, and
+	 * re-sending would both run the task twice and replay the delivered
+	 * events. Throws the last error when no (further) attempt is allowed.
 	 */
 	private async *sendWithRetry(
 		connector: A2AConnector,
@@ -249,14 +253,22 @@ export class A2AModule {
 	): AsyncGenerator<StreamEvent, string, unknown> {
 		let lastError: unknown;
 		for (let attempt = 1; attempt <= A2AModule.MAX_SEND_ATTEMPTS; attempt++) {
+			let yielded = false;
 			try {
-				return yield* this.sendMessageToConnector(
+				const stream = this.sendMessageToConnector(
 					connector,
 					toolName,
 					query,
 					threadId,
 					metadata,
 				);
+				let step = await stream.next();
+				while (!step.done) {
+					yielded = true;
+					yield step.value;
+					step = await stream.next();
+				}
+				return step.value;
 			} catch (error) {
 				lastError = error;
 				const { message, stack } = describeA2AError(error);
@@ -265,6 +277,7 @@ export class A2AModule {
 					{ toolName, threadId, error: message, stack },
 				);
 				this.a2aTasks.delete(threadId);
+				if (yielded) throw error;
 			}
 		}
 		throw lastError;

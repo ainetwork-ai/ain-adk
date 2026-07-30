@@ -149,19 +149,32 @@ export const interceptConsole = (): winston.Logger | undefined => {
 		error: console.error,
 	};
 
+	// Re-entrancy guard: winston/transport error handling may itself call
+	// console.*; mirroring that would recurse until the stack overflows.
+	let mirroring = false;
+	const mirror = (write: (text: string) => unknown, args: unknown[]) => {
+		if (mirroring) return;
+		mirroring = true;
+		try {
+			write(formatConsoleArgs(args));
+		} finally {
+			mirroring = false;
+		}
+	};
+
 	console.log = (...args: unknown[]) => {
 		interceptedConsole?.log(...args);
-		consoleLogger.info(formatConsoleArgs(args));
+		mirror((text) => consoleLogger.info(text), args);
 	};
 
 	console.warn = (...args: unknown[]) => {
 		interceptedConsole?.warn(...args);
-		consoleLogger.warn(formatConsoleArgs(args));
+		mirror((text) => consoleLogger.warn(text), args);
 	};
 
 	console.error = (...args: unknown[]) => {
 		interceptedConsole?.error(...args);
-		consoleLogger.error(formatConsoleArgs(args));
+		mirror((text) => consoleLogger.error(text), args);
 	};
 
 	return consoleLogger;

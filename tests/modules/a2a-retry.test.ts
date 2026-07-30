@@ -11,9 +11,25 @@ const thinkingEvent: StreamEvent = {
 	data: { title: "working", description: "" },
 } as StreamEvent;
 
-async function* failingStream(): AsyncGenerator<StreamEvent, string, unknown> {
-	yield thinkingEvent;
+// Dies before producing anything — the remote may never have seen the
+// request, so retrying is safe.
+async function* failingBeforeYield(): AsyncGenerator<
+	StreamEvent,
+	string,
+	unknown
+> {
 	throw new Error("boom: stream idle timeout");
+}
+
+// Dies after events were already delivered — the remote is executing and
+// the consumer already saw output, so a retry would duplicate both.
+async function* failingAfterYield(): AsyncGenerator<
+	StreamEvent,
+	string,
+	unknown
+> {
+	yield thinkingEvent;
+	throw new Error("boom: connection reset mid-stream");
 }
 
 async function* successStream(): AsyncGenerator<StreamEvent, string, unknown> {
@@ -52,15 +68,15 @@ describe("A2AModule retry behaviour", () => {
 		errorSpy.mockRestore();
 	});
 
-	it("sendTask retries once and returns the second attempt's result", async () => {
+	it("sendTask retries when the first attempt died before yielding anything", async () => {
 		const module = buildModule();
 		const sendSpy = jest
 			// biome-ignore lint/suspicious/noExplicitAny: private method
 			.spyOn(module as any, "sendMessageToConnector")
-			.mockImplementationOnce(failingStream)
+			.mockImplementationOnce(failingBeforeYield)
 			.mockImplementationOnce(successStream);
 
-		const { result } = await drain(
+		const { events, result } = await drain(
 			module.sendTask({
 				connectorName: "analysis-agent",
 				message: "analyze",
@@ -70,6 +86,29 @@ describe("A2AModule retry behaviour", () => {
 
 		expect(result).toBe("[Bot Called A2A Tool analysis-agent]\nanalysis result");
 		expect(sendSpy).toHaveBeenCalledTimes(2);
+		// Consumers see the successful attempt's events exactly once.
+		expect(events).toEqual([thinkingEvent]);
+	});
+
+	it("sendTask does NOT retry once events were already delivered", async () => {
+		const module = buildModule();
+		const sendSpy = jest
+			// biome-ignore lint/suspicious/noExplicitAny: private method
+			.spyOn(module as any, "sendMessageToConnector")
+			.mockImplementation(failingAfterYield);
+
+		await expect(
+			drain(
+				module.sendTask({
+					connectorName: "analysis-agent",
+					message: "analyze",
+					threadId: THREAD_ID,
+				}),
+			),
+		).rejects.toThrow("boom: connection reset mid-stream");
+		// A retry here would re-execute the remote task and replay the
+		// already-delivered events to the consumer.
+		expect(sendSpy).toHaveBeenCalledTimes(1);
 	});
 
 	it("sendTask propagates the error when the retry also fails", async () => {
@@ -77,7 +116,7 @@ describe("A2AModule retry behaviour", () => {
 		const sendSpy = jest
 			// biome-ignore lint/suspicious/noExplicitAny: private method
 			.spyOn(module as any, "sendMessageToConnector")
-			.mockImplementation(failingStream);
+			.mockImplementation(failingBeforeYield);
 
 		await expect(
 			drain(
@@ -95,7 +134,7 @@ describe("A2AModule retry behaviour", () => {
 		const module = buildModule();
 		// biome-ignore lint/suspicious/noExplicitAny: private method
 		jest.spyOn(module as any, "sendMessageToConnector")
-			.mockImplementation(failingStream);
+			.mockImplementation(failingBeforeYield);
 
 		await drain(
 			module.sendTask({
@@ -119,7 +158,7 @@ describe("A2AModule retry behaviour", () => {
 		(module as any).a2aTasks.set(THREAD_ID, "broken-task");
 		// biome-ignore lint/suspicious/noExplicitAny: private method
 		jest.spyOn(module as any, "sendMessageToConnector")
-			.mockImplementation(failingStream);
+			.mockImplementation(failingBeforeYield);
 
 		await drain(
 			module.sendTask({
@@ -145,7 +184,7 @@ describe("A2AModule retry behaviour", () => {
 		const sendSpy = jest
 			// biome-ignore lint/suspicious/noExplicitAny: private method
 			.spyOn(module as any, "sendMessageToConnector")
-			.mockImplementation(failingStream);
+			.mockImplementation(failingBeforeYield);
 
 		const { result } = await drain(
 			module.useTool(tool, "analyze", THREAD_ID),

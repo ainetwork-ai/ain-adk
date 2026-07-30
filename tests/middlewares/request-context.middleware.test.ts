@@ -5,7 +5,10 @@ import {
 	requestContextMiddleware,
 } from "@/middlewares/request-context.middleware";
 import { loggers } from "@/utils/logger";
-import { getRequestContext } from "@/utils/request-context";
+import {
+	getRequestContext,
+	updateRequestContext,
+} from "@/utils/request-context";
 
 const UUID_RE =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -115,6 +118,25 @@ describe("accessLogMiddleware", () => {
 			aborted: true,
 			requestId: "req-hang-1",
 		});
+	});
+
+	it("includes the userId that auth sets after the middleware registered", async () => {
+		const app = express();
+		app.use(requestContextMiddleware());
+		app.use(accessLogMiddleware());
+		app.use((_req, _res, next) => {
+			updateRequestContext({ userId: "u-9" });
+			next();
+		});
+		app.get("/me", (_req, res) => {
+			res.send("ok");
+		});
+
+		await request(app).get("/me");
+		await new Promise((resolve) => setTimeout(resolve, 30));
+
+		expect(infoSpy).toHaveBeenCalledTimes(1);
+		expect(infoSpy.mock.calls[0][1]).toMatchObject({ userId: "u-9" });
 	});
 
 	it("does not double-log when the response finishes normally", async () => {
