@@ -89,4 +89,38 @@ describe("accessLogMiddleware", () => {
 		await request(buildApp()).get("/");
 		expect(infoSpy).not.toHaveBeenCalled();
 	});
+
+	it("logs an aborted line when the client disconnects before the response", async () => {
+		const app = express();
+		app.use(requestContextMiddleware());
+		app.use(accessLogMiddleware());
+		app.get("/hang", () => {
+			// Never respond — the client gives up first.
+		});
+
+		const pending = request(app)
+			.get("/hang")
+			.set("X-Request-Id", "req-hang-1")
+			.timeout({ response: 100 })
+			.catch(() => {});
+		await pending;
+		// The close event fires on the server a beat after the client aborts.
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(infoSpy).toHaveBeenCalledTimes(1);
+		const [, meta] = infoSpy.mock.calls[0];
+		expect(meta).toMatchObject({
+			method: "GET",
+			path: "/hang",
+			aborted: true,
+			requestId: "req-hang-1",
+		});
+	});
+
+	it("does not double-log when the response finishes normally", async () => {
+		await request(buildApp()).get("/echo-context");
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(infoSpy).toHaveBeenCalledTimes(1);
+		expect(infoSpy.mock.calls[0][1].aborted).toBeUndefined();
+	});
 });

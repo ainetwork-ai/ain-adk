@@ -88,6 +88,15 @@ export class A2AService implements AgentExecutor {
 			eventBus.publish(initialTask);
 		}
 
+		// Logged before any await: thread loading and the LLM calls inside
+		// handleQuery emit nothing, so without this line a task that hangs
+		// there leaves zero server-side trace of the request ever arriving.
+		loggers.server.info(`Task ${taskId} started`, {
+			threadId,
+			agentId,
+			isNewTask: !existingTask,
+		});
+
 		const message: string = userMessage.parts
 			.filter((part) => part.kind === "text")
 			.map((part) => part.text)

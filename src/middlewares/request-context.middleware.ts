@@ -43,18 +43,27 @@ export const accessLogMiddleware = (): RequestHandler => {
 	return (req, res, next) => {
 		if (ACCESS_LOG_SKIP_PATHS.has(req.path)) return next();
 		const start = Date.now();
-		// Captured now: the finish event fires from HTTP internals, outside
-		// this request's AsyncLocalStorage context.
+		// Captured now: finish/close fire from HTTP internals, outside this
+		// request's AsyncLocalStorage context.
 		const requestId = getRequestContext()?.requestId;
-		res.on("finish", () => {
+		let logged = false;
+		// `finish` = response fully sent; `close` also covers requests that
+		// never finish (client gave up on a hung handler) — without it those
+		// leave no access log at all, hiding the very requests that matter.
+		const logOnce = (aborted: boolean) => {
+			if (logged) return;
+			logged = true;
 			loggers.http.info("HTTP request", {
 				method: req.method,
 				path: req.originalUrl,
 				status: res.statusCode,
 				durationMs: Date.now() - start,
+				...(aborted ? { aborted: true } : {}),
 				...(requestId ? { requestId } : {}),
 			});
-		});
+		};
+		res.on("finish", () => logOnce(false));
+		res.on("close", () => logOnce(!res.writableFinished));
 		next();
 	};
 };
