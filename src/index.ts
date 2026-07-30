@@ -26,6 +26,7 @@ import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
 import type { AinAgentManifest, OnIntentFallback } from "./types/agent";
 import type { AuthzConfig } from "./types/authz";
+import { interceptConsole } from "./utils/logger";
 
 export type {
 	AinAgentManifest,
@@ -103,6 +104,10 @@ export class AINAgent {
 			onIntentFallback?: OnIntentFallback;
 		},
 	) {
+		// Mirror console.log/warn/error into the log file (no-op without
+		// LOG_FILE_PATH) so start/shutdown banners are part of the log record.
+		interceptConsole();
+
 		this.app = express();
 		// Express 5 defaults the query parser to "simple", which does not parse
 		// nested/bracket params (e.g. `?labels[category]=logbook`). Use the

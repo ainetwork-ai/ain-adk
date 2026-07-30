@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import winston from "winston";
 import DailyRotateFile from "winston-daily-rotate-file";
 import { getRequestContext } from "@/utils/request-context";
@@ -113,29 +114,49 @@ export const loggers = {
 	http: getLogger("HTTP"),
 } as const;
 
-// Intercept console.log/warn/error and write to LOG_FILE_PATH
-export const interceptConsole = () => {
+const formatConsoleArgs = (args: unknown[]): string =>
+	args.map((arg) => (typeof arg === "string" ? arg : inspect(arg))).join(" ");
+
+let interceptedConsole: Pick<Console, "log" | "warn" | "error"> | undefined;
+
+// Mirrors console.log/warn/error into the log file so server start/stop
+// banners and stray console calls appear in the same .jsonl as everything
+// else. Still prints to stdout; no-op without LOG_FILE_PATH (dev console
+// stays untouched). Idempotent: only the first call patches.
+export const interceptConsole = (): winston.Logger | undefined => {
 	const logFilePath = process.env.LOG_FILE_PATH;
-	if (!logFilePath) return;
+	if (!logFilePath || interceptedConsole) return undefined;
 
 	const consoleLogger = createLogger("console");
-
-	const originalLog = console.log;
-	const originalWarn = console.warn;
-	const originalError = console.error;
+	interceptedConsole = {
+		log: console.log,
+		warn: console.warn,
+		error: console.error,
+	};
 
 	console.log = (...args: unknown[]) => {
-		originalLog(...args);
-		consoleLogger.info(args.map(String).join(" "));
+		interceptedConsole?.log(...args);
+		consoleLogger.info(formatConsoleArgs(args));
 	};
 
 	console.warn = (...args: unknown[]) => {
-		originalWarn(...args);
-		consoleLogger.warn(args.map(String).join(" "));
+		interceptedConsole?.warn(...args);
+		consoleLogger.warn(formatConsoleArgs(args));
 	};
 
 	console.error = (...args: unknown[]) => {
-		originalError(...args);
-		consoleLogger.error(args.map(String).join(" "));
+		interceptedConsole?.error(...args);
+		consoleLogger.error(formatConsoleArgs(args));
 	};
+
+	return consoleLogger;
+};
+
+// Undoes interceptConsole (used by tests; safe to call unpatched).
+export const restoreConsole = (): void => {
+	if (!interceptedConsole) return;
+	console.log = interceptedConsole.log;
+	console.warn = interceptedConsole.warn;
+	console.error = interceptedConsole.error;
+	interceptedConsole = undefined;
 };
