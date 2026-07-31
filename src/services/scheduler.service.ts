@@ -8,6 +8,7 @@ import type {
 	ScheduleTrigger,
 } from "@/types/schedule.js";
 import { loggers } from "@/utils/logger.js";
+import { runWithRequestContext } from "@/utils/request-context.js";
 import type { JobRunnerService } from "./job-runner.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
 import type { WorkflowExecutionService } from "./workflow-execution.service.js";
@@ -165,9 +166,22 @@ export class SchedulerService {
 		trigger: ScheduleTrigger,
 		scheduledFor: number,
 	): Promise<void> {
+		// The runId doubles as the correlation id so every log line of this
+		// run carries it, the same way requestId does for HTTP requests.
+		const runId = randomUUID();
+		return runWithRequestContext({ requestId: runId }, () =>
+			this.runWorkflowJobWithRunId(runId, workflowId, trigger, scheduledFor),
+		);
+	}
+
+	private async runWorkflowJobWithRunId(
+		runId: string,
+		workflowId: string,
+		trigger: ScheduleTrigger,
+		scheduledFor: number,
+	): Promise<void> {
 		try {
 			const scheduleRunMemory = this.memoryModule.getScheduleRunMemory();
-			const runId = randomUUID();
 			const startedAt = Date.now();
 			await scheduleRunMemory?.createScheduleRun({
 				runId,
@@ -311,12 +325,23 @@ export class SchedulerService {
 		trigger: ScheduleTrigger,
 		scheduledFor: number,
 	): Promise<void> {
+		// See runWorkflowJob: runId doubles as the correlation id.
+		const runId = randomUUID();
+		return runWithRequestContext({ requestId: runId }, () =>
+			this.runAutoRefreshJobWithRunId(runId, documentId, trigger, scheduledFor),
+		);
+	}
+
+	private async runAutoRefreshJobWithRunId(
+		runId: string,
+		documentId: string,
+		trigger: ScheduleTrigger,
+		scheduledFor: number,
+	): Promise<void> {
 		try {
 			const documentMemory = this.memoryModule.getDocumentMemory();
 			const scheduleRunMemory = this.memoryModule.getScheduleRunMemory();
 			if (!documentMemory) return;
-
-			const runId = randomUUID();
 			await scheduleRunMemory?.createScheduleRun({
 				runId,
 				jobType: "SLOT_REFRESH",

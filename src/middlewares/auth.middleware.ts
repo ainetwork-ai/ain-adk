@@ -3,6 +3,7 @@ import { StatusCodes } from "http-status-codes";
 import type { AuthModule } from "@/modules";
 import { AinHttpError } from "@/types/agent";
 import type { AuthResponse } from "@/types/auth";
+import { updateRequestContext } from "@/utils/request-context";
 
 export class AuthMiddleware {
 	private auth: AuthModule | undefined;
@@ -22,6 +23,7 @@ export class AuthMiddleware {
 				if (authRes.isAuthenticated) {
 					res.locals.userId = authRes.userId;
 					res.locals.email = authRes.email;
+					updateRequestContext({ userId: authRes.userId });
 					next();
 				} else {
 					const error: AinHttpError = new AinHttpError(

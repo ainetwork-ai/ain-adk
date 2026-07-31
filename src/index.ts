@@ -11,6 +11,10 @@ import { setOptions } from "./config/options";
 import { AuthMiddleware } from "./middlewares/auth.middleware";
 import { createAuthzMiddleware } from "./middlewares/authz.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
+import {
+	accessLogMiddleware,
+	requestContextMiddleware,
+} from "./middlewares/request-context.middleware";
 import type {
 	A2AModule,
 	AuthModule,
@@ -22,6 +26,7 @@ import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
 import type { AinAgentManifest, OnIntentFallback } from "./types/agent";
 import type { AuthzConfig } from "./types/authz";
+import { interceptConsole } from "./utils/logger";
 
 export type {
 	AinAgentManifest,
@@ -99,6 +104,10 @@ export class AINAgent {
 			onIntentFallback?: OnIntentFallback;
 		},
 	) {
+		// Mirror console.log/warn/error into the log file (no-op without
+		// LOG_FILE_PATH) so start/shutdown banners are part of the log record.
+		interceptConsole();
+
 		this.app = express();
 		// Express 5 defaults the query parser to "simple", which does not parse
 		// nested/bracket params (e.g. `?labels[category]=logbook`). Use the
@@ -145,6 +154,10 @@ export class AINAgent {
 	 * Also applies authentication middleware if configured.
 	 */
 	private initializeMiddlewares(): void {
+		// First so the whole request chain (auth included) shares one
+		// AsyncLocalStorage context and every completion gets an access log.
+		this.app.use(requestContextMiddleware());
+		this.app.use(accessLogMiddleware());
 		this.app.use(helmet());
 		this.app.use(cors());
 		this.app.use(express.json({ limit: "25mb" }));

@@ -25,7 +25,19 @@ import { A2AConnector } from "./a2a.connector.js";
  * conversation sessions, and provides an interface for inter-agent communication.
  * Supports multi-turn conversations with task and context tracking.
  */
+// JSON.stringify(new Error(...)) is "{}" — message/stack are non-enumerable —
+// which erases the failure cause from logs and tool results. Extract them.
+const describeA2AError = (
+	error: unknown,
+): { message: string; stack?: string } =>
+	error instanceof Error
+		? { message: error.message, stack: error.stack }
+		: { message: typeof error === "string" ? error : JSON.stringify(error) };
+
 export class A2AModule {
+	/** Communication attempts per send: the first call plus one retry. */
+	private static readonly MAX_SEND_ATTEMPTS = 2;
+
 	/** Map of A2A server URLs to their corresponding tool instances */
 	private a2aConnectors: Map<string, A2AConnector> = new Map();
 	/** Map of session IDs to their A2A session state */
@@ -221,6 +233,56 @@ export class A2AModule {
 		return `[Bot Called A2A Tool ${toolName}]\n${finalText.join("\n")}`;
 	}
 
+	/**
+	 * Sends a message through the connector, retrying once on communication
+	 * failure (network error, stream timeout, connection reset). A failed
+	 * attempt may have left a broken task mapping for the thread, so it is
+	 * dropped to let the retry start a fresh task.
+	 *
+	 * Retries ONLY when the failed attempt delivered no events: once the
+	 * consumer has seen output, the remote agent is already executing, and
+	 * re-sending would both run the task twice and replay the delivered
+	 * events. Throws the last error when no (further) attempt is allowed.
+	 */
+	private async *sendWithRetry(
+		connector: A2AConnector,
+		toolName: string,
+		query: string,
+		threadId: string,
+		metadata?: Record<string, unknown>,
+	): AsyncGenerator<StreamEvent, string, unknown> {
+		let lastError: unknown;
+		for (let attempt = 1; attempt <= A2AModule.MAX_SEND_ATTEMPTS; attempt++) {
+			let yielded = false;
+			try {
+				const stream = this.sendMessageToConnector(
+					connector,
+					toolName,
+					query,
+					threadId,
+					metadata,
+				);
+				let step = await stream.next();
+				while (!step.done) {
+					yielded = true;
+					yield step.value;
+					step = await stream.next();
+				}
+				return step.value;
+			} catch (error) {
+				lastError = error;
+				const { message, stack } = describeA2AError(error);
+				loggers.a2a.error(
+					`Error communicating with agent (attempt ${attempt}/${A2AModule.MAX_SEND_ATTEMPTS}):`,
+					{ toolName, threadId, error: message, stack },
+				);
+				this.a2aTasks.delete(threadId);
+				if (yielded) throw error;
+			}
+		}
+		throw lastError;
+	}
+
 	public async *sendTask(params: {
 		connectorName: string;
 		message: string;
@@ -235,18 +297,16 @@ export class A2AModule {
 			return `[Bot Called A2A Tool ${params.connectorName}]\n"Unknown agent connector"`;
 		}
 
-		try {
-			return yield* this.sendMessageToConnector(
-				connector,
-				params.connectorName,
-				params.message,
-				params.threadId,
-				params.metadata,
-			);
-		} catch (error) {
-			loggers.a2a.error("Error communicating with agent:", { error });
-			return `[Bot Called A2A Tool ${params.connectorName}]\n${typeof error === "string" ? error : JSON.stringify(error, null, 2)}`;
-		}
+		// No catch: after the retry is exhausted the error propagates, so
+		// callers (e.g. workflow tasks) record a real failure instead of
+		// mistaking the error text for a completed result.
+		return yield* this.sendWithRetry(
+			connector,
+			params.connectorName,
+			params.message,
+			params.threadId,
+			params.metadata,
+		);
 	}
 
 	/**
@@ -274,16 +334,17 @@ export class A2AModule {
 		}
 
 		try {
-			return yield* this.sendMessageToConnector(
+			return yield* this.sendWithRetry(
 				connector,
 				tool.toolName,
 				query,
 				threadId,
 			);
 		} catch (error) {
-			loggers.a2a.error("Error communicating with agent:", { error });
-			const toolResult = `[Bot Called A2A Tool ${tool.toolName}]\n${typeof error === "string" ? error : JSON.stringify(error, null, 2)}`;
-			return toolResult;
+			// Interactive tool-calling path: surface the failure to the model
+			// as tool output (with the actual cause) instead of throwing, so
+			// the LLM can react to it mid-conversation.
+			return `[Bot Called A2A Tool ${tool.toolName}]\n${describeA2AError(error).message}`;
 		}
 	}
 }
