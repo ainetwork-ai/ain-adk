@@ -10,11 +10,15 @@ import {
 	type Document,
 	type DocumentAutoRefresh,
 	type DocumentFilter,
+	type DocumentFilterSet,
 	DocumentFormat,
+	type DocumentListOptions,
 	type DocumentSlot,
 	DocumentSource,
 } from "@/types/document.js";
+import type { PaginatedResult } from "@/types/list.js";
 import { parseAutoRefreshPayload } from "@/utils/auto-refresh-payload.js";
+import { parseListOptions } from "@/utils/parse-list-options.js";
 import { streamEventsToSSE } from "@/utils/sse-stream.js";
 
 export class DocumentApiController {
@@ -66,54 +70,129 @@ export class DocumentApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const documentMemory = this.memoryModule.getDocumentMemory();
-			const { workflowId, threadId, source, labels } = req.query as {
-				workflowId?: string;
-				threadId?: string;
-				source?: DocumentSource;
-				labels?: Record<string, string>;
-			};
+			const { workflowId, threadId, source, labels, dateFrom, dateTo, view } =
+				req.query as {
+					workflowId?: string;
+					threadId?: string;
+					source?: DocumentSource;
+					labels?: Record<string, string>;
+					dateFrom?: string;
+					dateTo?: string;
+					view?: string;
+				};
 			const baseFilter: DocumentFilter = {
 				workflowId,
 				threadId,
 				source,
 				labels,
+				dateFrom: typeof dateFrom === "string" ? dateFrom : undefined,
+				dateTo: typeof dateTo === "string" ? dateTo : undefined,
 			};
+			const listOptions = parseListOptions(
+				req.query as Record<string, unknown>,
+			);
+			const options: DocumentListOptions = {
+				...(listOptions ?? {}),
+				summary: view === "summary",
+			};
+
+			// RBAC scopes as an OR-set of (userId, filter) pairs. Single query
+			// (when the provider supports it) keeps skip/limit/count correct.
 			const authzFilters = res.locals.authzFilters as
 				| DocumentFilter[]
 				| undefined;
-
-			let documents: Document[];
+			let filterSets: DocumentFilterSet[];
 			if (res.locals.authzListAll) {
-				// admin / unrestricted
-				documents =
-					(await documentMemory?.listDocuments(undefined, baseFilter)) ?? [];
+				filterSets = [{ filter: baseFilter }];
 			} else if (authzFilters?.length) {
-				// own documents ∪ records each read-role permits (cross-user)
-				const own =
-					(await documentMemory?.listDocuments(userId, baseFilter)) ?? [];
-				const sets = await Promise.all(
-					authzFilters.map((f) =>
-						documentMemory?.listDocuments(undefined, {
+				filterSets = [
+					{ userId, filter: baseFilter },
+					...authzFilters.map((f) => ({
+						filter: {
 							...baseFilter,
 							labels: { ...(labels ?? {}), ...(f.labels ?? {}) },
-						}),
-					),
-				);
-				const byId = new Map<string, Document>();
-				for (const d of [own, ...sets].flat()) {
-					if (d) byId.set(d.documentId, d);
-				}
-				documents = [...byId.values()];
+						},
+					})),
+				];
 			} else {
-				// no authz (legacy) or no cross-user access → own documents only
-				documents =
-					(await documentMemory?.listDocuments(userId, baseFilter)) ?? [];
+				filterSets = [{ userId, filter: baseFilter }];
 			}
-			res.json(documents);
+
+			const { items, total } = await this.listDocumentsBySets(
+				documentMemory,
+				filterSets,
+				options,
+			);
+
+			if (listOptions) {
+				const body: PaginatedResult<Document> = {
+					items,
+					total,
+					limit: listOptions.limit,
+					offset: listOptions.offset,
+				};
+				res.json(body);
+			} else {
+				res.json(items);
+			}
 		} catch (error) {
 			next(error);
 		}
 	};
+
+	/**
+	 * Union of the filter sets via the provider's single-query method when
+	 * available; otherwise per-set fetch merged in memory. The fallback also
+	 * emulates date range, summary and offset/limit so old providers stay
+	 * correct (just slower).
+	 */
+	private async listDocumentsBySets(
+		memory: ReturnType<MemoryModule["getDocumentMemory"]>,
+		filterSets: DocumentFilterSet[],
+		options: DocumentListOptions,
+	): Promise<{ items: Document[]; total: number }> {
+		if (!memory) return { items: [], total: 0 };
+
+		if (memory.listDocumentsAny) {
+			const items = await memory.listDocumentsAny(filterSets, options);
+			const total =
+				options.limit !== undefined && memory.countDocumentsAny
+					? await memory.countDocumentsAny(filterSets)
+					: items.length;
+			return { items, total };
+		}
+
+		const sets = await Promise.all(
+			filterSets.map((s) => memory.listDocuments(s.userId, s.filter)),
+		);
+		const byId = new Map<string, Document>();
+		for (const d of sets.flat()) byId.set(d.documentId, d);
+
+		const { dateFrom, dateTo } = filterSets[0]?.filter ?? {};
+		let items = [...byId.values()];
+		if (dateFrom || dateTo) {
+			items = items.filter((d) => {
+				const date = d.labels?.date;
+				if (!date) return false;
+				if (dateFrom && date < dateFrom) return false;
+				if (dateTo && date > dateTo) return false;
+				return true;
+			});
+		}
+		items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+		const total = items.length;
+		if (options.limit !== undefined || options.offset) {
+			const start = options.offset ?? 0;
+			items = items.slice(
+				start,
+				options.limit !== undefined ? start + options.limit : undefined,
+			);
+		}
+		if (options.summary) {
+			items = items.map(({ slots: _slots, ...rest }) => rest as Document);
+		}
+		return { items, total };
+	}
 
 	public handleGetDocument = async (
 		req: Request,
