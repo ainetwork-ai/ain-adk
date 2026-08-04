@@ -179,8 +179,10 @@ export class DocumentApiController {
 				return true;
 			});
 		}
-		items.sort((a, b) =>
-			String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")),
+		items.sort(
+			(a, b) =>
+				String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")) ||
+				b.documentId.localeCompare(a.documentId),
 		);
 		const total = items.length;
 		if (options.limit !== undefined || options.offset) {

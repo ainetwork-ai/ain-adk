@@ -57,9 +57,11 @@ describe("handleGetAllDocuments", () => {
 		const res = mockRes();
 		await controller.handleGetAllDocuments(mockReq(), res, next);
 		expect(Array.isArray(res._json)).toBe(true);
+		// equal updatedAt → documentId desc tiebreaker keeps ordering
+		// deterministic across requests (page-boundary stability)
 		expect((res._json as Document[]).map((d) => d.documentId)).toEqual([
-			"a",
 			"b",
+			"a",
 		]);
 	});
 

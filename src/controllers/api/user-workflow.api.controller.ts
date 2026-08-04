@@ -68,7 +68,9 @@ export class UserWorkflowApiController {
 					return Number.isNaN(t) ? 0 : t;
 				};
 				const sorted = [...fetched].sort(
-					(a, b) => updatedAtMs(b) - updatedAtMs(a),
+					(a, b) =>
+						updatedAtMs(b) - updatedAtMs(a) ||
+						b.workflowId.localeCompare(a.workflowId),
 				);
 				total = sorted.length;
 				items = sorted.slice(
