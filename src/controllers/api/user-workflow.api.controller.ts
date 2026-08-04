@@ -5,7 +5,9 @@ import type { UserWorkflowService } from "@/services/user-workflow.service.js";
 import type { UserWorkflowCoordinatorService } from "@/services/user-workflow-coordinator.service.js";
 import type { WorkflowExecutionService } from "@/services/workflow-execution.service.js";
 import { AinHttpError } from "@/types/agent.js";
+import type { PaginatedResult } from "@/types/list.js";
 import { MessageRole, type UserWorkflow } from "@/types/memory.js";
+import { parseListOptions } from "@/utils/parse-list-options.js";
 import { streamEventsToSSE } from "@/utils/sse-stream.js";
 
 export class UserWorkflowApiController {
@@ -38,14 +40,44 @@ export class UserWorkflowApiController {
 	}
 
 	public handleGetAllWorkflows = async (
-		_req: Request,
+		req: Request,
 		res: Response,
 		next: NextFunction,
 	) => {
 		try {
 			const userId = res.locals.userId || "";
-			const workflows = await this.userWorkflowService.listWorkflows(userId);
-			res.json(workflows);
+			const listOptions = parseListOptions(
+				req.query as Record<string, unknown>,
+			);
+			if (!listOptions) {
+				res.json(await this.userWorkflowService.listWorkflows(userId));
+				return;
+			}
+			const [fetched, count] = await Promise.all([
+				this.userWorkflowService.listWorkflows(userId, listOptions),
+				this.userWorkflowService.countWorkflows(userId),
+			]);
+			let items = fetched;
+			let total = count;
+			if (total === undefined) {
+				// Legacy provider ignored the options and returned everything —
+				// emulate the same sort/slice contract here.
+				const sorted = [...fetched].sort((a, b) =>
+					(b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""),
+				);
+				total = sorted.length;
+				items = sorted.slice(
+					listOptions.offset,
+					listOptions.offset + listOptions.limit,
+				);
+			}
+			const body: PaginatedResult<UserWorkflow> = {
+				items,
+				total,
+				limit: listOptions.limit,
+				offset: listOptions.offset,
+			};
+			res.json(body);
 		} catch (error) {
 			next(error);
 		}

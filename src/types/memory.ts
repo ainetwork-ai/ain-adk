@@ -482,4 +482,7 @@ export interface UserWorkflow {
 	nextRunAt?: number;
 	/** Thread ID of the last execution result */
 	lastThreadId?: string;
+
+	/** ISO 8601 timestamp of the last update (used for sorting in list endpoints) */
+	updatedAt?: string;
 }
