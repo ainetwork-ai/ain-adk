@@ -1,4 +1,11 @@
-import type { Document, DocumentFilter, DocumentSlot } from "@/types/document";
+import type {
+	Document,
+	DocumentFilter,
+	DocumentFilterSet,
+	DocumentListOptions,
+	DocumentSlot,
+} from "@/types/document";
+import type { ListOptions } from "@/types/list";
 import type {
 	Intent,
 	MessageObject,
@@ -116,7 +123,18 @@ export interface IUserWorkflowMemory {
 		workflow: Partial<UserWorkflow>,
 	): Promise<void>;
 	deleteUserWorkflow(workflowId: string, userId: string): Promise<void>;
-	listUserWorkflows(userId?: string): Promise<UserWorkflow[]>;
+	/**
+	 * When `options` is given, implementations sort by `updatedAt` desc and
+	 * apply offset/limit at the store. Implementations that also provide
+	 * countUserWorkflows are trusted to honor `options`; without it the
+	 * controller re-sorts/slices in memory (legacy providers ignore options).
+	 */
+	listUserWorkflows(
+		userId?: string,
+		options?: ListOptions,
+	): Promise<UserWorkflow[]>;
+	/** Total workflows for the user. Ships with ListOptions support above. */
+	countUserWorkflows?(userId?: string): Promise<number>;
 	/** List all active scheduled workflows across all users (used by scheduler) */
 	listActiveScheduledWorkflows(): Promise<UserWorkflow[]>;
 }
@@ -148,6 +166,18 @@ export interface IDocumentMemory {
 	): Promise<void>;
 	deleteDocument(documentId: string): Promise<void>;
 	listDocuments(userId?: string, filter?: DocumentFilter): Promise<Document[]>;
+	/**
+	 * Union (OR) of filter sets in a single query, sorted `updatedAt` desc.
+	 * Enables correct DB-level skip/limit/count across RBAC scopes. Optional:
+	 * when absent the controller falls back to per-set listDocuments plus
+	 * in-memory merge/sort/slice.
+	 */
+	listDocumentsAny?(
+		filters: DocumentFilterSet[],
+		options?: DocumentListOptions,
+	): Promise<Document[]>;
+	/** Total count for the union of filter sets. Ships with listDocumentsAny. */
+	countDocumentsAny?(filters: DocumentFilterSet[]): Promise<number>;
 	/** Documents with an active, incomplete autoRefresh (used by the scheduler). */
 	listAutoRefreshPendingDocuments?(): Promise<Document[]>;
 	/** Atomically append a slot to autoRefresh.doneSlotIds ($addToSet semantics). */

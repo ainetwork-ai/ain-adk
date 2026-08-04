@@ -1,3 +1,4 @@
+import type { ListOptions } from "./list.js";
 import type { WorkflowRenderedBlock } from "./memory.js";
 
 /**
@@ -161,4 +162,24 @@ export type DocumentFilter = {
 	threadId?: string;
 	source?: DocumentSource;
 	labels?: Record<string, string | string[]>;
+	/**
+	 * Inclusive range over `labels.date` (YYYY-MM-DD strings — lexicographic
+	 * order equals chronological order, so bounds like `2026-02-31` are safe).
+	 */
+	dateFrom?: string;
+	dateTo?: string;
 };
+
+/** One (userId, filter) scope; a list query is the union (OR) of its sets. */
+export type DocumentFilterSet = {
+	userId?: string;
+	filter?: DocumentFilter;
+};
+
+export type DocumentListOptions = ListOptions & {
+	/** Omit heavy fields (`slots`) from returned documents. */
+	summary?: boolean;
+};
+
+/** List-view shape returned by `view=summary` — `slots` omitted. */
+export type DocumentSummary = Omit<Document, "slots">;
