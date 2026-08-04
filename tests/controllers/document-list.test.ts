@@ -113,17 +113,24 @@ describe("handleGetAllDocuments", () => {
 			doc("old", { updatedAt: "2026-08-01T00:00:00.000Z" }),
 			doc("new", { updatedAt: "2026-08-03T00:00:00.000Z" }),
 			doc("mid", { updatedAt: "2026-08-02T00:00:00.000Z" }),
+			// Pins null/Date-safety: a missing updatedAt must not throw in the
+			// legacy in-memory sort fallback, and should sort last (treated as "").
+			doc("none", { updatedAt: undefined as never }),
 		];
 		const controller = makeController({ listDocuments: async () => docs });
 		const res = mockRes();
 		await controller.handleGetAllDocuments(
-			mockReq({ limit: "2", offset: "0" }),
+			mockReq({ limit: "3", offset: "1" }),
 			res,
 			next,
 		);
 		const body = res._json as { items: Document[]; total: number };
-		expect(body.total).toBe(3);
-		expect(body.items.map((d) => d.documentId)).toEqual(["new", "mid"]);
+		expect(body.total).toBe(4);
+		expect(body.items.map((d) => d.documentId)).toEqual([
+			"mid",
+			"old",
+			"none",
+		]);
 	});
 
 	it("legacy provider + view=summary → slots stripped", async () => {
