@@ -68,7 +68,7 @@ describe("handleGetAllWorkflows", () => {
 			listWorkflows: async () => [
 				wf("old", "2026-08-01"),
 				wf("new", "2026-08-03"),
-				wf("mid", "2026-08-02"),
+				{ workflowId: "mid", userId: "u1", updatedAt: new Date("2026-08-02") } as UserWorkflow,
 			],
 			countWorkflows: async () => undefined,
 		});

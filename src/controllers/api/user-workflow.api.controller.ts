@@ -62,8 +62,13 @@ export class UserWorkflowApiController {
 			if (total === undefined) {
 				// Legacy provider ignored the options and returned everything —
 				// emulate the same sort/slice contract here.
-				const sorted = [...fetched].sort((a, b) =>
-					(b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""),
+				const updatedAtMs = (w: UserWorkflow): number => {
+					if (!w.updatedAt) return 0;
+					const t = new Date(w.updatedAt).getTime();
+					return Number.isNaN(t) ? 0 : t;
+				};
+				const sorted = [...fetched].sort(
+					(a, b) => updatedAtMs(b) - updatedAtMs(a),
 				);
 				total = sorted.length;
 				items = sorted.slice(
