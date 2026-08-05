@@ -15,9 +15,9 @@ function res(locals: Record<string, unknown>): Response {
 
 describe("DocumentApiController authz", () => {
 	it("list: uses authzFilters — own ∪ each filter, merged/deduped", async () => {
-		const ownDoc = { documentId: "own-1", userId: "u1" };
-		const logbookDoc = { documentId: "lb-1", userId: "other" };
-		const sharedDoc = { documentId: "shared", userId: "u1" };
+		const ownDoc = { documentId: "own-1", userId: "u1", updatedAt: "2026-08-01T00:00:00.000Z" };
+		const logbookDoc = { documentId: "lb-1", userId: "other", updatedAt: "2026-08-02T00:00:00.000Z" };
+		const sharedDoc = { documentId: "shared", userId: "u1", updatedAt: "2026-08-03T00:00:00.000Z" };
 		// First call (own): returns ownDoc + sharedDoc; second call (filter): returns logbookDoc + sharedDoc
 		const listDocuments = jest
 			.fn()

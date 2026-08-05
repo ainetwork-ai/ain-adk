@@ -482,4 +482,15 @@ export interface UserWorkflow {
 	nextRunAt?: number;
 	/** Thread ID of the last execution result */
 	lastThreadId?: string;
+
+	/**
+	 * ISO 8601 timestamp of the last update (used for sorting in list endpoints).
+	 * Typed as `string`, but the mongodb provider stores this via mongoose
+	 * `timestamps: true`, so at runtime it can be a `Date` instance (it only
+	 * serializes to an ISO string once it crosses HTTP as JSON). Treat as
+	 * `string | Date` when consuming this field in-process; comparators that
+	 * sort on it should coerce (e.g. `String(x.updatedAt ?? "")`) rather than
+	 * assume `.localeCompare` is available.
+	 */
+	updatedAt?: string;
 }
