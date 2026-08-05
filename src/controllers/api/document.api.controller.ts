@@ -354,6 +354,36 @@ export class DocumentApiController {
 		}
 	};
 
+	/**
+	 * Soft delete: marks the document hidden instead of removing it. Hidden
+	 * documents drop out of every read path (the provider filters them), so
+	 * this is what user-facing "delete" buttons call. Hard delete stays on
+	 * `delete/:id` for admin tooling.
+	 */
+	public handleHideDocument = async (
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	) => {
+		try {
+			const userId = res.locals.userId || "";
+			const { id } = req.params as { id: string };
+			await this.getAuthorizedDocument(
+				userId,
+				id,
+				res.locals.authzChecked === true,
+			);
+
+			await this.memoryModule
+				.getDocumentMemory()
+				?.updateDocument(id, { hidden: true });
+			this.schedulerService.removeDocumentAutoRefresh(id);
+			res.status(StatusCodes.OK).send();
+		} catch (error) {
+			next(error);
+		}
+	};
+
 	public handleCreateDocument = async (
 		req: Request,
 		res: Response,
