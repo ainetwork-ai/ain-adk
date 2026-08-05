@@ -95,6 +95,72 @@ describe("WorkflowResponseComposer", () => {
 		expect(result.content).toBe("summary\n\n");
 	});
 
+	it("presents source content with the present-mode system prompt", async () => {
+		const generateMessages = jest.fn(({ query, systemPrompt }) => [
+			{ role: "user", query, systemPrompt },
+		]);
+		const modelModule = {
+			getModel: () => ({
+				generateMessages,
+				fetchStreamWithContextMessage: jest.fn(() => streamText("정리된 문장")),
+			}),
+			getModelOptions: () => ({}),
+		} as unknown as ModelModule;
+		const composer = new WorkflowResponseComposer(modelModule);
+
+		const { result } = await collectGenerator(
+			composer.renderResponseBlock(
+				{
+					blockId: "atoms",
+					type: "text",
+					mode: "present",
+					sourceTaskIds: ["task-1"],
+					prompt: "task-1의 분석 문장을 수치 그대로 불릿으로 정리",
+				},
+				taskResults,
+				[],
+			),
+		);
+
+		const call = generateMessages.mock.calls[0][0];
+		expect(call.systemPrompt).toContain("source content");
+		expect(call.systemPrompt).not.toContain("never restate");
+		expect(call.query).toContain("Source content (task results):");
+		expect(call.query).toContain("Sales data collected.");
+		expect(call.query).not.toContain("do not restate");
+		expect(call.query).not.toContain("Do not include any reference context");
+		expect(result.content).toBe("정리된 문장\n\n");
+	});
+
+	it("renders empty content without calling the model when a present-mode block has no source", async () => {
+		const generateMessages = jest.fn();
+		const modelModule = {
+			getModel: () => ({
+				generateMessages,
+				fetchStreamWithContextMessage: jest.fn(),
+			}),
+			getModelOptions: () => ({}),
+		} as unknown as ModelModule;
+		const composer = new WorkflowResponseComposer(modelModule);
+
+		const { result } = await collectGenerator(
+			composer.renderResponseBlock(
+				{
+					blockId: "atoms",
+					type: "text",
+					mode: "present",
+					sourceTaskIds: ["missing-task"],
+					prompt: "정리해 출력",
+				},
+				taskResults,
+				[],
+			),
+		);
+
+		expect(generateMessages).not.toHaveBeenCalled();
+		expect(result.content).toBe("");
+	});
+
 	it("includes referenced rendered table blocks when extracting graph data", async () => {
 		const generateMessages = jest.fn(({ query }) => [{ role: "user", query }]);
 		const modelModule = {
