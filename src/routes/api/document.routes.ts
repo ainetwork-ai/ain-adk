@@ -63,6 +63,7 @@ export const createDocumentApiRouter = (): Router => {
 		checkDocumentMemory,
 		controller.handleUpdateDocument,
 	);
+	router.post("/hide/:id", checkDocumentMemory, controller.handleHideDocument);
 	router.post(
 		"/delete/:id",
 		checkDocumentMemory,

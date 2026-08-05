@@ -144,6 +144,13 @@ export interface Document {
 	version: number;
 	/** True once a human has edited `content`; `blocks` may then be stale. */
 	editedManually?: boolean;
+	/**
+	 * Soft delete: hidden documents are excluded from every read path
+	 * (get/list/count/auto-refresh) — effectively deleted for users.
+	 * Physical deletion and restore are admin-tool operations, done directly
+	 * against storage, not through this API.
+	 */
+	hidden?: boolean;
 	/** ISO timestamp of creation. */
 	createdAt: string;
 	/** ISO timestamp of the last update. */
