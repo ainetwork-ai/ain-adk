@@ -211,6 +211,13 @@ export interface WorkflowTextBlock {
 	blockId: string;
 	type: "text";
 	prompt: string;
+	/**
+	 * Absent/"generate": write new commentary; source context must not be
+	 * restated. "present": source content is the output material — the block
+	 * prompt controls how it is organized; facts absent from the source must
+	 * not be added.
+	 */
+	mode?: "generate" | "present";
 	sourceTaskIds?: string[];
 	sourceBlockIds?: string[];
 }

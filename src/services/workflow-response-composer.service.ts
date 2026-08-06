@@ -10,7 +10,14 @@ import type {
 	WorkflowTextBlock,
 } from "@/types/memory.js";
 import type { StreamEvent } from "@/types/stream.js";
+import { loggers } from "@/utils/logger.js";
 import { serializeTaskResults } from "@/utils/workflow-task-results.js";
+
+const GENERATE_TEXT_SYSTEM_PROMPT =
+	"Generate ONLY the new text described in Instructions. Task results and already-rendered blocks are reference context — never restate, echo, or repeat them in your output.";
+
+const PRESENT_TEXT_SYSTEM_PROMPT =
+	"Present the provided source content as directed by Instructions. The source content is your material: reorganize and format it exactly the way Instructions ask. Do not add facts or numbers that are not in the source content, and keep numbers and units exactly as written unless Instructions say otherwise.";
 
 export class WorkflowResponseComposer {
 	private modelModule: ModelModule;
@@ -70,11 +77,28 @@ export class WorkflowResponseComposer {
 			};
 		}
 
+		if (
+			block.mode === "present" &&
+			!this.hasPresentableSource(block, taskResults, renderedBlocks)
+		) {
+			loggers.agent.warn(
+				"Present-mode text block has no source content; rendering empty block",
+				{ blockId: block.blockId },
+			);
+			return {
+				blockId: block.blockId,
+				type: block.type,
+				content: "",
+			};
+		}
+
 		const content = yield* this.renderGeneratedTextBlock(
 			block,
 			taskResults,
 			renderedBlocks,
-			"Generate ONLY the new text described in Instructions. Task results and already-rendered blocks are reference context — never restate, echo, or repeat them in your output.",
+			block.mode === "present"
+				? PRESENT_TEXT_SYSTEM_PROMPT
+				: GENERATE_TEXT_SYSTEM_PROMPT,
 		);
 
 		const finalContent = content.endsWith("\n\n") ? content : `${content}\n\n`;
@@ -196,26 +220,48 @@ export class WorkflowResponseComposer {
 		taskResults: WorkflowTaskResult[],
 		renderedBlocks: WorkflowRenderedBlock[],
 	): string {
+		const present = block.mode === "present";
 		const sections: string[] = [];
 
 		if (taskResults.length > 0) {
 			sections.push(
-				`Task results (reference context — do not restate):\n${serializeTaskResults(taskResults)}`,
+				present
+					? `Source content (task results):\n${serializeTaskResults(taskResults)}`
+					: `Task results (reference context — do not restate):\n${serializeTaskResults(taskResults)}`,
 			);
 		}
 
 		const blocksText = this.serializeRenderedBlocks(renderedBlocks);
 		if (blocksText) {
 			sections.push(
-				`Already-rendered blocks (reference context — do not repeat):\n${blocksText}`,
+				present
+					? `Source content (rendered blocks):\n${blocksText}`
+					: `Already-rendered blocks (reference context — do not repeat):\n${blocksText}`,
 			);
 		}
 
 		sections.push(
-			`Instructions:\n${block.prompt}\n\nOutput only the new text described above. Do not include any reference context.`,
+			present
+				? `Instructions:\n${block.prompt}`
+				: `Instructions:\n${block.prompt}\n\nOutput only the new text described above. Do not include any reference context.`,
 		);
 
 		return sections.join("\n\n");
+	}
+
+	private hasPresentableSource(
+		block: WorkflowTextBlock,
+		taskResults: Record<string, WorkflowTaskResult>,
+		renderedBlocks: WorkflowRenderedBlock[],
+	): boolean {
+		const results = this.getSourceTaskResults(block, taskResults);
+		if (results.some((result) => result.content?.trim())) {
+			return true;
+		}
+		const blocksText = this.serializeRenderedBlocks(
+			this.getSourceRenderedBlocks(block, renderedBlocks),
+		);
+		return blocksText.length > 0;
 	}
 
 	private getSourceRenderedBlocks(
