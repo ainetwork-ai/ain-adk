@@ -84,6 +84,25 @@ describe("collectAttachedDocumentIds", () => {
 	it("returns empty for a thread with no attachments", () => {
 		expect(collectAttachedDocumentIds(makeThread())).toEqual([]);
 	});
+
+	// A workflow result message records its output document under the singular
+	// `documentId` key (workflow-execution.service.ts), not `documentIds` — so
+	// follow-up turns saw no attachment and the model lost the workflow output.
+	it("collects a workflow message's singular documentId", () => {
+		const thread = makeThread([
+			{ metadata: { workflowId: "w1", workflowRun: true, documentId: "doc-w" } },
+		]);
+		expect(collectAttachedDocumentIds(thread)).toEqual(["doc-w"]);
+	});
+
+	it("dedupes a singular documentId against plural ids and request ids", () => {
+		const thread = makeThread([
+			{ metadata: { documentIds: ["doc-a"] } },
+			{ metadata: { documentId: "doc-a" } },
+			{ metadata: { documentId: 42 } },
+		]);
+		expect(collectAttachedDocumentIds(thread, ["doc-a"])).toEqual(["doc-a"]);
+	});
 });
 
 describe("injectAttachedDocuments", () => {

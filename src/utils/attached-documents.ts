@@ -9,8 +9,8 @@ const ATTACHED_DOCUMENTS_FOOTER = `---
 
 /**
  * Collects attached document ids for the current turn: ids recorded on
- * earlier messages' `metadata.documentIds` (chronological), then the current
- * request's ids. Deduped, order-preserving.
+ * earlier messages' `metadata.documentIds` / `metadata.documentId`
+ * (chronological), then the current request's ids. Deduped, order-preserving.
  */
 export function collectAttachedDocumentIds(
 	thread: ThreadObject,
@@ -29,6 +29,12 @@ export function collectAttachedDocumentIds(
 		if (Array.isArray(metaIds)) {
 			for (const id of metaIds) add(id);
 		}
+		// A workflow result message records its output document under the
+		// singular `documentId` (workflow-execution.service.ts) and stores the
+		// message itself as a reference-only document part. Treating it as an
+		// attachment is what lets follow-up turns discuss the workflow output —
+		// and it applies retroactively to threads written before this change.
+		add(message.metadata?.documentId);
 	}
 	for (const id of requestDocumentIds ?? []) add(id);
 	return ids;
