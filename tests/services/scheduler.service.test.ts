@@ -349,6 +349,111 @@ describe("SchedulerService — document auto refresh", () => {
 		expect(m.workflowExecutionService.fillDocumentSlot).toHaveBeenCalledWith("doc-1", "s2");
 	});
 
+	it("records how the target set was derived, with a reason per excluded slot", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(makeLogbookDocument());
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+
+		expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({
+				targeting: {
+					documentSlotIds: ["s1", "s2", "no-binding"],
+					requestedSlotIds: undefined,
+					targetSlotIds: ["s1", "s2"],
+					excluded: [{ slotId: "no-binding", reason: "no_binding" }],
+				},
+			}),
+		);
+	});
+
+	it("records the targeting BEFORE any slot job runs, so an interrupted run keeps its plan", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(makeLogbookDocument());
+		const order: string[] = [];
+		m.scheduleRunMemory.updateScheduleRun.mockImplementation(
+			async (_runId: string, patch: Record<string, unknown>) => {
+				order.push(patch.targeting ? "targeting" : "final");
+			},
+		);
+		m.workflowExecutionService.fillDocumentSlot.mockImplementation(async () => {
+			order.push("fill");
+			return {};
+		});
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+
+		expect(order[0]).toBe("targeting");
+		expect(order).toContain("fill");
+	});
+
+	it("records already_done exclusions when doneSlotIds narrows the set", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(
+			makeLogbookDocument({
+				autoRefresh: { runAt: 0, active: true, doneSlotIds: ["s1"] },
+			}),
+		);
+		await m.scheduler.runAutoRefreshJob("doc-1", "catchup", Date.now());
+
+		expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({
+				targeting: expect.objectContaining({
+					targetSlotIds: ["s2"],
+					excluded: expect.arrayContaining([
+						{ slotId: "s1", reason: "already_done" },
+						{ slotId: "no-binding", reason: "no_binding" },
+					]),
+				}),
+			}),
+		);
+	});
+
+	it("records not_in_slot_ids exclusions when an explicit allowlist narrows the set", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(
+			makeLogbookDocument({
+				autoRefresh: { runAt: 0, active: true, slotIds: ["s1"] },
+			}),
+		);
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+
+		expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({
+				targeting: expect.objectContaining({
+					requestedSlotIds: ["s1"],
+					targetSlotIds: ["s1"],
+					excluded: expect.arrayContaining([
+						{ slotId: "s2", reason: "not_in_slot_ids" },
+						{ slotId: "no-binding", reason: "no_binding" },
+					]),
+				}),
+			}),
+		);
+	});
+
+	it("labels a no-work success run with noopReason instead of a bare success", async () => {
+		const cases: Array<[Record<string, unknown>, string]> = [
+			[{ runAt: 0, active: false }, "auto_refresh_inactive"],
+			[{ runAt: 0, active: true, completedAt: 123 }, "auto_refresh_completed"],
+			[{ runAt: 0, active: true, doneSlotIds: ["s1", "s2"] }, "no_pending_slots"],
+		];
+		for (const [autoRefresh, noopReason] of cases) {
+			const m = makeMocks();
+			m.documentMemory.getDocument.mockResolvedValue(
+				makeLogbookDocument({ autoRefresh }),
+			);
+			await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+
+			expect(m.workflowExecutionService.fillDocumentSlot).not.toHaveBeenCalled();
+			expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ status: "success", noopReason }),
+			);
+		}
+	});
+
 	it("treats a resolving fill whose slot persisted 'failed' as a failed slot (no content produced)", async () => {
 		const m = makeMocks();
 		// fillDocumentSlot resolves for BOTH slots, but s2's persisted status is
