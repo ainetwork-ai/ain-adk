@@ -4,7 +4,9 @@ import type { MemoryModule } from "@/modules/memory/memory.module.js";
 import type { Document, DocumentAutoRefresh } from "@/types/document.js";
 import type { UserWorkflow } from "@/types/memory.js";
 import type {
+	ScheduleRunExclusion,
 	ScheduleRunSlotResult,
+	ScheduleRunTargeting,
 	ScheduleTrigger,
 } from "@/types/schedule.js";
 import { loggers } from "@/utils/logger.js";
@@ -369,15 +371,26 @@ export class SchedulerService {
 					status: "success",
 					finishedAt: Date.now(),
 					attempts: 0,
+					noopReason: autoRefresh?.completedAt
+						? "auto_refresh_completed"
+						: "auto_refresh_inactive",
 				});
 				return;
 			}
 
-			const done = new Set(autoRefresh.doneSlotIds ?? []);
-			const targetIds = this.getAutoRefreshTargetSlotIds(
-				document,
-				autoRefresh,
-			).filter((slotId) => !done.has(slotId));
+			// Persisted BEFORE the first slot job is submitted: a run killed by a
+			// restart mid-way still shows what it set out to cover, and a run
+			// covering fewer slots than the document has stops being silent.
+			const targeting = this.deriveAutoRefreshTargeting(document, autoRefresh);
+			const targetIds = targeting.targetSlotIds;
+			await scheduleRunMemory?.updateScheduleRun(runId, { targeting });
+			if (targeting.excluded.length > 0) {
+				loggers.agent.info("Auto-refresh skipped some document slots", {
+					documentId,
+					targetSlotIds: targetIds,
+					excluded: targeting.excluded,
+				});
+			}
 
 			if (targetIds.length === 0) {
 				await documentMemory.completeAutoRefresh?.(documentId, Date.now());
@@ -385,6 +398,7 @@ export class SchedulerService {
 					status: "success",
 					finishedAt: Date.now(),
 					attempts: 0,
+					noopReason: "no_pending_slots",
 				});
 				return;
 			}
@@ -493,9 +507,10 @@ export class SchedulerService {
 	}
 
 	/**
-	 * Target slot ids for a document's auto-refresh: an explicit allowlist, or
-	 * (default) every slot with a binding. Shared by {@link runAutoRefreshJob}
-	 * and {@link reconcileManualSlotFill} so the two stay in sync.
+	 * Candidate slot ids for a document's auto-refresh: an explicit allowlist,
+	 * or (default) every slot with a binding. Shared by
+	 * {@link deriveAutoRefreshTargeting} and {@link reconcileManualSlotFill} so
+	 * the two stay in sync.
 	 */
 	private getAutoRefreshTargetSlotIds(
 		document: Document,
@@ -505,6 +520,56 @@ export class SchedulerService {
 			.filter((slot) => slot.binding)
 			.map((slot) => slot.slotId);
 		return autoRefresh.slotIds ?? boundSlotIds;
+	}
+
+	/**
+	 * Expands {@link getAutoRefreshTargetSlotIds} into the derivation recorded
+	 * on the run: what the document offered, what this run will actually
+	 * submit, and every slot dropped along the way with its reason. Three
+	 * different filters can shrink the target set (no binding, an explicit
+	 * allowlist, the done ledger) and none of them left a trace before — a
+	 * 3-of-6 run and a genuine 3-slot run looked identical in storage.
+	 */
+	private deriveAutoRefreshTargeting(
+		document: Document,
+		autoRefresh: DocumentAutoRefresh,
+	): ScheduleRunTargeting {
+		const slots = document.slots ?? [];
+		const documentSlotIds = slots.map((slot) => slot.slotId);
+		const bound = new Set(
+			slots.filter((slot) => slot.binding).map((slot) => slot.slotId),
+		);
+		const candidates = this.getAutoRefreshTargetSlotIds(document, autoRefresh);
+		const candidateSet = new Set(candidates);
+		const done = new Set(autoRefresh.doneSlotIds ?? []);
+
+		const targetSlotIds: string[] = [];
+		const excluded: ScheduleRunExclusion[] = [];
+		for (const slotId of candidates) {
+			if (done.has(slotId)) {
+				excluded.push({ slotId, reason: "already_done" });
+			} else {
+				targetSlotIds.push(slotId);
+			}
+		}
+		// Slots the document carries that never became candidates at all.
+		for (const slotId of documentSlotIds) {
+			if (candidateSet.has(slotId)) continue;
+			excluded.push({
+				slotId,
+				reason: bound.has(slotId) ? "not_in_slot_ids" : "no_binding",
+			});
+		}
+
+		return {
+			documentSlotIds,
+			// Omitted rather than set to undefined: mongoose stores an explicit
+			// undefined as null, which does not match the optional string[] type
+			// that readers of the stored run see.
+			...(autoRefresh.slotIds ? { requestedSlotIds: autoRefresh.slotIds } : {}),
+			targetSlotIds,
+			excluded,
+		};
 	}
 
 	/**
