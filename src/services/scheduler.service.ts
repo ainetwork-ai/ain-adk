@@ -185,6 +185,14 @@ export class SchedulerService {
 		try {
 			const scheduleRunMemory = this.memoryModule.getScheduleRunMemory();
 			const startedAt = Date.now();
+			// Catch-up runs fire at boot, far from the cron time they stand in
+			// for — record the planned time so the gap is explainable from logs.
+			loggers.agent.info("Scheduled workflow run starting", {
+				workflowId,
+				trigger,
+				scheduledFor: new Date(scheduledFor).toISOString(),
+				delayMs: startedAt - scheduledFor,
+			});
 			await scheduleRunMemory?.createScheduleRun({
 				runId,
 				jobType: "WORKFLOW",
@@ -344,13 +352,23 @@ export class SchedulerService {
 			const documentMemory = this.memoryModule.getDocumentMemory();
 			const scheduleRunMemory = this.memoryModule.getScheduleRunMemory();
 			if (!documentMemory) return;
+			const startedAt = Date.now();
+			// "once" fires within a tick of runAt; "catchup" is a boot/tick
+			// recovery of an already-passed runAt, so it starts at an arbitrary
+			// time — log the planned time and the gap to make that visible.
+			loggers.agent.info("Auto-refresh run starting", {
+				documentId,
+				trigger,
+				scheduledFor: new Date(scheduledFor).toISOString(),
+				delayMs: startedAt - scheduledFor,
+			});
 			await scheduleRunMemory?.createScheduleRun({
 				runId,
 				jobType: "SLOT_REFRESH",
 				jobKey: documentId,
 				trigger,
 				scheduledFor,
-				startedAt: Date.now(),
+				startedAt,
 				status: "running",
 				attempts: 0,
 			});
@@ -413,6 +431,9 @@ export class SchedulerService {
 							await this.workflowExecutionService.fillDocumentSlot(
 								documentId,
 								slotId,
+								{
+									initiator: { type: "schedule", trigger, scheduledFor, runId },
+								},
 							);
 						},
 					});
