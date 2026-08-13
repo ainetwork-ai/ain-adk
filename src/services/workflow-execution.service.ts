@@ -18,6 +18,7 @@ import {
 	type WorkflowTaskResult,
 	type WorkflowTemplate,
 } from "@/types/memory.js";
+import type { SlotFillInitiator } from "@/types/schedule.js";
 import type { StreamEvent } from "@/types/stream.js";
 import { renderDocument } from "@/utils/document-render.js";
 import { loggers } from "@/utils/logger.js";
@@ -640,6 +641,7 @@ export class WorkflowExecutionService {
 		options?: {
 			workflowId?: string;
 			executionVariables?: Record<string, string>;
+			initiator?: SlotFillInitiator;
 		},
 		signal?: AbortSignal,
 	): Promise<{ documentId: string; slotId: string; content: string }> {
@@ -669,6 +671,8 @@ export class WorkflowExecutionService {
 		options?: {
 			workflowId?: string;
 			executionVariables?: Record<string, string>;
+			/** Who initiated this fill; logged so unexpected fills are traceable. */
+			initiator?: SlotFillInitiator;
 		},
 		signal?: AbortSignal,
 	): AsyncGenerator<StreamEvent> {
@@ -722,6 +726,29 @@ export class WorkflowExecutionService {
 				`Workflow ${workflowId} has no structured definition; cannot fill slot`,
 			);
 		}
+
+		// Fills can fire long after their cause (boot catch-up, delayed tick), so
+		// name the initiator here — "the log stream suddenly shows a fill" must be
+		// answerable from this line alone.
+		const initiator = options?.initiator;
+		loggers.agent.info("Document slot fill started", {
+			documentId,
+			slotId,
+			workflowId,
+			workflowTitle: workflow.title,
+			initiatedBy: initiator?.type ?? "unknown",
+			...(initiator?.type === "schedule"
+				? {
+						scheduleTrigger: initiator.trigger,
+						scheduleRunId: initiator.runId,
+						scheduledFor: new Date(initiator.scheduledFor).toISOString(),
+						scheduleDelayMs: Date.now() - initiator.scheduledFor,
+					}
+				: {}),
+			...(initiator?.type === "manual" && initiator.userId
+				? { requestedBy: initiator.userId }
+				: {}),
+		});
 
 		await this.updateSlot(documentMemory, document, slotId, {
 			status: "running",

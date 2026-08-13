@@ -346,7 +346,16 @@ describe("SchedulerService — document auto refresh", () => {
 		);
 		await m.scheduler.runAutoRefreshJob("doc-1", "catchup", Date.now());
 		expect(m.workflowExecutionService.fillDocumentSlot).toHaveBeenCalledTimes(1);
-		expect(m.workflowExecutionService.fillDocumentSlot).toHaveBeenCalledWith("doc-1", "s2");
+		expect(m.workflowExecutionService.fillDocumentSlot).toHaveBeenCalledWith(
+			"doc-1",
+			"s2",
+			{
+				initiator: expect.objectContaining({
+					type: "schedule",
+					trigger: "catchup",
+				}),
+			},
+		);
 	});
 
 	it("records how the target set was derived, with a reason per excluded slot", async () => {

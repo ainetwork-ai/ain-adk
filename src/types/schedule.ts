@@ -80,6 +80,23 @@ export interface ScheduleRun {
 	noopReason?: ScheduleRunNoopReason;
 }
 
+/**
+ * Who initiated a document slot fill. Carried into the fill's start log so a
+ * fill appearing at an unexpected time is traceable to its origin: a
+ * scheduled auto-refresh run (with the run's trigger and planned fire time)
+ * vs. a manual fill API call (with the requesting user).
+ */
+export type SlotFillInitiator =
+	| {
+			type: "schedule";
+			trigger: ScheduleTrigger;
+			/** When the run was originally scheduled to fire (epoch ms). */
+			scheduledFor: number;
+			/** The schedule run this fill belongs to. */
+			runId: string;
+	  }
+	| { type: "manual"; userId?: string };
+
 export interface ScheduleRunFilter {
 	jobType?: ScheduleJobType;
 	jobKey?: string;

@@ -500,7 +500,11 @@ export class DocumentApiController {
 			const result = await this.workflowExecutionService.fillDocumentSlot(
 				id,
 				slotId,
-				{ workflowId, executionVariables },
+				{
+					workflowId,
+					executionVariables,
+					initiator: { type: "manual", userId },
+				},
 			);
 			// fillDocumentSlot throws on failure, so resolving here means the
 			// manual fill succeeded — reconcile it into the auto-refresh ledger
@@ -537,7 +541,11 @@ export class DocumentApiController {
 				return this.workflowExecutionService.fillDocumentSlotStream(
 					id,
 					slotId,
-					{ workflowId, executionVariables },
+					{
+						workflowId,
+						executionVariables,
+						initiator: { type: "manual", userId },
+					},
 					signal,
 				);
 			},
