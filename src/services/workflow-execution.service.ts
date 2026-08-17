@@ -26,7 +26,6 @@ import {
 	appendRichMessageToThread,
 	appendTextMessageToThread,
 } from "@/utils/thread-messages.js";
-import { injectDocumentContext } from "@/utils/workflow-document-context.js";
 import { workflowTaskLabel } from "@/utils/workflow-task-results.js";
 import type { ToolCallingService } from "./tool-calling.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
@@ -544,21 +543,27 @@ export class WorkflowExecutionService {
 			);
 		}
 
+		// The document IS the variable source: its labels become variables of
+		// the same name (so a new document kind needs no code change), the
+		// caller's executionVariables override them by name, and the rendered
+		// body arrives as {{document}}. Variable substitution is deep, so all
+		// three reach task AND response-block prompts alike.
+		const renderedContent = renderDocument(document);
 		const { definition } = this.workflowVariableResolver.resolveForDocumentFill(
 			workflow,
-			options.executionVariables,
+			{
+				...document.labels,
+				...options.executionVariables,
+				// Last on purpose: replacements apply in insertion order, so a
+				// later one would otherwise rewrite text inside the body.
+				document: renderedContent,
+			},
 		);
 		if (!definition) {
 			throw new Error(
 				`Workflow ${options.workflowId} has no valid structured definition; cannot generate advice`,
 			);
 		}
-
-		const renderedContent = renderDocument(document);
-		const definitionWithDocument = injectDocumentContext(
-			definition,
-			renderedContent,
-		);
 
 		const startedAt = Date.now();
 		loggers.agent.info("Generating document advice via workflow", {
@@ -582,7 +587,7 @@ export class WorkflowExecutionService {
 
 		const { finalContent, executionError } =
 			yield* this.renderStructuredDefinition(
-				definitionWithDocument,
+				definition,
 				thread,
 				options.workflowId,
 				signal,

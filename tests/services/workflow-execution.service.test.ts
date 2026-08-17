@@ -2,7 +2,7 @@ import type { MemoryModule, ModelModule } from "@/modules";
 import { WorkflowExecutionService } from "@/services/workflow-execution.service";
 import type { ToolCallingService } from "@/services/tool-calling.service";
 import type { UserWorkflowService } from "@/services/user-workflow.service";
-import type { WorkflowVariableResolver } from "@/services/workflow-variable-resolver.service";
+import { WorkflowVariableResolver } from "@/services/workflow-variable-resolver.service";
 import { type Document, DocumentFormat } from "@/types/document";
 import {
 	ThreadType,
@@ -601,13 +601,10 @@ function buildAdviceService(overrides: {
 	const userWorkflowService = {
 		getWorkflow: jest.fn(async () => undefined), // 템플릿 폴백 경로 사용
 	} as unknown as UserWorkflowService;
-	const resolver = {
-		resolveForDocumentFill: jest.fn(() => ({
-			query: "q",
-			displayQuery: "dq",
-			definition: template?.definition,
-		})),
-	} as unknown as WorkflowVariableResolver;
+	// Real resolver: the advice path relies on its deep variable substitution
+	// to reach response blocks, so a stub would hide the behavior under test.
+	const resolver = new WorkflowVariableResolver();
+	jest.spyOn(resolver, "resolveForDocumentFill");
 	const service = new WorkflowExecutionService(
 		userWorkflowService,
 		resolver,
@@ -705,6 +702,97 @@ describe("generateDocumentAdviceStream", () => {
 			.calls[0][0] as WorkflowDefinition;
 		expect(passedDefinition.tasks[0].prompt).toContain("오늘 매출 100만원");
 		expect(passedDefinition.tasks[0].prompt).not.toContain("{{document}}");
+	});
+
+	it("substitutes {{document}} in response block prompts", async () => {
+		const { service, renderSpy } = buildAdviceService({
+			template: {
+				definition: {
+					tasks: [],
+					response: {
+						blocks: [
+							{
+								blockId: "b1",
+								type: "text",
+								prompt: "이 일지를 근거로 조언해줘: {{document}}",
+							},
+						],
+					},
+				},
+			},
+			renderResult: {
+				finalContent: "ok",
+				renderedBlocks: [],
+				executionError: undefined,
+			},
+		});
+		for await (const _ of service.generateDocumentAdviceStream("d1", {
+			workflowId: "wf-advice",
+		})) {
+			// drain
+		}
+		const block = (renderSpy.mock.calls[0][0] as WorkflowDefinition).response
+			.blocks[0] as { prompt: string };
+		expect(block.prompt).toContain("오늘 매출 100만원");
+		expect(block.prompt).not.toContain("{{document}}");
+	});
+
+	it("substitutes document labels as variables in tasks and blocks", async () => {
+		const { service, renderSpy } = buildAdviceService({
+			document: { labels: { workplace: "피자힐", date: "2026-08-17" } },
+			template: {
+				definition: {
+					tasks: [
+						{ taskId: "t1", title: "조회", prompt: "{{workplace}} {{date}} 매출" },
+					],
+					response: {
+						blocks: [
+							{ blockId: "b1", type: "text", prompt: "{{workplace}} 조언" },
+						],
+					},
+				},
+			},
+			renderResult: {
+				finalContent: "ok",
+				renderedBlocks: [],
+				executionError: undefined,
+			},
+		});
+		for await (const _ of service.generateDocumentAdviceStream("d1", {
+			workflowId: "wf-advice",
+		})) {
+			// drain
+		}
+		const definition = renderSpy.mock.calls[0][0] as WorkflowDefinition;
+		expect(definition.tasks[0].prompt).toBe("피자힐 2026-08-17 매출");
+		expect((definition.response.blocks[0] as { prompt: string }).prompt).toBe(
+			"피자힐 조언",
+		);
+	});
+
+	it("lets executionVariables override a document label of the same name", async () => {
+		const { service, renderSpy } = buildAdviceService({
+			document: { labels: { workplace: "피자힐" } },
+			template: {
+				definition: {
+					tasks: [{ taskId: "t1", title: "조회", prompt: "{{store}}/{{workplace}}" }],
+					response: { blocks: [] },
+				},
+			},
+			renderResult: {
+				finalContent: "ok",
+				renderedBlocks: [],
+				executionError: undefined,
+			},
+		});
+		for await (const _ of service.generateDocumentAdviceStream("d1", {
+			workflowId: "wf-advice",
+			executionVariables: { store: "피자힐", workplace: "더글라스하우스" },
+		})) {
+			// drain
+		}
+		const definition = renderSpy.mock.calls[0][0] as WorkflowDefinition;
+		expect(definition.tasks[0].prompt).toBe("피자힐/더글라스하우스");
 	});
 
 	it("propagates execution errors without caching advice", async () => {
