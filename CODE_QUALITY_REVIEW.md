@@ -33,23 +33,34 @@
 
 ---
 
-### 2. Single/Multi Intent Trigger: 보일러플레이트 중복 (DRY)
+### 2. ✅ Single/Multi Intent Trigger: 보일러플레이트 중복 (DRY) — **완료 (2026-05-12)**
 
-[src/services/intents/single-trigger.service.ts](src/services/intents/single-trigger.service.ts)(109줄)와 [src/services/intents/multi-trigger.service.ts](src/services/intents/multi-trigger.service.ts)(126줄)의 구조가 거의 동일합니다.
+**원본 상태**: `single-trigger.service.ts`(109줄)와 `multi-trigger.service.ts`(126줄)의 흐름(생성자 / fallback / 직렬화 / 메시지 빌드 / 모델 호출 / JSON 파싱)이 거의 동일했고, 라우터 `trigger.service.ts`(50줄)가 환경 변수에 따라 둘 사이를 선택하는 구조였습니다. 실 차이는 **프롬프트 / 메시지 템플릿 / 응답 파싱 스키마**뿐이었습니다.
 
-겹치는 부분:
+**적용된 변경** ([src/services/intents/trigger.service.ts](src/services/intents/trigger.service.ts))
+- 라우터 + 두 서브 클래스(`SingleIntentTriggerService`, `MultiIntentTriggerService`)를 `IntentTriggerService` 한 클래스로 통합.
+- 모드별 차이만 `TriggerStrategy` 인터페이스에 캡슐화:
+  - `buildSystemPrompt(memory, intentList)`
+  - `buildTriggerMessage(threadMessages, query)`
+  - `parseResponse(content, query) → TriggerOutcome | null`
+  - `logIntentResult: boolean` (multi 모드만 결과 로그를 남기던 기존 동작 보존)
+- `singleStrategy` / `multiStrategy` 두 const 객체로 구현, 환경변수 `DISABLE_MULTI_INTENTS`로 선택.
+- 공통 흐름(intent 메모리 가드, intent 목록 직렬화, 모델 호출, intent 이름 → Intent 매핑, 빈 결과 fallback)은 `intentTriggering` 메서드 본체로 단일화.
+- 메시지 템플릿의 history preamble 부분도 `buildHistoryPreamble` 헬퍼로 추출.
+- `src/services/intents/single-trigger.service.ts`, `src/services/intents/multi-trigger.service.ts` **두 파일 삭제**.
 
-| 항목 | single | multi |
-|------|--------|-------|
-| 생성자 (modelModule, memoryModule) | [18-25](src/services/intents/single-trigger.service.ts#L18-L25) | [18-25](src/services/intents/multi-trigger.service.ts#L18-L25) |
-| intentMemory/intents 로드 + 빈 결과 fallback | [41-50](src/services/intents/single-trigger.service.ts#L41-L50) | [40-51](src/services/intents/multi-trigger.service.ts#L40-L51) |
-| intentList 직렬화, thread 직렬화 | [52-58](src/services/intents/single-trigger.service.ts#L52-L58) | [53-58](src/services/intents/multi-trigger.service.ts#L53-L58) |
-| triggerMessage 템플릿 (몇 단어만 다름) | [64-77](src/services/intents/single-trigger.service.ts#L64-L77) | [65-78](src/services/intents/multi-trigger.service.ts#L65-L78) |
-| generateMessages + fetch + JSON.parse fallback | [79-96](src/services/intents/single-trigger.service.ts#L79-L96) | [80-104](src/services/intents/multi-trigger.service.ts#L80-L104) |
+**결과**
+- 라인 수: 50 + 109 + 126 = **285줄 → 216줄** (약 69줄 감소, 파일 2개 삭제)
+- 외부 공개 API(`IntentTriggerService` 클래스 + `intentTriggering` 메서드) 변경 없음.
+- 신규 모드를 추가할 때 새 `TriggerStrategy` 객체만 작성하면 됨.
 
-실제 차이는 **프롬프트 1개**, **응답 파싱 스키마**, **결과 매핑 로직**뿐.
-
-**개선 제안**: 공통 베이스 클래스 `BaseIntentTriggerService` 또는 한 클래스 + 전략(strategy)으로 통합. parse + map 부분만 protected hook으로 노출.
+**회귀 가드 테스트 추가** ([tests/services/intents/trigger.service.test.ts](tests/services/intents/trigger.service.test.ts))
+- 리팩토링 이전에는 trigger 서비스 단위 테스트가 없었으므로 동작 동등성을 보장하기 위해 13건의 테스트를 신규로 추가:
+  - 공통 fallback 4건: intent 메모리 없음 / intent 목록 비어 있음 / 빈 응답 / JSON 파싱 실패
+  - 단일 모드 3건: subquery=원본 query / intentName 매핑 / 단일 프롬프트 템플릿
+  - 멀티 모드 4건: 전체 매핑 / 빈 subquery 필터링 / 응답 필드 누락 시 기본값 / 멀티 프롬프트 템플릿
+  - history preamble 2건: thread 메시지 포함 여부
+- 전체 22 suites / 110 tests 모두 통과.
 
 ---
 
@@ -158,7 +169,7 @@ reset() { this.instances.clear(); }
 | # | 상태 | 작업 | 영향 | 난이도 |
 |---|------|------|------|--------|
 | 1 | ✅ 완료 (2026-05-12) | `IntentFulfillService.intentFulfill` 분기 분해 + 공통 스트림 루프 추출 | 매우 큼 | 중 |
-| 2 |  | Single/Multi Intent Trigger 공통 베이스 추출 | 큼 | 낮음 |
+| 2 | ✅ 완료 (2026-05-12) | Single/Multi Intent Trigger 공통 베이스 추출 (서브 클래스 2개 제거, strategy 패턴 도입) | 큼 | 낮음 |
 | 3 |  | `Container`를 `memoize(key, factory)` 패턴으로 단순화 | 중간 (유지보수성) | 낮음 |
 | 4 |  | `QueryService.handleQuery`에서 PII reject / thread 생성 분리 | 중간 | 낮음 |
 | 5 |  | Model 호출 준비 패턴을 `ModelModule` 헬퍼로 통합 | 중간 | 낮음 |
