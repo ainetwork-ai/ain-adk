@@ -9,6 +9,7 @@ import {
 	createToolMessage,
 	createToolResultPart,
 	normalizeMessageObject,
+	normalizeMessageParts,
 	normalizeThreadMessages,
 	normalizeThreadObject,
 	serializeMessageForModelFallback,
@@ -354,5 +355,19 @@ describe("message utilities", () => {
 			schemaVersion: 2,
 			parts: [thoughtPart, toolCallPart, toolResultPart],
 		});
+	});
+
+	it("survives main-style document messages without throwing", () => {
+		const message = {
+			messageId: "m-doc",
+			role: MessageRole.MODEL,
+			timestamp: 1,
+			content: {
+				type: "document",
+				parts: [{ type: "document", documentId: "doc-1", title: "8월 보고서" }],
+			},
+		} as unknown as MessageObject;
+
+		expect(() => normalizeMessageParts(message)).not.toThrow();
 	});
 });
