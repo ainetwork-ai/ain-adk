@@ -14,7 +14,7 @@ Primary goals:
 
 ## Progress Snapshot
 
-Last updated: `2026-04-20`
+Last updated: `2026-08-19`
 
 Completed groundwork so far:
 
@@ -87,6 +87,9 @@ Completed groundwork so far:
 - added thread-level legacy message read adapters that expose canonical `schemaVersion: 2` message views
 - normalized thread read and write boundaries in thread, query, and thread API services
 - added focused tests covering legacy thread message reads, canonicalized writes, and query intent processing compatibility
+- added `DocumentContentPart` so main's rich document messages map into the canonical part union
+- added `LocalArtifactStore`, the first concrete `IArtifactStore` implementation (filesystem binary + JSON metadata sidecar, sha256 checksum, synchronous preview text for text-like mime types)
+- exported `LocalArtifactStore` from the public module surface and added focused store tests
 
 Not completed yet:
 

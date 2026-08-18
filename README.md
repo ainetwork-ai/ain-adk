@@ -66,6 +66,7 @@ interface AINAgentModules {
   modelModule: ModelModule;    // Required - AI model integrations
   memoryModule: MemoryModule;  // Required - thread/intent/workflow storage
   artifactModule?: ArtifactModule; // Optional - artifact storage and download handling
+  // e.g. new ArtifactModule(new LocalArtifactStore({ baseDir: "./artifacts" }))
   a2aModule?: A2AModule;       // Optional - agent-to-agent communication
   mcpModule?: MCPModule;       // Optional - MCP server connections
 }
