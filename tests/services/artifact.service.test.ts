@@ -146,6 +146,63 @@ describe("ArtifactService", () => {
 		expect(openDownload).toHaveBeenCalledWith("art-1");
 	});
 
+	it("deletes artifacts the user owns", async () => {
+		const del = jest.fn(async () => {});
+
+		const service = new ArtifactService({
+			getStore: () =>
+				({
+					get: async () => ({
+						artifactId: "art-1",
+						userId: "user-1",
+						status: "ready" as const,
+						name: "report.pdf",
+						mimeType: "application/pdf",
+						size: 1024,
+						storageKey: "artifacts/report.pdf",
+						createdAt: 100,
+					}),
+					put: jest.fn(),
+					delete: del,
+					openDownload: jest.fn(),
+				}) as any,
+		} as any);
+
+		await expect(service.deleteArtifact("user-1", "art-1")).resolves.toBeUndefined();
+		expect(del).toHaveBeenCalledWith("art-1");
+	});
+
+	it("rejects deletion of another user's artifact", async () => {
+		const del = jest.fn(async () => {});
+
+		const service = new ArtifactService({
+			getStore: () =>
+				({
+					get: async () => ({
+						artifactId: "art-1",
+						userId: "other-user",
+						status: "ready" as const,
+						name: "report.pdf",
+						mimeType: "application/pdf",
+						size: 1024,
+						storageKey: "artifacts/report.pdf",
+						createdAt: 100,
+					}),
+					put: jest.fn(),
+					delete: del,
+					openDownload: jest.fn(),
+				}) as any,
+		} as any);
+
+		await expect(service.deleteArtifact("user-1", "art-1")).rejects.toMatchObject(
+			{
+				message: "Artifact access denied",
+				code: "ARTIFACT_ACCESS_DENIED",
+			},
+		);
+		expect(del).not.toHaveBeenCalled();
+	});
+
 	it("resolves query artifact parts with store metadata", async () => {
 		const get = jest.fn(async () => ({
 			artifactId: "art-1",

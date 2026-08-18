@@ -44,6 +44,11 @@ export const createArtifactApiRouter = (): Router => {
 		checkArtifactModule,
 		artifactApiController.handleDownloadArtifact,
 	);
+	router.delete(
+		"/:id",
+		checkArtifactModule,
+		artifactApiController.handleDeleteArtifact,
+	);
 
 	return router;
 };

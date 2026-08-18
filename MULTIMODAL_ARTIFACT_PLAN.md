@@ -90,6 +90,7 @@ Completed groundwork so far:
 - added `DocumentContentPart` so main's rich document messages map into the canonical part union
 - added `LocalArtifactStore`, the first concrete `IArtifactStore` implementation (filesystem binary + JSON metadata sidecar, sha256 checksum, synchronous preview text for text-like mime types)
 - exported `LocalArtifactStore` from the public module surface and added focused store tests
+- added `DELETE /api/artifacts/:id` with ownership checks, completing the optional artifact CRUD surface
 
 Not completed yet:
 
