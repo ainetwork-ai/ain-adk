@@ -106,13 +106,22 @@ export type ThoughtContentPart = {
 	description?: string;
 };
 
+export type DocumentContentPart = {
+	kind: "document";
+	/** Resolved against the document store, not the artifact store. */
+	documentId: string;
+	/** Label hint for rendering (e.g. link text). Not the canonical title. */
+	title?: string;
+};
+
 export type MessageContentPart =
 	| TextContentPart
 	| ArtifactContentPart
 	| DataContentPart
 	| ToolCallContentPart
 	| ToolResultContentPart
-	| ThoughtContentPart;
+	| ThoughtContentPart
+	| DocumentContentPart;
 
 type MessageBase = {
 	messageId: string;

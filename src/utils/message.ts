@@ -4,6 +4,7 @@ import type {
 	CanonicalMessageObject,
 	CanonicalThreadObject,
 	DataContentPart,
+	DocumentContentPart,
 	LegacyMessageObject,
 	MessageContentPart,
 	MessageObject,
@@ -98,6 +99,16 @@ function normalizeThoughtPart(
 	};
 }
 
+function normalizeDocumentPart(
+	part: Record<string, unknown>,
+): DocumentContentPart {
+	return {
+		kind: "document",
+		documentId: String(part.documentId ?? ""),
+		title: typeof part.title === "string" ? part.title : undefined,
+	};
+}
+
 function normalizeKnownPart(
 	part: Record<string, unknown>,
 ): MessageContentPart | undefined {
@@ -106,6 +117,8 @@ function normalizeKnownPart(
 			return normalizeTextPart(part.text);
 		case "artifact":
 			return normalizeArtifactPart(part);
+		case "document":
+			return normalizeDocumentPart(part);
 		case "data":
 			return normalizeDataPart(part);
 		case "tool-call":
@@ -127,6 +140,16 @@ function normalizeLegacyContentPart(
 		const normalized = normalizeKnownPart(part);
 		if (normalized) {
 			return normalized;
+		}
+	}
+
+	// Main-style rich parts discriminate on `type` instead of `kind`.
+	if (isRecord(part) && typeof part.type === "string") {
+		if (part.type === "document" && typeof part.documentId === "string") {
+			return normalizeDocumentPart(part);
+		}
+		if (part.type === "text" && typeof part.text === "string") {
+			return normalizeTextPart(part.text);
 		}
 	}
 
@@ -374,6 +397,12 @@ export function serializePartForModelFallback(
 			return part.description
 				? `${part.title}\n${part.description}`
 				: part.title;
+		case "document":
+			// Body is never embedded; expose the reference so the model knows
+			// an attached document exists.
+			return part.title
+				? `[Document: ${part.title} (${part.documentId})]`
+				: `[Document: ${part.documentId}]`;
 	}
 }
 

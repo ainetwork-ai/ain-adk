@@ -370,4 +370,38 @@ describe("message utilities", () => {
 
 		expect(() => normalizeMessageParts(message)).not.toThrow();
 	});
+
+	it("maps main-style rich document parts to canonical document parts", () => {
+		const message = {
+			messageId: "m-rich",
+			role: MessageRole.MODEL,
+			timestamp: 1,
+			content: {
+				type: "rich",
+				parts: [
+					{ type: "text", text: "보고서가 준비되었습니다." },
+					{ type: "document", documentId: "doc-1", title: "8월 보고서" },
+				],
+			},
+		} as unknown as MessageObject;
+
+		expect(normalizeMessageParts(message)).toEqual([
+			{ kind: "text", text: "보고서가 준비되었습니다." },
+			{ kind: "document", documentId: "doc-1", title: "8월 보고서" },
+		]);
+	});
+
+	it("passes through canonical document parts", () => {
+		const message = {
+			messageId: "m-canon",
+			role: MessageRole.MODEL,
+			timestamp: 1,
+			schemaVersion: 2,
+			parts: [{ kind: "document", documentId: "doc-2" }],
+		} as unknown as MessageObject;
+
+		expect(normalizeMessageParts(message)).toEqual([
+			{ kind: "document", documentId: "doc-2" },
+		]);
+	});
 });
