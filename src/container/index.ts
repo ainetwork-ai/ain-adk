@@ -8,6 +8,7 @@ import {
 import { getOnIntentFallback } from "@/config/options";
 import { AgentApiController } from "@/controllers/api/agent.api.controller";
 import { ArtifactApiController } from "@/controllers/api/artifact.api.controller";
+import { DocumentApiController } from "@/controllers/api/document.api.controller";
 import { IntentApiController } from "@/controllers/api/intent.api.controller";
 import { ModelApiController } from "@/controllers/api/model.api.controller";
 import { ThreadApiController } from "@/controllers/api/threads.api.controller";
@@ -17,8 +18,10 @@ import { IntentController } from "@/controllers/intent.controller";
 import { QueryController } from "@/controllers/query.controller";
 import { A2AService } from "@/services/a2a.service";
 import { ArtifactService } from "@/services/artifact.service";
+import { DocumentAdviceService } from "@/services/document-advice.service";
 import { IntentFulfillService } from "@/services/intents/fulfill.service";
 import { IntentTriggerService } from "@/services/intents/trigger.service";
+import { JobRunnerService } from "@/services/job-runner.service";
 import { PIIService } from "@/services/pii.service";
 import { QueryService } from "@/services/query.service";
 import { SchedulerService } from "@/services/scheduler.service";
@@ -48,7 +51,9 @@ class Container {
 	private _userWorkflowCoordinatorService?: UserWorkflowCoordinatorService;
 	private _workflowExecutionService?: WorkflowExecutionService;
 	private _workflowVariableResolver?: WorkflowVariableResolver;
+	private _jobRunnerService?: JobRunnerService;
 	private _schedulerService?: SchedulerService;
+	private _documentAdviceService?: DocumentAdviceService;
 
 	// Controllers
 	private _queryController?: QueryController;
@@ -60,6 +65,7 @@ class Container {
 	private _intentApiController?: IntentApiController;
 	private _workflowTemplateApiController?: WorkflowTemplateApiController;
 	private _userWorkflowApiController?: UserWorkflowApiController;
+	private _documentApiController?: DocumentApiController;
 
 	getThreadService(): ThreadService {
 		if (!this._threadService) {
@@ -104,6 +110,7 @@ class Container {
 				this.getToolCallingService(),
 				getOnIntentFallback(),
 				this.getPIIService(),
+				this.getWorkflowExecutionService(),
 			);
 		}
 		return this._intentFulfillService;
@@ -160,7 +167,6 @@ class Container {
 		if (!this._workflowExecutionService) {
 			this._workflowExecutionService = new WorkflowExecutionService(
 				this.getUserWorkflowService(),
-				this.getQueryService(),
 				this.getWorkflowVariableResolver(),
 				getModelModule(),
 				getMemoryModule(),
@@ -178,11 +184,20 @@ class Container {
 		return this._workflowVariableResolver;
 	}
 
+	getJobRunnerService(): JobRunnerService {
+		if (!this._jobRunnerService) {
+			this._jobRunnerService = new JobRunnerService();
+		}
+		return this._jobRunnerService;
+	}
+
 	getSchedulerService(): SchedulerService {
 		if (!this._schedulerService) {
 			this._schedulerService = new SchedulerService(
 				this.getUserWorkflowService(),
 				this.getWorkflowExecutionService(),
+				this.getJobRunnerService(),
+				getMemoryModule(),
 			);
 		}
 		return this._schedulerService;
@@ -266,6 +281,28 @@ class Container {
 		return this._userWorkflowApiController;
 	}
 
+	getDocumentAdviceService(): DocumentAdviceService {
+		if (!this._documentAdviceService) {
+			this._documentAdviceService = new DocumentAdviceService(
+				getModelModule(),
+				getMemoryModule(),
+			);
+		}
+		return this._documentAdviceService;
+	}
+
+	getDocumentApiController(): DocumentApiController {
+		if (!this._documentApiController) {
+			this._documentApiController = new DocumentApiController(
+				getMemoryModule(),
+				this.getWorkflowExecutionService(),
+				this.getDocumentAdviceService(),
+				this.getSchedulerService(),
+			);
+		}
+		return this._documentApiController;
+	}
+
 	/**
 	 * Reset all instances (useful for testing)
 	 */
@@ -282,7 +319,9 @@ class Container {
 		this._userWorkflowCoordinatorService = undefined;
 		this._workflowExecutionService = undefined;
 		this._workflowVariableResolver = undefined;
+		this._jobRunnerService = undefined;
 		this._schedulerService = undefined;
+		this._documentAdviceService = undefined;
 
 		this._queryController = undefined;
 		this._intentController = undefined;
@@ -293,6 +332,7 @@ class Container {
 		this._intentApiController = undefined;
 		this._workflowTemplateApiController = undefined;
 		this._userWorkflowApiController = undefined;
+		this._documentApiController = undefined;
 	}
 }
 

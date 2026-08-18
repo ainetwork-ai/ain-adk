@@ -11,6 +11,11 @@ export type SSEStreamOptions = {
 		threadId: string,
 		data: Extract<StreamEvent, { event: "thinking_process" }>["data"],
 	) => Promise<void> | void;
+	/**
+	 * Called once the stream has been fully consumed with no error and no
+	 * client-initiated abort — i.e. on successful completion only.
+	 */
+	onComplete?: () => Promise<void> | void;
 	setup: (signal: AbortSignal) => Promise<AsyncIterable<StreamEvent>>;
 };
 
@@ -63,10 +68,28 @@ export async function streamEventsToSSE(
 				`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`,
 			);
 		}
+		if (!abortController.signal.aborted) {
+			await options.onComplete?.();
+		}
 	} catch (error: unknown) {
 		const errMsg =
 			(error as Error)?.message || `Failed to handle ${options.logLabel}`;
-		res.write(`event: error\ndata: ${JSON.stringify({ message: errMsg })}\n\n`);
+		// Carry the HTTP status (when the error is an AinHttpError) so the client
+		// can distinguish e.g. 403 (no permission) from a generic failure — the
+		// SSE headers are already sent, so it can't come back as a real status.
+		const status = (error as { status?: number })?.status;
+		// The error only reaches the client as an SSE event; without this log a
+		// failed stream leaves no server-side trace at all.
+		loggers.intentStream.error(`${options.logLabel} failed`, {
+			userId: options.userId,
+			threadId: currentThreadId,
+			status,
+			error: errMsg,
+			...options.logContext,
+		});
+		res.write(
+			`event: error\ndata: ${JSON.stringify({ message: errMsg, status })}\n\n`,
+		);
 	} finally {
 		clearInterval(keepaliveInterval);
 		res.end();

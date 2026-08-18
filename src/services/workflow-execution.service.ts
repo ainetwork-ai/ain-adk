@@ -1,23 +1,38 @@
 import { randomUUID } from "node:crypto";
 import type { A2AModule, MemoryModule, ModelModule } from "@/modules";
 import {
+	type Document,
+	DocumentFormat,
+	type DocumentFragment,
+	type DocumentSlot,
+	DocumentSource,
+} from "@/types/document.js";
+import {
 	MessageRole,
 	type ThreadMetadata,
 	type ThreadObject,
 	ThreadType,
 	type UserWorkflow,
+	type WorkflowDefinition,
 	type WorkflowRenderedBlock,
 	type WorkflowTaskResult,
+	type WorkflowTemplate,
 } from "@/types/memory.js";
+import type { SlotFillInitiator } from "@/types/schedule.js";
 import type { StreamEvent } from "@/types/stream.js";
+import { renderDocument } from "@/utils/document-render.js";
 import { loggers } from "@/utils/logger.js";
-import { appendTextMessageToThread } from "@/utils/thread-messages.js";
-import type { QueryService } from "./query.service.js";
+import {
+	appendRichMessageToThread,
+	appendTextMessageToThread,
+} from "@/utils/thread-messages.js";
+import { workflowTaskLabel } from "@/utils/workflow-task-results.js";
 import type { ToolCallingService } from "./tool-calling.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
 import { WorkflowResponseComposer } from "./workflow-response-composer.service.js";
 import { WorkflowTableService } from "./workflow-table.service.js";
 import { WorkflowTaskRunner } from "./workflow-task-runner.service.js";
+import { WorkflowVariableExtractionService } from "./workflow-variable-extraction.service.js";
 import type { WorkflowVariableResolver } from "./workflow-variable-resolver.service.js";
 
 type WorkflowExecutionResult = {
@@ -27,15 +42,14 @@ type WorkflowExecutionResult = {
 
 export class WorkflowExecutionService {
 	private userWorkflowService: UserWorkflowService;
-	private queryService: QueryService;
 	private workflowVariableResolver: WorkflowVariableResolver;
 	private memoryModule: MemoryModule;
 	private workflowTaskRunner: WorkflowTaskRunner;
 	private workflowResponseComposer: WorkflowResponseComposer;
+	private workflowVariableExtraction: WorkflowVariableExtractionService;
 
 	constructor(
 		userWorkflowService: UserWorkflowService,
-		queryService: QueryService,
 		workflowVariableResolver: WorkflowVariableResolver,
 		modelModule: ModelModule,
 		memoryModule: MemoryModule,
@@ -43,7 +57,6 @@ export class WorkflowExecutionService {
 		a2aModule?: A2AModule,
 	) {
 		this.userWorkflowService = userWorkflowService;
-		this.queryService = queryService;
 		this.workflowVariableResolver = workflowVariableResolver;
 		this.memoryModule = memoryModule;
 		this.workflowTaskRunner = new WorkflowTaskRunner(
@@ -54,6 +67,9 @@ export class WorkflowExecutionService {
 		this.workflowResponseComposer = new WorkflowResponseComposer(
 			modelModule,
 			new WorkflowTableService(),
+		);
+		this.workflowVariableExtraction = new WorkflowVariableExtractionService(
+			modelModule,
 		);
 	}
 
@@ -98,8 +114,9 @@ export class WorkflowExecutionService {
 			);
 
 		if (!definition) {
-			yield* this.executeLegacyWorkflowStream(workflow, query, displayQuery);
-			return;
+			throw new Error(
+				`Workflow ${workflowId} has no valid structured definition; legacy content execution is no longer supported`,
+			);
 		}
 
 		loggers.agent.info(
@@ -126,6 +143,190 @@ export class WorkflowExecutionService {
 			},
 		};
 
+		const { finalContent, renderedBlocks, executionError } =
+			yield* this.renderStructuredDefinition(
+				definition,
+				thread,
+				workflowId,
+				signal,
+			);
+
+		const responseContent =
+			finalContent || (executionError ? `오류: ${executionError.message}` : "");
+		try {
+			const documentMemory = this.memoryModule.getDocumentMemory();
+			if (documentMemory && !executionError && finalContent) {
+				// Promote the workflow result to a first-class document and
+				// reference it from the thread (body is resolved on demand).
+				const documentId = randomUUID();
+				const now = new Date().toISOString();
+				await documentMemory.createDocument({
+					documentId,
+					userId: workflow.userId,
+					title: thread.title,
+					format: DocumentFormat.MARKDOWN,
+					content: finalContent,
+					blocks: renderedBlocks,
+					source: DocumentSource.WORKFLOW,
+					workflowId,
+					threadId: thread.threadId,
+					version: 1,
+					createdAt: now,
+					updatedAt: now,
+				});
+				await appendRichMessageToThread(
+					this.memoryModule,
+					thread,
+					MessageRole.MODEL,
+					[{ type: "document", documentId, title: thread.title }],
+					{
+						workflowId,
+						workflowRun: true,
+						documentId,
+					},
+				);
+			} else {
+				// No document memory (or execution failed): keep the legacy
+				// inline text message with structured blocks in metadata.
+				await appendTextMessageToThread(
+					this.memoryModule,
+					thread,
+					MessageRole.MODEL,
+					responseContent,
+					{
+						workflowId,
+						workflowRun: true,
+						responseBlocks: renderedBlocks,
+						...(executionError ? { error: executionError.message } : {}),
+					},
+				);
+			}
+		} catch (saveError) {
+			loggers.agent.error("Failed to save workflow response message", {
+				workflowId,
+				threadId: thread.threadId,
+				error: saveError,
+			});
+		}
+
+		try {
+			await this.userWorkflowService.updateWorkflow(workflowId, {
+				userId: workflow.userId,
+				lastRunAt: Date.now(),
+				lastThreadId: thread.threadId,
+			});
+		} catch (updateError) {
+			loggers.agent.error("Failed to update workflow lastRunAt", {
+				workflowId,
+				error: updateError,
+			});
+		}
+
+		if (executionError) {
+			throw executionError;
+		}
+	}
+
+	/**
+	 * Runs an intent-mapped workflow and streams its progress into the chat
+	 * stream. Unlike {@link executeWorkflowStream}, this does NOT create or
+	 * persist a workflow thread, document, or lastRunAt bookkeeping — the
+	 * chat thread (persisted by the intent fulfillment path) is the only
+	 * artifact. Accepts a user workflow id or a template id, like slot
+	 * bindings. Variable values are extracted from the subquery via one LLM
+	 * call and merged over the workflow's stored variableValues. Setup
+	 * failures (unknown id, no definition) throw before the first yield so
+	 * callers can fall back; task failures throw after streaming.
+	 */
+	async *executeIntentWorkflowStream(
+		workflowId: string,
+		chatThread: ThreadObject,
+		subquery: string,
+		signal?: AbortSignal,
+	): AsyncGenerator<StreamEvent> {
+		const workflow = await this.getFillableWorkflow(workflowId);
+		if (!workflow) {
+			throw new Error(`User workflow or template not found: ${workflowId}`);
+		}
+
+		const variables = this.workflowVariableResolver.normalizeVariables(
+			workflow.variables,
+		);
+		let extractedVariables: Record<string, string> | undefined;
+		if (variables && Object.keys(variables).length > 0) {
+			extractedVariables =
+				await this.workflowVariableExtraction.extractFromQuery(
+					variables,
+					subquery,
+					"timezone" in workflow ? workflow.timezone : undefined,
+				);
+		}
+
+		// Document-fill semantics: an intent-mapped run has no creation step,
+		// so every provided value applies regardless of its declared
+		// resolveAt; values the model couldn't extract fall back to the
+		// workflow's stored variableValues.
+		const { definition } = this.workflowVariableResolver.resolveForDocumentFill(
+			workflow,
+			extractedVariables,
+		);
+		if (!definition) {
+			throw new Error(
+				`Workflow ${workflowId} has no valid structured definition; cannot fulfill intent`,
+			);
+		}
+
+		loggers.agent.info("Executing intent-mapped workflow", {
+			workflowId,
+			workflowTitle: workflow.title,
+			taskCount: definition.tasks.length,
+			chatThreadId: chatThread.threadId,
+			extractedVariableIds: Object.keys(extractedVariables ?? {}),
+		});
+
+		// Ephemeral, non-persisted thread: carries threadId for A2A correlation
+		// and task context, but is never written to the thread store.
+		const thread: ThreadObject = {
+			type: ThreadType.WORKFLOW,
+			userId: chatThread.userId,
+			threadId: randomUUID(),
+			title: workflow.title,
+			workflowId,
+			messages: [],
+		};
+
+		const { executionError } = yield* this.renderStructuredDefinition(
+			definition,
+			thread,
+			workflowId,
+			signal,
+		);
+
+		if (executionError) {
+			throw executionError;
+		}
+	}
+
+	/**
+	 * Runs a structured workflow definition (tasks → response blocks) against a
+	 * thread context, streaming progress events. Never throws — any failure is
+	 * captured and returned as `executionError` so callers can decide how to
+	 * persist the (partial) result.
+	 */
+	private async *renderStructuredDefinition(
+		definition: WorkflowDefinition,
+		thread: ThreadObject,
+		workflowId: string,
+		signal?: AbortSignal,
+	): AsyncGenerator<
+		StreamEvent,
+		{
+			finalContent: string;
+			renderedBlocks: WorkflowRenderedBlock[];
+			executionError?: Error;
+		},
+		unknown
+	> {
 		const taskResults: Record<string, WorkflowTaskResult> = {};
 		const renderedBlocks: WorkflowRenderedBlock[] = [];
 		let finalContent = "";
@@ -136,7 +337,7 @@ export class WorkflowExecutionService {
 			yield {
 				event: "thinking_process",
 				data: {
-					title: `[워크플로우] ${workflow.title}`,
+					title: "[워크플로우] 실행",
 					description: "워크플로우 실행을 시작합니다.",
 					metadata: {
 						phase: "workflow_start",
@@ -154,7 +355,7 @@ export class WorkflowExecutionService {
 				if (firstFailedTaskId) {
 					taskResults[task.taskId] = {
 						taskId: task.taskId,
-						title: task.title,
+						title: workflowTaskLabel(task),
 						agent: task.agent,
 						status: "skipped",
 						content: "",
@@ -165,7 +366,7 @@ export class WorkflowExecutionService {
 					yield {
 						event: "thinking_process",
 						data: {
-							title: `[워크플로우] 작업 건너뜀: ${task.title}`,
+							title: `[워크플로우] 작업 건너뜀: ${workflowTaskLabel(task)}`,
 							description: `이전 작업(${firstFailedTaskId}) 실패로 인해 건너뜁니다.`,
 							metadata: {
 								phase: "task_skipped",
@@ -179,7 +380,7 @@ export class WorkflowExecutionService {
 				}
 
 				loggers.agent.debug(
-					`Workflow task starting (${i + 1}/${definition.tasks.length}): ${task.title}`,
+					`Workflow task starting (${i + 1}/${definition.tasks.length}): ${workflowTaskLabel(task)}`,
 					{
 						workflowId,
 						threadId: thread.threadId,
@@ -203,7 +404,7 @@ export class WorkflowExecutionService {
 								workflowId,
 								threadId: thread.threadId,
 								taskId: task.taskId,
-								taskTitle: task.title,
+								taskTitle: workflowTaskLabel(task),
 								deltaPreview: result.value.data.delta.slice(0, 200),
 							},
 						);
@@ -214,7 +415,7 @@ export class WorkflowExecutionService {
 				}
 				taskResults[task.taskId] = result.value;
 				loggers.agent.debug(
-					`Workflow task finished (${i + 1}/${definition.tasks.length}): ${task.title}`,
+					`Workflow task finished (${i + 1}/${definition.tasks.length}): ${workflowTaskLabel(task)}`,
 					{
 						workflowId,
 						threadId: thread.threadId,
@@ -295,101 +496,344 @@ export class WorkflowExecutionService {
 				);
 			}
 
-			loggers.agent.info(
-				`Structured user workflow completed: ${workflow.title}`,
-				{
-					workflowId,
-					threadId: thread.threadId,
-				},
-			);
+			loggers.agent.info("Structured workflow definition completed", {
+				workflowId,
+				threadId: thread.threadId,
+			});
 		} catch (error) {
 			executionError =
 				error instanceof Error ? error : new Error(String(error));
-			loggers.agent.error(
-				`Structured user workflow failed: ${workflow.title}`,
-				{
-					workflowId,
-					threadId: thread.threadId,
-					error: executionError.message,
-				},
-			);
-		} finally {
-			const responseContent =
-				finalContent ||
-				(executionError ? `오류: ${executionError.message}` : "");
-			try {
-				await appendTextMessageToThread(
-					this.memoryModule,
-					thread,
-					MessageRole.MODEL,
-					responseContent,
-					{
-						workflowId,
-						workflowRun: true,
-						responseBlocks: renderedBlocks,
-						...(executionError ? { error: executionError.message } : {}),
-					},
-				);
-			} catch (saveError) {
-				loggers.agent.error("Failed to save workflow response message", {
-					workflowId,
-					threadId: thread.threadId,
-					error: saveError,
-				});
-			}
-
-			try {
-				await this.userWorkflowService.updateWorkflow(workflowId, {
-					userId: workflow.userId,
-					lastRunAt: Date.now(),
-					lastThreadId: thread.threadId,
-				});
-			} catch (updateError) {
-				loggers.agent.error("Failed to update workflow lastRunAt", {
-					workflowId,
-					error: updateError,
-				});
-			}
+			loggers.agent.error("Structured workflow definition failed", {
+				workflowId,
+				threadId: thread.threadId,
+				error: executionError.message,
+			});
 		}
 
-		if (executionError) {
-			throw executionError;
-		}
+		return { finalContent, renderedBlocks, executionError };
 	}
 
-	private async *executeLegacyWorkflowStream(
-		workflow: UserWorkflow,
-		query: string,
-		displayQuery: string,
+	/**
+	 * Generates AI advice for a document by running the bound advice workflow
+	 * over the document's rendered content, then caches the result on
+	 * `document.advice`. Mirrors {@link fillDocumentSlotStream}: ephemeral
+	 * non-persisted thread — the advice field is the only artifact.
+	 */
+	async *generateDocumentAdviceStream(
+		documentId: string,
+		options: {
+			workflowId: string;
+			executionVariables?: Record<string, string>;
+		},
+		signal?: AbortSignal,
 	): AsyncGenerator<StreamEvent> {
-		loggers.agent.info(`Executing legacy user workflow: ${workflow.title}`, {
-			workflowId: workflow.workflowId,
-			resolvedQuery: query,
-		});
-
-		let threadId: string | undefined;
-		const stream = this.queryService.handleQuery(
-			{
-				type: ThreadType.WORKFLOW,
-				userId: workflow.userId,
-				workflowId: workflow.workflowId,
-				title: workflow.title,
-			},
-			{ query, displayQuery },
-		);
-
-		for await (const event of stream) {
-			if (event.event === "thread_id") {
-				threadId = event.data.threadId;
-			}
-			yield event;
+		const documentMemory = this.memoryModule.getDocumentMemory();
+		if (!documentMemory) {
+			throw new Error("Document memory is not initialized");
+		}
+		const document = await documentMemory.getDocument(documentId);
+		if (!document) {
+			throw new Error(`Document not found: ${documentId}`);
 		}
 
-		await this.userWorkflowService.updateWorkflow(workflow.workflowId, {
-			userId: workflow.userId,
-			lastRunAt: Date.now(),
-			lastThreadId: threadId,
+		const workflow = await this.getFillableWorkflow(options.workflowId);
+		if (!workflow) {
+			throw new Error(
+				`User workflow or template not found: ${options.workflowId}`,
+			);
+		}
+
+		// The document IS the variable source: its labels become variables of
+		// the same name (so a new document kind needs no code change), the
+		// caller's executionVariables override them by name, and the rendered
+		// body arrives as {{document}}. Variable substitution is deep, so all
+		// three reach task AND response-block prompts alike.
+		const renderedContent = renderDocument(document);
+		const { definition } = this.workflowVariableResolver.resolveForDocumentFill(
+			workflow,
+			{
+				...document.labels,
+				...options.executionVariables,
+				// Last on purpose: replacements apply in insertion order, so a
+				// later one would otherwise rewrite text inside the body.
+				document: renderedContent,
+			},
+		);
+		if (!definition) {
+			throw new Error(
+				`Workflow ${options.workflowId} has no valid structured definition; cannot generate advice`,
+			);
+		}
+
+		const startedAt = Date.now();
+		loggers.agent.info("Generating document advice via workflow", {
+			documentId,
+			workflowId: options.workflowId,
+			workflowTitle: workflow.title,
+			taskCount: definition.tasks.length,
+			contentLength: renderedContent.length,
 		});
+
+		// Ephemeral, non-persisted thread: carries threadId for A2A correlation
+		// and task context, but is never written to the thread store.
+		const thread: ThreadObject = {
+			type: ThreadType.WORKFLOW,
+			userId: document.userId,
+			threadId: randomUUID(),
+			title: workflow.title,
+			workflowId: options.workflowId,
+			messages: [],
+		};
+
+		const { finalContent, executionError } =
+			yield* this.renderStructuredDefinition(
+				definition,
+				thread,
+				options.workflowId,
+				signal,
+			);
+
+		if (executionError) {
+			// renderStructuredDefinition already logged the task-level failure;
+			// this ties it to the advice request before the SSE layer reports it.
+			loggers.agent.error("Document advice workflow failed", {
+				documentId,
+				workflowId: options.workflowId,
+				durationMs: Date.now() - startedAt,
+				error: executionError.message,
+			});
+			throw executionError;
+		}
+		if (!finalContent.trim()) {
+			loggers.agent.warn("Document advice workflow produced no content", {
+				documentId,
+				workflowId: options.workflowId,
+				durationMs: Date.now() - startedAt,
+			});
+			return;
+		}
+
+		try {
+			// Persist only the advice (metadata); do NOT bump version off a
+			// pre-stream read, which could clobber a concurrent edit (lost update).
+			await documentMemory.updateDocument(documentId, {
+				advice: {
+					content: finalContent,
+					generatedAt: new Date().toISOString(),
+				},
+			});
+		} catch (saveError) {
+			loggers.agent.error("Failed to cache document advice", {
+				documentId,
+				error: saveError,
+			});
+		}
+
+		loggers.agent.info("Document advice generated via workflow", {
+			documentId,
+			workflowId: options.workflowId,
+			adviceLength: finalContent.length,
+			durationMs: Date.now() - startedAt,
+		});
+	}
+
+	/**
+	 * Non-streaming variant of {@link fillDocumentSlotStream}.
+	 */
+	async fillDocumentSlot(
+		documentId: string,
+		slotId: string,
+		options?: {
+			workflowId?: string;
+			executionVariables?: Record<string, string>;
+			initiator?: SlotFillInitiator;
+		},
+		signal?: AbortSignal,
+	): Promise<{ documentId: string; slotId: string; content: string }> {
+		let content = "";
+		for await (const event of this.fillDocumentSlotStream(
+			documentId,
+			slotId,
+			options,
+			signal,
+		)) {
+			if (event.event === "text_chunk") {
+				content += event.data.delta;
+			}
+		}
+		return { documentId, slotId, content };
+	}
+
+	/**
+	 * Fills a single document slot by running its bound workflow (or an
+	 * explicitly provided one). Unlike {@link executeWorkflowStream}, this does
+	 * NOT create or persist a thread — the document slot is the only artifact.
+	 * Progress is streamed live but not persisted anywhere.
+	 */
+	async *fillDocumentSlotStream(
+		documentId: string,
+		slotId: string,
+		options?: {
+			workflowId?: string;
+			executionVariables?: Record<string, string>;
+			/** Who initiated this fill; logged so unexpected fills are traceable. */
+			initiator?: SlotFillInitiator;
+		},
+		signal?: AbortSignal,
+	): AsyncGenerator<StreamEvent> {
+		const documentMemory = this.memoryModule.getDocumentMemory();
+		if (!documentMemory) {
+			throw new Error("Document memory is not initialized");
+		}
+
+		const document = await documentMemory.getDocument(documentId);
+		if (!document) {
+			throw new Error(`Document not found: ${documentId}`);
+		}
+
+		const slot = document.slots?.find((s) => s.slotId === slotId);
+		if (!slot) {
+			throw new Error(`Document slot not found: ${documentId}/${slotId}`);
+		}
+
+		// Resolve which workflow fills this slot (explicit override > binding).
+		const workflowId =
+			options?.workflowId ??
+			(slot.binding?.type === "WORKFLOW" ? slot.binding.workflowId : undefined);
+		if (!workflowId) {
+			throw new Error(
+				`No workflow bound to slot ${documentId}/${slotId}; provide workflowId`,
+			);
+		}
+		const executionVariables =
+			options?.executionVariables ??
+			(slot.binding?.type === "WORKFLOW"
+				? slot.binding.executionVariables
+				: undefined);
+
+		yield {
+			event: "document_id",
+			data: { documentId, slotId },
+		};
+
+		// A slot may bind to either a user workflow or a workflow template.
+		const workflow = await this.getFillableWorkflow(workflowId);
+		if (!workflow) {
+			throw new Error(`User workflow or template not found: ${workflowId}`);
+		}
+
+		const { definition } = this.workflowVariableResolver.resolveForDocumentFill(
+			workflow,
+			executionVariables,
+		);
+		if (!definition) {
+			throw new Error(
+				`Workflow ${workflowId} has no structured definition; cannot fill slot`,
+			);
+		}
+
+		// Fills can fire long after their cause (boot catch-up, delayed tick), so
+		// name the initiator here — "the log stream suddenly shows a fill" must be
+		// answerable from this line alone.
+		const initiator = options?.initiator;
+		loggers.agent.info("Document slot fill started", {
+			documentId,
+			slotId,
+			workflowId,
+			workflowTitle: workflow.title,
+			initiatedBy: initiator?.type ?? "unknown",
+			...(initiator?.type === "schedule"
+				? {
+						scheduleTrigger: initiator.trigger,
+						scheduleRunId: initiator.runId,
+						scheduledFor: new Date(initiator.scheduledFor).toISOString(),
+						scheduleDelayMs: Date.now() - initiator.scheduledFor,
+					}
+				: {}),
+			...(initiator?.type === "manual" && initiator.userId
+				? { requestedBy: initiator.userId }
+				: {}),
+		});
+
+		await this.updateSlot(documentMemory, document, slotId, {
+			status: "running",
+			error: undefined,
+		});
+
+		// Ephemeral, non-persisted thread: carries threadId for A2A correlation
+		// and task context, but is never written to the thread store.
+		const thread: ThreadObject = {
+			type: ThreadType.WORKFLOW,
+			userId: document.userId,
+			threadId: randomUUID(),
+			title: workflow.title,
+			workflowId,
+			messages: [],
+		};
+
+		const { finalContent, renderedBlocks, executionError } =
+			yield* this.renderStructuredDefinition(
+				definition,
+				thread,
+				workflowId,
+				signal,
+			);
+
+		if (executionError || !finalContent) {
+			await this.updateSlot(documentMemory, document, slotId, {
+				status: "failed",
+				error: executionError?.message ?? "No content produced",
+			});
+			if (executionError) {
+				throw executionError;
+			}
+			return;
+		}
+
+		const fragment: DocumentFragment = {
+			content: finalContent,
+			blocks: renderedBlocks,
+			source: { type: "WORKFLOW", workflowId },
+			resolvedAt: new Date().toISOString(),
+		};
+		await this.updateSlot(documentMemory, document, slotId, {
+			status: "resolved",
+			fragment,
+			error: undefined,
+		});
+	}
+
+	/**
+	 * Atomically patches a single slot via the memory layer. Must NOT rebuild
+	 * the whole slots array from `document` (a snapshot taken when the fill
+	 * started): concurrent fills of other slots would clobber each other's
+	 * results. `updateDocumentSlot` targets only the matched slot and bumps
+	 * `version`/`updatedAt` in the same write.
+	 */
+	private async updateSlot(
+		documentMemory: NonNullable<ReturnType<MemoryModule["getDocumentMemory"]>>,
+		document: Document,
+		slotId: string,
+		patch: Partial<DocumentSlot>,
+	): Promise<void> {
+		await documentMemory.updateDocumentSlot(document.documentId, slotId, patch);
+	}
+
+	/**
+	 * Resolves a slot binding's `workflowId` to a runnable workflow, accepting
+	 * either a user workflow or a workflow template. User workflows take
+	 * precedence; falls back to a template with the same id.
+	 */
+	private async getFillableWorkflow(
+		workflowId: string,
+	): Promise<UserWorkflow | WorkflowTemplate | undefined> {
+		const userWorkflow = await this.userWorkflowService.getWorkflow(workflowId);
+		if (userWorkflow) {
+			return userWorkflow;
+		}
+		return this.memoryModule
+			.getWorkflowTemplateMemory()
+			.getTemplate(workflowId);
 	}
 
 	private async createWorkflowThread(

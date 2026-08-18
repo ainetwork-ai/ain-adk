@@ -275,13 +275,15 @@ describe("IntentFulfillService", () => {
 
 	it("emits canonical tool events for MCP tool execution while preserving provider append fallback", async () => {
 		let streamCallCount = 0;
-		const appendMessages = jest.fn();
+		const appendAssistantToolCallTurn = jest.fn();
+		const appendToolResult = jest.fn();
 		const useTool = jest.fn(async () => "tool result text");
 		const modelModule = {
 			getModel: () => ({
 				generateMessages: () => [],
 				convertToolsToFunctions: () => [],
-				appendMessages,
+				appendAssistantToolCallTurn,
+				appendToolResult,
 				fetchStreamWithContextMessage: async () => {
 					const isToolRequest = streamCallCount === 0;
 					streamCallCount += 1;
@@ -410,7 +412,15 @@ describe("IntentFulfillService", () => {
 			expect.objectContaining({ toolName: "search" }),
 			{ query: "hello" },
 		);
-		expect(appendMessages).toHaveBeenCalledWith([], "tool result text");
+		expect(appendAssistantToolCallTurn).toHaveBeenCalledWith(
+			[],
+			expect.objectContaining({ content: null }),
+		);
+		expect(appendToolResult).toHaveBeenCalledWith([], {
+			toolCallId: "tool-call-1",
+			toolName: "search",
+			content: "tool result text",
+		});
 		expect(finalMessage).toMatchObject({
 			role: MessageRole.MODEL,
 			schemaVersion: 2,
@@ -420,12 +430,14 @@ describe("IntentFulfillService", () => {
 
 	it("emits canonical tool events for A2A tool execution", async () => {
 		let streamCallCount = 0;
-		const appendMessages = jest.fn();
+		const appendAssistantToolCallTurn = jest.fn();
+		const appendToolResult = jest.fn();
 		const modelModule = {
 			getModel: () => ({
 				generateMessages: () => [],
 				convertToolsToFunctions: () => [],
-				appendMessages,
+				appendAssistantToolCallTurn,
+				appendToolResult,
 				fetchStreamWithContextMessage: async () => {
 					const isToolRequest = streamCallCount === 0;
 					streamCallCount += 1;
@@ -553,6 +565,10 @@ describe("IntentFulfillService", () => {
 				},
 			},
 		});
-		expect(appendMessages).toHaveBeenCalledWith([], "remote result text");
+		expect(appendToolResult).toHaveBeenCalledWith([], {
+			toolCallId: "a2a-call-1",
+			toolName: "remote_agent",
+			content: "remote result text",
+		});
 	});
 });

@@ -54,7 +54,7 @@ export class QueryController {
 		res: Response,
 		next: NextFunction,
 	) => {
-		const { type, threadId, workflowId, title } = req.body;
+		const { type, threadId, workflowId, title, documentIds } = req.body;
 		const userId = res.locals.userId;
 
 		try {
@@ -62,7 +62,7 @@ export class QueryController {
 				await this.normalizeAndResolveInput(req.body, userId);
 			const stream = this.queryService.handleQuery(
 				{ type, userId, threadId, workflowId, title },
-				{ input, query, displayQuery },
+				{ input, query, displayQuery, documentIds },
 			);
 
 			let responseThreadId = threadId;
@@ -96,7 +96,7 @@ export class QueryController {
 		res: Response,
 		next: NextFunction,
 	) => {
-		const { type, threadId, workflowId, title } = req.body;
+		const { type, threadId, workflowId, title, documentIds } = req.body;
 		const userId = res.locals.userId;
 		let input: QueryMessageInput;
 		let query: string;
@@ -118,7 +118,7 @@ export class QueryController {
 			setup: async () =>
 				this.queryService.handleQuery(
 					{ type, userId, threadId, workflowId, title },
-					{ input, query, displayQuery },
+					{ input, query, displayQuery, documentIds },
 				),
 			onThinkingProcess: async (currentThreadId, data) => {
 				// a2a 호출에 대해서는 데이터베이스에 추가하지 않기 위해 여기서 thread message에 기록

@@ -5,17 +5,20 @@ export { AuthModule } from "./auth/auth.module.js";
 export { MCPModule } from "./mcp/mcp.module.js";
 export type {
 	IAgentMemory,
+	IDocumentMemory,
 	IIntentMemory,
 	IMemory,
+	IScheduleRunMemory,
 	IThreadMemory,
 	IUserWorkflowMemory,
 	IWorkflowTemplateMemory,
 } from "./memory/base.memory.js";
 export { MemoryModule } from "./memory/memory.module.js";
 export {
+	type AssistantToolCallTurn,
 	BaseModel,
-	type ModelAppendMessageInput,
 	type ModelFetchOptions,
 	type ModelGenerateMessagesParams,
+	type ToolResultMessage,
 } from "./models/base.model.js";
 export { ModelModule } from "./models/model.module.js";

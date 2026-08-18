@@ -32,6 +32,7 @@ export type QueryExecutionInput = {
 	query: string;
 	displayQuery?: string;
 	input?: QueryMessageInput;
+	documentIds?: string[];
 };
 
 /**

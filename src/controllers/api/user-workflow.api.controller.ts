@@ -5,7 +5,9 @@ import type { UserWorkflowService } from "@/services/user-workflow.service.js";
 import type { UserWorkflowCoordinatorService } from "@/services/user-workflow-coordinator.service.js";
 import type { WorkflowExecutionService } from "@/services/workflow-execution.service.js";
 import { AinHttpError } from "@/types/agent.js";
+import type { PaginatedResult } from "@/types/list.js";
 import { MessageRole, type UserWorkflow } from "@/types/memory.js";
+import { parseListOptions } from "@/utils/parse-list-options.js";
 import { streamEventsToSSE } from "@/utils/sse-stream.js";
 
 export class UserWorkflowApiController {
@@ -38,14 +40,51 @@ export class UserWorkflowApiController {
 	}
 
 	public handleGetAllWorkflows = async (
-		_req: Request,
+		req: Request,
 		res: Response,
 		next: NextFunction,
 	) => {
 		try {
 			const userId = res.locals.userId || "";
-			const workflows = await this.userWorkflowService.listWorkflows(userId);
-			res.json(workflows);
+			const listOptions = parseListOptions(
+				req.query as Record<string, unknown>,
+			);
+			if (!listOptions) {
+				res.json(await this.userWorkflowService.listWorkflows(userId));
+				return;
+			}
+			const [fetched, count] = await Promise.all([
+				this.userWorkflowService.listWorkflows(userId, listOptions),
+				this.userWorkflowService.countWorkflows(userId),
+			]);
+			let items = fetched;
+			let total = count;
+			if (total === undefined) {
+				// Legacy provider ignored the options and returned everything —
+				// emulate the same sort/slice contract here.
+				const updatedAtMs = (w: UserWorkflow): number => {
+					if (!w.updatedAt) return 0;
+					const t = new Date(w.updatedAt).getTime();
+					return Number.isNaN(t) ? 0 : t;
+				};
+				const sorted = [...fetched].sort(
+					(a, b) =>
+						updatedAtMs(b) - updatedAtMs(a) ||
+						b.workflowId.localeCompare(a.workflowId),
+				);
+				total = sorted.length;
+				items = sorted.slice(
+					listOptions.offset,
+					listOptions.offset + listOptions.limit,
+				);
+			}
+			const body: PaginatedResult<UserWorkflow> = {
+				items,
+				total,
+				limit: listOptions.limit,
+				offset: listOptions.offset,
+			};
+			res.json(body);
 		} catch (error) {
 			next(error);
 		}
@@ -74,6 +113,12 @@ export class UserWorkflowApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const workflowData = req.body as UserWorkflow;
+			if (!workflowData.definition) {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					"definition is required",
+				);
+			}
 			const created = await this.userWorkflowCoordinatorService.createWorkflow({
 				...workflowData,
 				userId,
@@ -95,12 +140,17 @@ export class UserWorkflowApiController {
 			const { id } = req.params as { id: string };
 			await this.getAuthorizedWorkflow(userId, id);
 			const updates = req.body as Partial<UserWorkflow>;
-			await this.userWorkflowCoordinatorService.updateWorkflow(id, {
-				...updates,
-				userId,
-			});
+			const updated = await this.userWorkflowCoordinatorService.updateWorkflow(
+				id,
+				{
+					...updates,
+					userId,
+				},
+			);
 
-			res.status(StatusCodes.OK).send();
+			// 갱신된 워크플로우(재스케줄 후 nextRunAt 포함)를 돌려줘야 클라이언트가
+			// 재조회 없이 예약 상태를 갱신할 수 있다. (기존: 빈 200 응답)
+			res.status(StatusCodes.OK).json(updated ?? null);
 		} catch (error) {
 			next(error);
 		}

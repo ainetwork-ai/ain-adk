@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { MemoryModule } from "@/modules/index.js";
+import type { ListOptions } from "@/types/list.js";
 import type { UserWorkflow } from "@/types/memory.js";
 import type { WorkflowVariableResolver } from "./workflow-variable-resolver.service.js";
 
@@ -32,6 +33,11 @@ export class UserWorkflowService {
 		};
 		const { content, title, definition } =
 			this.workflowVariableResolver.resolveForCreation(normalizedWorkflow);
+		if (!definition) {
+			throw new Error(
+				"Workflow definition is required: structured definition missing or invalid",
+			);
+		}
 
 		const newWorkflow: UserWorkflow = {
 			...normalizedWorkflow,
@@ -70,9 +76,18 @@ export class UserWorkflowService {
 		return memory.getUserWorkflow(workflowId);
 	}
 
-	async listWorkflows(userId?: string): Promise<UserWorkflow[]> {
+	async listWorkflows(
+		userId?: string,
+		options?: ListOptions,
+	): Promise<UserWorkflow[]> {
 		const memory = this.memoryModule.getUserWorkflowMemory();
-		return memory.listUserWorkflows(userId);
+		return memory.listUserWorkflows(userId, options);
+	}
+
+	/** undefined = provider has no count support (legacy). */
+	async countWorkflows(userId?: string): Promise<number | undefined> {
+		const memory = this.memoryModule.getUserWorkflowMemory();
+		return memory.countUserWorkflows?.(userId);
 	}
 
 	async listActiveScheduledWorkflows(): Promise<UserWorkflow[]> {

@@ -1,4 +1,12 @@
 import type {
+	Document,
+	DocumentFilter,
+	DocumentFilterSet,
+	DocumentListOptions,
+	DocumentSlot,
+} from "@/types/document";
+import type { ListOptions } from "@/types/list";
+import type {
 	Intent,
 	MessageObject,
 	ThreadFilter,
@@ -8,6 +16,7 @@ import type {
 	UserWorkflow,
 	WorkflowTemplate,
 } from "@/types/memory";
+import type { ScheduleRun, ScheduleRunFilter } from "@/types/schedule";
 
 /**
  * Memory connection interface - manages the underlying connection
@@ -21,6 +30,15 @@ export interface IMemory {
 	getAgentMemory(): IAgentMemory;
 	getWorkflowTemplateMemory(): IWorkflowTemplateMemory;
 	getUserWorkflowMemory(): IUserWorkflowMemory;
+	/**
+	 * Document storage. Optional for backward compatibility — memory
+	 * implementations that predate documents may omit it.
+	 */
+	getDocumentMemory?(): IDocumentMemory;
+	/**
+	 * Schedule run history. Optional for backward compatibility.
+	 */
+	getScheduleRunMemory?(): IScheduleRunMemory;
 }
 
 /**
@@ -72,6 +90,7 @@ export interface IAgentMemory {
 	updateAgentPrompt?(prompt: string): Promise<void>;
 	getAggregatePrompt?(): Promise<string>;
 	getGenerateTitlePrompt?(): Promise<string>;
+	getDocumentAdvicePrompt?(): Promise<string>;
 	getSingleTriggerPrompt?(): Promise<string>;
 	getMultiTriggerPrompt?(): Promise<string>;
 	getToolSelectPrompt?(): Promise<string>;
@@ -104,7 +123,83 @@ export interface IUserWorkflowMemory {
 		workflow: Partial<UserWorkflow>,
 	): Promise<void>;
 	deleteUserWorkflow(workflowId: string, userId: string): Promise<void>;
-	listUserWorkflows(userId?: string): Promise<UserWorkflow[]>;
+	/**
+	 * When `options` is given, implementations sort by `updatedAt` desc and
+	 * apply offset/limit at the store. Implementations that also provide
+	 * countUserWorkflows are trusted to honor `options`; without it the
+	 * controller re-sorts/slices in memory (legacy providers ignore options).
+	 */
+	listUserWorkflows(
+		userId?: string,
+		options?: ListOptions,
+	): Promise<UserWorkflow[]>;
+	/** Total workflows for the user. Ships with ListOptions support above. */
+	countUserWorkflows?(userId?: string): Promise<number>;
 	/** List all active scheduled workflows across all users (used by scheduler) */
 	listActiveScheduledWorkflows(): Promise<UserWorkflow[]>;
+}
+
+/**
+ * Document memory interface - handles document persistence.
+ *
+ * Documents are first-class, mutable entities referenced from threads.
+ */
+export interface IDocumentMemory {
+	getDocument(documentId: string): Promise<Document | undefined>;
+	createDocument(document: Document): Promise<Document>;
+	updateDocument(
+		documentId: string,
+		document: Partial<Document>,
+	): Promise<void>;
+	/**
+	 * Atomically patch a single slot of a document. Concurrent fills of
+	 * different slots must not clobber each other, so implementations MUST
+	 * target only the matched slot (e.g. Mongo's positional `$` operator)
+	 * rather than rewriting the whole `slots` array from a caller snapshot,
+	 * and MUST bump `version`/`updatedAt` in the same write. Keys whose value
+	 * is `undefined` are removed from the slot.
+	 */
+	updateDocumentSlot(
+		documentId: string,
+		slotId: string,
+		patch: Partial<DocumentSlot>,
+	): Promise<void>;
+	deleteDocument(documentId: string): Promise<void>;
+	listDocuments(userId?: string, filter?: DocumentFilter): Promise<Document[]>;
+	/**
+	 * Union (OR) of filter sets in a single query, sorted `updatedAt` desc.
+	 * Enables correct DB-level skip/limit/count across RBAC scopes. Optional:
+	 * when absent the controller falls back to per-set listDocuments plus
+	 * in-memory merge/sort/slice.
+	 */
+	listDocumentsAny?(
+		filters: DocumentFilterSet[],
+		options?: DocumentListOptions,
+	): Promise<Document[]>;
+	/** Total count for the union of filter sets. Ships with listDocumentsAny. */
+	countDocumentsAny?(filters: DocumentFilterSet[]): Promise<number>;
+	/** Documents with an active, incomplete autoRefresh (used by the scheduler). */
+	listAutoRefreshPendingDocuments?(): Promise<Document[]>;
+	/** Atomically append a slot to autoRefresh.doneSlotIds ($addToSet semantics). */
+	markAutoRefreshSlotDone?(documentId: string, slotId: string): Promise<void>;
+	/** Stamp autoRefresh.completedAt (job finished, never re-runs). */
+	completeAutoRefresh?(documentId: string, completedAt: number): Promise<void>;
+}
+
+/**
+ * Schedule run memory interface - execution history of scheduled jobs.
+ */
+export interface IScheduleRunMemory {
+	createScheduleRun(run: ScheduleRun): Promise<void>;
+	updateScheduleRun(runId: string, patch: Partial<ScheduleRun>): Promise<void>;
+	/** Newest first (startedAt desc). */
+	listScheduleRuns(
+		filter?: ScheduleRunFilter,
+		limit?: number,
+	): Promise<ScheduleRun[]>;
+	/**
+	 * Mark runs stuck in "running" (process died mid-run) as failed with
+	 * error "interrupted". Returns the number of runs updated.
+	 */
+	failInterruptedRuns(): Promise<number>;
 }

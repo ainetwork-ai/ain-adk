@@ -1,7 +1,9 @@
 import type {
 	IAgentMemory,
+	IDocumentMemory,
 	IIntentMemory,
 	IMemory,
+	IScheduleRunMemory,
 	IThreadMemory,
 	IUserWorkflowMemory,
 	IWorkflowTemplateMemory,
@@ -42,5 +44,17 @@ export class MemoryModule {
 
 	public getUserWorkflowMemory(): IUserWorkflowMemory {
 		return this.memory.getUserWorkflowMemory();
+	}
+
+	/**
+	 * Document storage. Returns undefined when the underlying memory
+	 * implementation does not support documents.
+	 */
+	public getDocumentMemory(): IDocumentMemory | undefined {
+		return this.memory.getDocumentMemory?.();
+	}
+
+	public getScheduleRunMemory(): IScheduleRunMemory | undefined {
+		return this.memory.getScheduleRunMemory?.();
 	}
 }

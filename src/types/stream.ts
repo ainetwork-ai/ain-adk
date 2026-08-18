@@ -69,6 +69,10 @@ export type StreamEvent =
 	  }
 	| { event: "error"; data: { message: string } }
 	| { event: "thread_id"; data: ThreadMetadata }
+	| {
+			event: "document_id";
+			data: { documentId: string; slotId: string };
+	  }
 	| { event: "intent_process"; data: { subquery: string; actionPlan: string } }
 	| { event: "collection_name"; data: { name: string } }
 	| {
@@ -90,6 +94,21 @@ export interface ToolCallDelta {
 	function?: {
 		name?: string;
 		arguments?: string;
+	};
+}
+
+/**
+ * A fully-assembled tool call reconstructed from a streamed assistant turn.
+ *
+ * The `id` is provider-issued and is the join key between the assistant's
+ * tool call and the corresponding tool result message that follows.
+ */
+export interface AssembledToolCall {
+	id: string;
+	type: "function";
+	function: {
+		name: string;
+		arguments: string;
 	};
 }
 

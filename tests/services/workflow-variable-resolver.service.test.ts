@@ -131,6 +131,85 @@ describe("WorkflowVariableResolver", () => {
 		);
 	});
 
+	it("rejects heading blocks without text", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [],
+			response: {
+				blocks: [
+					{
+						blockId: "1. WPC 쿠폰(금액권) 사용 분석 (단위: 개)",
+						type: "heading",
+						level: 2,
+						text: "",
+					},
+				],
+			},
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			AinHttpError,
+		);
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			'Heading block "1. WPC 쿠폰(금액권) 사용 분석 (단위: 개)" must use a non-empty text string.',
+		);
+	});
+
+	it("rejects tasks missing a prompt", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [{ taskId: "fetch", title: "조회" }],
+			response: { blocks: [] },
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			AinHttpError,
+		);
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			'Task "fetch" must use a non-empty prompt string.',
+		);
+	});
+
+	it("accepts tasks without a title", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition: WorkflowDefinition = {
+			tasks: [{ taskId: "fetch", prompt: "데이터를 조회한다." }],
+			response: { blocks: [] },
+		};
+
+		expect(resolver.normalizeDefinition(definition)).toEqual(definition);
+	});
+
+	it("rejects tasks with a non-string title", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [{ taskId: "fetch", title: 123, prompt: "데이터를 조회한다." }],
+			response: { blocks: [] },
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			AinHttpError,
+		);
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			'Task "fetch" title must be a string.',
+		);
+	});
+
+	it("rejects tasks missing a taskId", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [{ title: "조회", prompt: "데이터를 조회한다." }],
+			response: { blocks: [] },
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			AinHttpError,
+		);
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			"Workflow task at index 0 must use a non-empty taskId string.",
+		);
+	});
+
 	it("applies stored execution-time variableValues and lets executionVariables override them", () => {
 		const resolver = new WorkflowVariableResolver();
 
@@ -180,6 +259,137 @@ describe("WorkflowVariableResolver", () => {
 		expect(result.definition?.tasks[0].prompt).toMatch(
 			/^날짜 \d{4}-\d{2}-\d{2} \/ 매장 hongdae$/,
 		);
+	});
+
+	describe("resolveForDocumentFill", () => {
+		it("substitutes provided variables regardless of resolveAt declaration, including undeclared keys", () => {
+			const resolver = new WorkflowVariableResolver();
+
+			const result = resolver.resolveForDocumentFill(
+				{
+					title: "{{workplace}} 매출",
+					content: "{{workplace}} / {{date}} / {{plu}}",
+					timezone: "Asia/Seoul",
+					// workplace declared as creation, date/plu not declared at all.
+					variables: {
+						workplace: {
+							id: "workplace",
+							label: "매장",
+							type: "text",
+							resolveAt: "creation",
+						},
+					},
+					definition: {
+						tasks: [
+							{
+								taskId: "fetch",
+								title: "조회",
+								prompt: "매장 {{workplace}} 일자 {{date}} 품목 {{plu}}",
+							},
+						],
+						response: { blocks: [] },
+					},
+				},
+				{ workplace: "온달", date: "2026-06-16", plu: "1234" },
+			);
+
+			expect(result.query).toBe("온달 / 2026-06-16 / 1234");
+			expect(result.displayQuery).toBe("온달 매출");
+			expect(result.definition?.tasks[0].prompt).toBe(
+				"매장 온달 일자 2026-06-16 품목 1234",
+			);
+		});
+
+		it("treats empty and whitespace-only provided values as not provided so workflow defaults survive", () => {
+			const resolver = new WorkflowVariableResolver();
+
+			const result = resolver.resolveForDocumentFill(
+				{
+					title: "리포트",
+					content: "매장 {{workplace}} 품목 {{plu}} 채널 {{channel}}",
+					timezone: "Asia/Seoul",
+					variables: {
+						plu: {
+							id: "plu",
+							label: "품목",
+							type: "text",
+							resolveAt: "execution",
+						},
+						channel: {
+							id: "channel",
+							label: "채널",
+							type: "text",
+							resolveAt: "execution",
+						},
+					},
+					variableValues: { plu: "0000", channel: "전체" },
+					definition: { tasks: [], response: { blocks: [] } },
+				},
+				{ workplace: "온달", plu: "", channel: "   " },
+			);
+
+			expect(result.query).toBe("매장 온달 품목 0000 채널 전체");
+		});
+
+		it("still resolves built-in template tokens in the workflow body", () => {
+			const resolver = new WorkflowVariableResolver();
+
+			const result = resolver.resolveForDocumentFill(
+				{
+					title: "리포트",
+					content: "{{workplace}} {{today}}",
+					timezone: "Asia/Seoul",
+					definition: { tasks: [], response: { blocks: [] } },
+				},
+				{ workplace: "온달" },
+			);
+
+			expect(result.query).toMatch(/^온달 \d{4}-\d{2}-\d{2}$/);
+		});
+	});
+
+	it("replaces placeholders by variable id as well as variable key", () => {
+		const resolver = new WorkflowVariableResolver();
+
+		const result = resolver.resolveForExecution({
+			title: "{{년도}}년 {{월}}월 리포트",
+			content: "기간={{년도}}-{{월}}",
+			timezone: "Asia/Seoul",
+			variables: {
+				year: {
+					id: "년도",
+					label: "년도",
+					type: "text",
+					resolveAt: "execution",
+				},
+				month: {
+					id: "월",
+					label: "월",
+					type: "text",
+					resolveAt: "execution",
+				},
+			},
+			variableValues: {
+				year: "2026",
+				month: "04",
+			},
+			definition: {
+				tasks: [
+					{
+						taskId: "fetch",
+						title: "조회",
+						prompt: "{{년도}}년 {{월}}월 데이터 조회",
+					},
+				],
+				response: {
+					blocks: [],
+				},
+			},
+		});
+
+		expect(result.displayQuery).toBe("2026년 04월 리포트");
+		expect(result.query).toBe("기간=2026-04");
+		expect(result.definition?.tasks[0].prompt).toBe("2026년 04월 데이터 조회");
 	});
 
 	it("replaces workflow variable offsets inside table rows and columns", () => {
@@ -253,5 +463,74 @@ describe("WorkflowVariableResolver", () => {
 				options: ["A", "B"],
 			},
 		});
+	});
+
+	it("accepts matrix table blocks with valid rowFormats unchanged", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition: WorkflowDefinition = {
+			tasks: [],
+			response: {
+				blocks: [
+					{
+						blockId: "share-format",
+						type: "table",
+						layout: "matrix",
+						rowHeader: "구분",
+						rows: ["매출", "비중"],
+						columns: ["1월", "합계"],
+						formulas: ["비중 = row_share(매출, 합계)"],
+						rowFormats: { 비중: { decimals: 0 } },
+					},
+				],
+			},
+		};
+
+		expect(resolver.normalizeDefinition(definition)).toEqual(definition);
+	});
+
+	it("rejects rowFormats on non-matrix table blocks", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [],
+			response: {
+				blocks: [
+					{
+						blockId: "store-sales",
+						type: "table",
+						layout: "records",
+						columns: ["store"],
+						rowFormats: { store: { decimals: 0 } },
+					},
+				],
+			},
+		} as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			'Table block "store-sales" supports rowFormats only with layout: matrix.',
+		);
+	});
+
+	it("rejects rowFormats entries with invalid shape", () => {
+		const resolver = new WorkflowVariableResolver();
+		const definition = {
+			tasks: [],
+			response: {
+				blocks: [
+					{
+						blockId: "share-format",
+						type: "table",
+						layout: "matrix",
+						rowHeader: "구분",
+						rows: ["비중"],
+						columns: ["1월"],
+						rowFormats: { 비중: { kind: "money" } },
+					},
+				],
+			},
+		} as unknown as WorkflowDefinition;
+
+		expect(() => resolver.normalizeDefinition(definition)).toThrow(
+			'Table block "share-format" rowFormats.비중.kind is invalid.',
+		);
 	});
 });

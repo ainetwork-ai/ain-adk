@@ -9,7 +9,12 @@ import { setManifest } from "./config/manifest";
 import { setModules } from "./config/modules";
 import { setOptions } from "./config/options";
 import { AuthMiddleware } from "./middlewares/auth.middleware";
+import { createAuthzMiddleware } from "./middlewares/authz.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
+import {
+	accessLogMiddleware,
+	requestContextMiddleware,
+} from "./middlewares/request-context.middleware";
 import type {
 	A2AModule,
 	ArtifactModule,
@@ -21,6 +26,8 @@ import type {
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
 import type { AinAgentManifest, OnIntentFallback } from "./types/agent";
+import type { AuthzConfig } from "./types/authz";
+import { interceptConsole } from "./utils/logger";
 
 export type {
 	AinAgentManifest,
@@ -67,6 +74,7 @@ export class AINAgent {
 	public artifactModule?: ArtifactModule;
 	public a2aModule?: A2AModule;
 	public mcpModule?: MCPModule;
+	public authz?: AuthzConfig;
 
 	/** Optional fallback handler when intent matching fails */
 	public onIntentFallback?: OnIntentFallback;
@@ -94,12 +102,22 @@ export class AINAgent {
 			artifactModule?: ArtifactModule;
 			a2aModule?: A2AModule;
 			mcpModule?: MCPModule;
+			authz?: AuthzConfig;
 		},
 		options?: {
 			onIntentFallback?: OnIntentFallback;
 		},
 	) {
+		// Mirror console.log/warn/error into the log file (no-op without
+		// LOG_FILE_PATH) so start/shutdown banners are part of the log record.
+		interceptConsole();
+
 		this.app = express();
+		// Express 5 defaults the query parser to "simple", which does not parse
+		// nested/bracket params (e.g. `?labels[category]=logbook`). Use the
+		// "extended" parser so faceted filters like DocumentFilter.labels are
+		// decoded into nested objects on req.query.
+		this.app.set("query parser", "extended");
 
 		// Set manifest
 		this.manifest = manifest;
@@ -112,6 +130,7 @@ export class AINAgent {
 		this.mcpModule = modules.mcpModule;
 		this.memoryModule = modules.memoryModule;
 		this.authModule = modules.authModule;
+		this.authz = modules.authz;
 		this.onIntentFallback = options?.onIntentFallback;
 
 		// Set global modules for easy access
@@ -145,6 +164,10 @@ export class AINAgent {
 	 * Also applies authentication middleware if configured.
 	 */
 	private initializeMiddlewares(): void {
+		// First so the whole request chain (auth included) shares one
+		// AsyncLocalStorage context and every completion gets an access log.
+		this.app.use(requestContextMiddleware());
+		this.app.use(accessLogMiddleware());
 		this.app.use(helmet());
 		this.app.use(cors());
 		this.app.use(express.json({ limit: "25mb" }));
@@ -226,6 +249,9 @@ export class AINAgent {
 	 */
 	private initializeRoutes = (): void => {
 		const auth = new AuthMiddleware(this.authModule);
+		const authorize = this.authz
+			? createAuthzMiddleware(this.authz.resolver, this.authz.routes)
+			: undefined;
 
 		this.app.get("/", async (_, res: Response) => {
 			const { name, description } = this.manifest;
@@ -253,9 +279,13 @@ export class AINAgent {
 			},
 		);
 
-		this.app.use("/query", auth.middleware(), createQueryRouter());
-		this.app.use("/intent", auth.middleware(), createIntentRouter());
-		this.app.use("/api", auth.middleware(), createApiRouter());
+		const guards = authorize
+			? [auth.middleware(), authorize]
+			: [auth.middleware()];
+
+		this.app.use("/query", ...guards, createQueryRouter());
+		this.app.use("/intent", ...guards, createIntentRouter());
+		this.app.use("/api", ...guards, createApiRouter());
 
 		if (isValidUrl(this.manifest.url)) {
 			this.app.use("/a2a", createA2ARouter());

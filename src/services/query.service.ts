@@ -16,6 +16,7 @@ import {
 } from "@/types/memory.js";
 import type { QueryExecutionInput } from "@/types/message-input";
 import type { StreamEvent } from "@/types/stream";
+import { injectAttachedDocuments } from "@/utils/attached-documents.js";
 import { loggers } from "@/utils/logger.js";
 import {
 	createMessageFromQueryInput,
@@ -23,6 +24,7 @@ import {
 	createModelInputMessageFromQueryInput,
 	normalizeThreadObject,
 } from "@/utils/message";
+import { updateRequestContext } from "@/utils/request-context.js";
 import { persistTextMessage } from "@/utils/thread-messages.js";
 import { sanitizeThinkingData } from "@/utils/tool-args.js";
 import type { IntentFulfillService } from "./intents/fulfill.service";
@@ -168,6 +170,12 @@ export class QueryService {
 		} = threadMetadata;
 		const { displayQuery, input } = queryData;
 		const originalQuery = queryData.query;
+		// Request bodies are untyped; accept only a real array of non-empty strings.
+		const documentIds = Array.isArray(queryData.documentIds)
+			? queryData.documentIds.filter(
+					(id): id is string => typeof id === "string" && id.length > 0,
+				)
+			: undefined;
 		let { query } = queryData;
 		const threadMemory = this.memoryModule.getThreadMemory();
 
@@ -233,6 +241,8 @@ export class QueryService {
 		}
 
 		threadId ??= randomUUID();
+		// From here on every log line in this request carries the threadId.
+		updateRequestContext({ threadId });
 		if (!thread) {
 			const title =
 				type === ThreadType.WORKFLOW && inputTitle
@@ -288,9 +298,25 @@ export class QueryService {
 							subquery: intent.subquery,
 						})),
 					query: !displayQuery ? undefined : query,
+					documentIds: documentIds?.length ? documentIds : undefined,
 				},
 			}),
 		]);
+
+		// Attached documents: resolve fresh content and expose it to fulfillment
+		// only. Injected in-memory (never persisted); triggering above ran on the
+		// short query so the body is immune to subquery rewriting.
+		const piiService = this.piiService;
+		const maskFilter =
+			piiService && piiService.getMode() === PIIFilterMode.MASK
+				? (text: string) => piiService.filterText(text)
+				: undefined;
+		await injectAttachedDocuments(
+			this.memoryModule,
+			thread,
+			documentIds,
+			maskFilter,
+		);
 
 		// 3. intent fulfillment (with rewrite step)
 		const stream = this.intentFulfillService.intentFulfill(

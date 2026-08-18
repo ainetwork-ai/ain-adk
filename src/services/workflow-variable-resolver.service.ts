@@ -3,6 +3,7 @@ import { AinHttpError } from "@/types/agent.js";
 import type {
 	UserWorkflow,
 	WorkflowDefinition,
+	WorkflowTableColumnFormat,
 	WorkflowVariable,
 	WorkflowVariablePartSpec,
 } from "@/types/memory.js";
@@ -315,7 +316,75 @@ function resolveWorkflowVariables(
 	return applyReplacements(input, replacements, resolveAt);
 }
 
-function validateWorkflowDefinition(
+function validateTableFormatMap(
+	blockId: string,
+	field: "columnFormats" | "rowFormats",
+	formats: unknown,
+): void {
+	if (formats && (typeof formats !== "object" || Array.isArray(formats))) {
+		throw new AinHttpError(
+			StatusCodes.BAD_REQUEST,
+			`Table block "${blockId}" must use ${field}: Record<string, object>.`,
+		);
+	}
+
+	for (const [key, format] of Object.entries(
+		(formats || {}) as Record<string, unknown>,
+	)) {
+		if (!format || typeof format !== "object" || Array.isArray(format)) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Table block "${blockId}" ${field}.${key} must be an object.`,
+			);
+		}
+		const candidate = format as WorkflowTableColumnFormat;
+
+		if (
+			candidate.kind &&
+			!["auto", "text", "number", "currency", "percent"].includes(
+				String(candidate.kind),
+			)
+		) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Table block "${blockId}" ${field}.${key}.kind is invalid.`,
+			);
+		}
+
+		if (
+			candidate.grouping !== undefined &&
+			typeof candidate.grouping !== "boolean"
+		) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Table block "${blockId}" ${field}.${key}.grouping must be boolean.`,
+			);
+		}
+
+		if (
+			candidate.decimals !== undefined &&
+			(typeof candidate.decimals !== "number" ||
+				!Number.isFinite(candidate.decimals))
+		) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Table block "${blockId}" ${field}.${key}.decimals must be a number.`,
+			);
+		}
+
+		for (const stringKey of ["prefix", "suffix", "nullDisplay"] as const) {
+			const value = candidate[stringKey];
+			if (value !== undefined && typeof value !== "string") {
+				throw new AinHttpError(
+					StatusCodes.BAD_REQUEST,
+					`Table block "${blockId}" ${field}.${key}.${stringKey} must be a string.`,
+				);
+			}
+		}
+	}
+}
+
+export function validateWorkflowDefinition(
 	definition?: WorkflowDefinition,
 ): WorkflowDefinition | undefined {
 	if (!definition) {
@@ -327,6 +396,29 @@ function validateWorkflowDefinition(
 			StatusCodes.BAD_REQUEST,
 			"Workflow definition.tasks must be an array.",
 		);
+	}
+
+	for (const [index, task] of definition.tasks.entries()) {
+		if (typeof task.taskId !== "string" || !task.taskId.trim()) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Workflow task at index ${index} must use a non-empty taskId string.`,
+			);
+		}
+
+		if (task.title !== undefined && typeof task.title !== "string") {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Task "${task.taskId}" title must be a string.`,
+			);
+		}
+
+		if (typeof task.prompt !== "string" || !task.prompt.trim()) {
+			throw new AinHttpError(
+				StatusCodes.BAD_REQUEST,
+				`Task "${task.taskId}" must use a non-empty prompt string.`,
+			);
+		}
 	}
 
 	if (!Array.isArray(definition.response?.blocks)) {
@@ -497,67 +589,18 @@ function validateWorkflowDefinition(
 			}
 		}
 
+		validateTableFormatMap(block.blockId, "columnFormats", block.columnFormats);
+		validateTableFormatMap(block.blockId, "rowFormats", block.rowFormats);
+
 		if (
-			block.columnFormats &&
-			(typeof block.columnFormats !== "object" ||
-				Array.isArray(block.columnFormats))
+			block.rowFormats &&
+			Object.keys(block.rowFormats).length &&
+			block.layout !== "matrix"
 		) {
 			throw new AinHttpError(
 				StatusCodes.BAD_REQUEST,
-				`Table block "${block.blockId}" must use columnFormats: Record<string, object>.`,
+				`Table block "${block.blockId}" supports rowFormats only with layout: matrix.`,
 			);
-		}
-
-		for (const [column, format] of Object.entries(block.columnFormats || {})) {
-			if (!format || typeof format !== "object" || Array.isArray(format)) {
-				throw new AinHttpError(
-					StatusCodes.BAD_REQUEST,
-					`Table block "${block.blockId}" columnFormats.${column} must be an object.`,
-				);
-			}
-
-			if (
-				format.kind &&
-				!["auto", "text", "number", "currency", "percent"].includes(
-					String(format.kind),
-				)
-			) {
-				throw new AinHttpError(
-					StatusCodes.BAD_REQUEST,
-					`Table block "${block.blockId}" columnFormats.${column}.kind is invalid.`,
-				);
-			}
-
-			if (
-				format.grouping !== undefined &&
-				typeof format.grouping !== "boolean"
-			) {
-				throw new AinHttpError(
-					StatusCodes.BAD_REQUEST,
-					`Table block "${block.blockId}" columnFormats.${column}.grouping must be boolean.`,
-				);
-			}
-
-			if (
-				format.decimals !== undefined &&
-				(typeof format.decimals !== "number" ||
-					!Number.isFinite(format.decimals))
-			) {
-				throw new AinHttpError(
-					StatusCodes.BAD_REQUEST,
-					`Table block "${block.blockId}" columnFormats.${column}.decimals must be a number.`,
-				);
-			}
-
-			for (const key of ["prefix", "suffix", "nullDisplay"] as const) {
-				const value = format[key];
-				if (value !== undefined && typeof value !== "string") {
-					throw new AinHttpError(
-						StatusCodes.BAD_REQUEST,
-						`Table block "${block.blockId}" columnFormats.${column}.${key} must be a string.`,
-					);
-				}
-			}
 		}
 
 		if (
@@ -639,7 +682,7 @@ export class WorkflowVariableResolver {
 		definition?: WorkflowDefinition;
 	} {
 		let { content, title } = workflow;
-		let { definition } = workflow;
+		let definition: WorkflowDefinition | undefined = workflow.definition;
 		const normalizedVariables = normalizeWorkflowVariablesRecord(
 			workflow.variables,
 		);
@@ -681,27 +724,81 @@ export class WorkflowVariableResolver {
 		displayQuery: string;
 		definition?: WorkflowDefinition;
 	} {
+		return this.resolveExecutionLike(workflow, executionVariables, false);
+	}
+
+	/**
+	 * Resolves a workflow for filling a document slot.
+	 *
+	 * Unlike {@link resolveForExecution}, the document context has no
+	 * creation/execution distinction: every variable value is already decided
+	 * (entered in the document-creation dialog or fixed by the workplace) and
+	 * stored on the slot binding. So all provided values are substituted
+	 * regardless of each variable's declared `resolveAt`, then built-in template
+	 * tokens (e.g. `{{today}}`) are resolved. This does NOT change how standalone
+	 * workflow execution resolves variables.
+	 *
+	 * Empty/whitespace-only values mean "not entered" (slot bindings persist
+	 * such keys for display) and are dropped here so they don't override the
+	 * workflow's own `variableValues` defaults with blanks.
+	 */
+	resolveForDocumentFill(
+		workflow: WorkflowTextFields,
+		providedVariables?: Record<string, string>,
+	): {
+		query: string;
+		displayQuery: string;
+		definition?: WorkflowDefinition;
+	} {
+		const nonEmptyVariables = providedVariables
+			? Object.fromEntries(
+					Object.entries(providedVariables).filter(
+						([, value]) => value.trim() !== "",
+					),
+				)
+			: undefined;
+		return this.resolveExecutionLike(workflow, nonEmptyVariables, true);
+	}
+
+	/**
+	 * Shared execution-time variable substitution. Only `execution`-scoped
+	 * replacements apply, EXCEPT when `forceResolveAt` is true (document-slot
+	 * fills), where every provided value is applied regardless of its declared
+	 * `resolveAt`. Built-in template tokens (e.g. `{{today}}`) are always resolved.
+	 */
+	private resolveExecutionLike(
+		workflow: WorkflowTextFields,
+		providedVariables: Record<string, string> | undefined,
+		forceResolveAt: boolean,
+	): {
+		query: string;
+		displayQuery: string;
+		definition?: WorkflowDefinition;
+	} {
 		const { timezone } = workflow;
 		let query = workflow.content;
 		let displayQuery = workflow.title;
-		let definition = workflow.definition;
+		let definition: WorkflowDefinition | undefined = workflow.definition;
 		const normalizedVariables = normalizeWorkflowVariablesRecord(
 			workflow.variables,
 		);
-		const mergedExecutionVariables = {
+		const mergedVariables = {
 			...(workflow.variableValues || {}),
-			...(executionVariables || {}),
+			...(providedVariables || {}),
 		};
 
-		if (Object.keys(mergedExecutionVariables).length > 0) {
-			const resolvedVars = resolveTemplateRecord(
-				mergedExecutionVariables,
-				timezone,
-			);
-			const replacements = buildVariableReplacements(
+		if (Object.keys(mergedVariables).length > 0) {
+			const resolvedVars = resolveTemplateRecord(mergedVariables, timezone);
+			let replacements = buildVariableReplacements(
 				resolvedVars,
 				normalizedVariables,
 			);
+			if (forceResolveAt) {
+				replacements = replacements.map((replacement) => ({
+					...replacement,
+					resolveAt: "execution" as const,
+				}));
+			}
 			query = resolveWorkflowVariables(query, replacements, "execution");
 			displayQuery = resolveWorkflowVariables(
 				displayQuery,
