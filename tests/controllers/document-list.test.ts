@@ -167,6 +167,20 @@ describe("handleGetAllDocuments", () => {
 		]);
 	});
 
+	it("mine=1 narrows to the caller's own rows even when authz opens the list", async () => {
+		const seen: unknown[] = [];
+		const controller = makeController({
+			listDocumentsAny: async (sets: unknown) => {
+				seen.push(sets);
+				return [doc("a")];
+			},
+		});
+		const res = mockRes();
+		res.locals.authzListAll = true; // read-open policy would list everyone
+		await controller.handleGetAllDocuments(mockReq({ mine: "1" }), res, next);
+		expect(seen[0]).toEqual([{ userId: "u1", filter: expect.anything() }]);
+	});
+
 	it("authz union in legacy path dedupes by documentId", async () => {
 		const controller = makeController({
 			listDocuments: async () => [doc("dup")],

@@ -70,16 +70,25 @@ export class DocumentApiController {
 		try {
 			const userId = res.locals.userId || "";
 			const documentMemory = this.memoryModule.getDocumentMemory();
-			const { workflowId, threadId, source, labels, dateFrom, dateTo, view } =
-				req.query as {
-					workflowId?: string;
-					threadId?: string;
-					source?: DocumentSource;
-					labels?: Record<string, string>;
-					dateFrom?: string;
-					dateTo?: string;
-					view?: string;
-				};
+			const {
+				workflowId,
+				threadId,
+				source,
+				labels,
+				dateFrom,
+				dateTo,
+				view,
+				mine,
+			} = req.query as {
+				workflowId?: string;
+				threadId?: string;
+				source?: DocumentSource;
+				labels?: Record<string, string>;
+				dateFrom?: string;
+				dateTo?: string;
+				view?: string;
+				mine?: string;
+			};
 			const baseFilter: DocumentFilter = {
 				workflowId,
 				threadId,
@@ -102,7 +111,12 @@ export class DocumentApiController {
 				| DocumentFilter[]
 				| undefined;
 			let filterSets: DocumentFilterSet[];
-			if (res.locals.authzListAll) {
+			if (mine === "1" || mine === "true") {
+				// Caller-requested narrowing to its own rows (e.g. a "my documents"
+				// page). Always narrower than the read policy allows, so it needs no
+				// authz of its own.
+				filterSets = [{ userId, filter: baseFilter }];
+			} else if (res.locals.authzListAll) {
 				filterSets = [{ filter: baseFilter }];
 			} else if (authzFilters?.length) {
 				filterSets = [
