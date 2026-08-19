@@ -91,13 +91,17 @@ Completed groundwork so far:
 - added `LocalArtifactStore`, the first concrete `IArtifactStore` implementation (filesystem binary + JSON metadata sidecar, sha256 checksum, synchronous preview text for text-like mime types)
 - exported `LocalArtifactStore` from the public module surface and added focused store tests
 - added `DELETE /api/artifacts/:id` with ownership checks, completing the optional artifact CRUD surface
+- re-synced this plan with the post-main-merge codebase: implemented part/event names, document modality, unified intent trigger service, current workflow structure, and settled Phase 0 decisions
 
 Not completed yet:
 
-- full multipart `MessageObject` migration across all runtime paths
-- full query/request/response contract refactor across streaming and provider-facing paths
-- artifact upload/download runtime APIs
-- stream event redesign
+- full multipart `MessageObject` migration across all runtime paths (inference is still normalized to text-first)
+- removal of the compatibility `text_chunk` stream event (breaking; wait until downstream consumers use canonical events)
+- multipart form-data upload middleware (deferred until base64 JSON upload becomes a real limit)
+- preview extraction pipeline beyond `LocalArtifactStore`'s synchronous text preview (async PDF/document extraction)
+- `S3ArtifactStore` / `AzureBlobArtifactStore` implementations
+- provider-side adoption of the canonical `input` bridge (lives in ain-adk-providers)
+- MCP tool binary outputs → artifact conversion (tool image results are currently stringified into model context)
 
 ---
 
@@ -128,8 +132,7 @@ The current implementation is still text-first in important inference paths, but
 - [src/types/memory.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/types/memory.ts)
 - [src/types/stream.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/types/stream.ts)
 - [src/modules/models/base.model.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/modules/models/base.model.ts)
-- [src/services/intents/single-trigger.service.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/services/intents/single-trigger.service.ts)
-- [src/services/intents/multi-trigger.service.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/services/intents/multi-trigger.service.ts)
+- [src/services/intents/trigger.service.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/services/intents/trigger.service.ts)
 - [src/services/intents/fulfill.service.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/services/intents/fulfill.service.ts)
 - [src/services/a2a.service.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/services/a2a.service.ts)
 - [src/modules/a2a/a2a.module.ts](/Users/shyun/comcom/ain-agent/ain-adk/src/modules/a2a/a2a.module.ts)
@@ -167,33 +170,45 @@ content: {
 }
 ```
 
-To a multipart-first model:
+To a multipart-first model. The implemented union in `src/types/memory.ts`
+(`MessageContentPart`) is:
 
 ```ts
-type ContentPart =
+type MessageContentPart =
   | { kind: "text"; text: string }
   | {
-      kind: "file";
+      kind: "artifact"; // implemented name for the planned "file" kind
       artifactId: string;
-      name: string;
-      mimeType: string;
-      size: number;
+      name?: string;
+      mimeType?: string;
+      size?: number;
       downloadUrl?: string;
       previewText?: string;
     }
   | { kind: "data"; mimeType: string; data: unknown }
   | { kind: "tool-call"; toolCallId: string; toolName: string; args: unknown }
   | { kind: "tool-result"; toolCallId: string; toolName: string; result: unknown }
-  | { kind: "thought"; title: string; description?: string };
+  | { kind: "thought"; title: string; description?: string }
+  | { kind: "document"; documentId: string; title?: string };
 
 type MessageObject = {
   messageId: string;
   role: "USER" | "SYSTEM" | "MODEL" | "TOOL";
-  parts: ContentPart[];
+  parts: MessageContentPart[];
   timestamp: number;
   metadata?: Record<string, unknown>;
 };
 ```
+
+Document modality note (merged from main's document system):
+
+- documents are a separate modality from artifacts: a `document` part references
+  the document store (`IDocumentMemory`, `/api/document`), while an `artifact`
+  part references the binary artifact store (`ArtifactModule`)
+- document parts store only `documentId` + a label hint; clients resolve the
+  latest document content on render, so message history never embeds bodies
+- query input can carry `documentIds`, which are injected into fulfillment
+  context in-memory (never persisted into the thread) via `injectAttachedDocuments`
 
 Recommended changes:
 
@@ -450,12 +465,12 @@ Toward returning structured output:
 
 ## 3. Artifact APIs
 
-Recommended new endpoints:
+Recommended new endpoints (all implemented):
 
-- `POST /api/artifacts`
+- `POST /api/artifacts` (JSON/base64 upload)
 - `GET /api/artifacts/:id`
 - `GET /api/artifacts/:id/download`
-- optional `DELETE /api/artifacts/:id`
+- `DELETE /api/artifacts/:id`
 
 Upload handling note:
 
@@ -472,10 +487,9 @@ Recommended options:
 - authenticated proxy download through ADK routes
 - signed URL generation by the artifact store
 
-Default recommendation:
-
-- use authenticated proxy downloads as the simplest secure baseline
-- allow stores such as S3 or Azure Blob to return signed URLs where appropriate
+Decided and implemented: authenticated proxy downloads through
+`GET /api/artifacts/:id/download` with ownership checks. Stores such as S3 or
+Azure Blob may still return signed URLs where appropriate in the future.
 
 The selected strategy should be consistent with the existing auth middleware and user ownership checks.
 
@@ -498,34 +512,27 @@ Recommended direction:
 
 ## Stream Event Redesign
 
-The current stream event model is too text-centric.
+The canonical event vocabulary is now implemented in `src/types/stream.ts`.
 
-Recommended future event set:
+Implemented event set:
 
 - `thread_id`
 - `message_start`
 - `part_delta`
 - `artifact_ready`
-- `tool_call`
-- `tool_result`
+- `tool_start` / `tool_output` (implemented names for the planned `tool_call` / `tool_result`)
 - `thinking_process`
 - `message_complete`
 - `error`
+- `text_chunk` (compatibility-only; to be removed once consumers migrate)
 
-Example direction:
+Additional events that exist outside this plan's original scope (workflow and
+document features merged from main):
 
-```ts
-type StreamEvent =
-  | { event: "thread_id"; data: ThreadMetadata }
-  | { event: "message_start"; data: { messageId: string; role: MessageRole } }
-  | { event: "part_delta"; data: { kind: "text"; delta: string } }
-  | { event: "artifact_ready"; data: ArtifactRef }
-  | { event: "tool_call"; data: ToolCallPayload }
-  | { event: "tool_result"; data: ToolResultPayload }
-  | { event: "thinking_process"; data: { title: string; description: string } }
-  | { event: "message_complete"; data: { messageId: string } }
-  | { event: "error"; data: { message: string } };
-```
+- `document_id`
+- `task_output` / `task_result` (workflow task progress)
+- `intent_process`
+- `collection_name`
 
 This keeps streaming extensible for both text and downloadable outputs.
 
@@ -607,10 +614,17 @@ Additional recommendation:
 
 Workflow support should remain text-first for now, but the design should not block a future multimodal workflow model.
 
+Note: the workflow system has since evolved (merged from main) into
+`WorkflowTemplate` / `UserWorkflow` with structured `definition` blocks
+(tasks → heading/text/graph/table), cron scheduling, and dedicated
+`/api/workflow-template` / `/api/user-workflow` / `/api/schedule-runs` routes.
+The text-first stance below still applies to workflow *content* (prompts and
+variable substitution), independent of that structural evolution.
+
 Short-term recommendation:
 
 - keep workflow execution input as text-only
-- keep workflow templates and variable resolution centered on string substitution
+- keep workflow content and variable resolution centered on string substitution
 - avoid expanding workflow APIs to multipart in the first milestone
 
 Long-term design guidance:
@@ -801,12 +815,14 @@ Additional recommendation:
 
 ## Phase 0. Contract Freeze and ADR-Level Decisions
 
-- finalize canonical `MessageObject`, `ContentPart`, `ArtifactObject`, and `ArtifactRef` shapes
-- finalize stream event vocabulary
-- finalize artifact lifecycle states and preview lifecycle states
-- finalize error code vocabulary
-- finalize the first-milestone workflow stance as text-only
-- finalize whether query output returns both `message` and a compatibility `content`
+All of these are now settled in code:
+
+- canonical `MessageObject`, `MessageContentPart`, `ArtifactObject`, and `ArtifactRef` shapes → `src/types/memory.ts`, `src/types/artifact.ts`
+- stream event vocabulary → `src/types/stream.ts` (see Stream Event Redesign above)
+- artifact lifecycle states (`uploaded`/`processing`/`ready`/`failed`) and preview lifecycle states (`pending`/`ready`/`failed`)
+- error code vocabulary (`ARTIFACT_STORE_NOT_CONFIGURED`, `ARTIFACT_NOT_FOUND`, `ARTIFACT_ACCESS_DENIED`, `ARTIFACT_NOT_READY`, `INVALID_ARTIFACT_UPLOAD`, ...)
+- first-milestone workflow stance: text-only
+- query output returns both canonical `message` and compatibility `content`
 
 This phase is intentionally small but important. It reduces rework in every later phase.
 
