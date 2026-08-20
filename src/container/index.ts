@@ -248,7 +248,10 @@ class Container {
 
 	getThreadApiController(): ThreadApiController {
 		if (!this._threadApiController) {
-			this._threadApiController = new ThreadApiController(getMemoryModule());
+			this._threadApiController = new ThreadApiController(
+				getMemoryModule(),
+				this.getArtifactService(),
+			);
 		}
 		return this._threadApiController;
 	}

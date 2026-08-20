@@ -1,14 +1,17 @@
 import type { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import type { MemoryModule } from "@/modules/index.js";
+import type { ArtifactService } from "@/services/artifact.service";
 import type { ThreadFilter } from "@/types/memory.js";
 import { normalizeThreadObject } from "@/utils/message.js";
 
 export class ThreadApiController {
 	private memoryModule: MemoryModule;
+	private artifactService?: ArtifactService;
 
-	constructor(memoryModule: MemoryModule) {
+	constructor(memoryModule: MemoryModule, artifactService?: ArtifactService) {
 		this.memoryModule = memoryModule;
+		this.artifactService = artifactService;
 	}
 
 	public handleGetThread = async (
@@ -41,6 +44,7 @@ export class ThreadApiController {
 			const userId = res.locals.userId || "";
 			const threadMemory = this.memoryModule.getThreadMemory();
 			await threadMemory?.deleteThread(userId, threadId);
+			await this.artifactService?.deleteThreadArtifacts(userId, threadId);
 			res.status(StatusCodes.OK).send();
 		} catch (error) {
 			next(error);

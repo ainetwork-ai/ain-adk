@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
 	ArtifactDownloadResult,
@@ -93,6 +93,29 @@ export class LocalArtifactStore implements IArtifactStore {
 		}
 		await rm(this.metadataPath(artifactId), { force: true });
 		await rm(this.binaryPath(artifactId), { force: true });
+	}
+
+	// ponytail: O(n) sidecar scan per call; index by threadId if stores grow large
+	public async listByThread(threadId: string): Promise<ArtifactObject[]> {
+		let entries: string[];
+		try {
+			entries = await readdir(this.baseDir);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				return [];
+			}
+			throw error;
+		}
+
+		const artifacts = await Promise.all(
+			entries
+				.filter((entry) => entry.endsWith(".json"))
+				.map((entry) => this.get(entry.slice(0, -".json".length))),
+		);
+		return artifacts.filter(
+			(artifact): artifact is ArtifactObject =>
+				artifact !== undefined && artifact.threadId === threadId,
+		);
 	}
 
 	public async openDownload(

@@ -54,4 +54,31 @@ describe("ThreadApiController", () => {
 		});
 		expect(next).not.toHaveBeenCalled();
 	});
+
+	it("cleans up thread artifacts when deleting a thread", async () => {
+		const deleteThread = jest.fn(async () => {});
+		const deleteThreadArtifacts = jest.fn(async () => {});
+		const controller = new ThreadApiController(
+			{
+				getThreadMemory: () => ({ deleteThread }),
+			} as any,
+			{ deleteThreadArtifacts } as any,
+		);
+
+		const send = jest.fn();
+		const status = jest.fn().mockReturnValue({ send });
+		const req = { params: { id: "thread-1" } } as unknown as Request;
+		const res = {
+			locals: { userId: "user-1" },
+			status,
+		} as unknown as Response;
+		const next = jest.fn() as NextFunction;
+
+		await controller.handleDeleteThread(req, res, next);
+
+		expect(deleteThread).toHaveBeenCalledWith("user-1", "thread-1");
+		expect(deleteThreadArtifacts).toHaveBeenCalledWith("user-1", "thread-1");
+		expect(status).toHaveBeenCalledWith(200);
+		expect(next).not.toHaveBeenCalled();
+	});
 });

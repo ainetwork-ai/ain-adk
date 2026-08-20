@@ -111,6 +111,37 @@ describe("LocalArtifactStore", () => {
 		expect(artifact.previewStatus).toBeUndefined();
 	});
 
+	it("lists artifacts belonging to a thread", async () => {
+		const first = await store.put({
+			name: "a.txt",
+			mimeType: "text/plain",
+			data: new TextEncoder().encode("a"),
+			threadId: "thread-1",
+		});
+		await store.put({
+			name: "b.txt",
+			mimeType: "text/plain",
+			data: new TextEncoder().encode("b"),
+			threadId: "thread-2",
+		});
+		const third = await store.put({
+			name: "c.txt",
+			mimeType: "text/plain",
+			data: new TextEncoder().encode("c"),
+			threadId: "thread-1",
+		});
+
+		const listed = await store.listByThread("thread-1");
+
+		expect(listed.map((a) => a.artifactId).sort()).toEqual(
+			[first.artifactId, third.artifactId].sort(),
+		);
+	});
+
+	it("returns an empty list for a thread without artifacts", async () => {
+		await expect(store.listByThread("missing-thread")).resolves.toEqual([]);
+	});
+
 	it("rejects artifact ids that escape the base directory", async () => {
 		await expect(store.get("../evil")).resolves.toBeUndefined();
 		await expect(store.openDownload("../evil")).rejects.toThrow(

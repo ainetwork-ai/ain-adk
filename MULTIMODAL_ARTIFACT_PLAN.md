@@ -93,6 +93,7 @@ Completed groundwork so far:
 - added `DELETE /api/artifacts/:id` with ownership checks, completing the optional artifact CRUD surface
 - re-synced this plan with the post-main-merge codebase: implemented part/event names, document modality, unified intent trigger service, current workflow structure, and settled Phase 0 decisions
 - added upload limit validation via `ArtifactModuleOptions` (`maxSizeBytes` → `ARTIFACT_TOO_LARGE` 413, `allowedMimeTypes` with `type/*` wildcards → `ARTIFACT_TYPE_NOT_ALLOWED` 415); unlimited when unconfigured
+- added thread-deletion artifact cleanup: optional `IArtifactStore.listByThread` (implemented by `LocalArtifactStore`), best-effort `ArtifactService.deleteThreadArtifacts` (never fails the thread deletion), wired into the thread delete API
 
 Not completed yet:
 
