@@ -55,6 +55,92 @@ describe("ArtifactService", () => {
 		});
 	});
 
+	it("rejects uploads larger than the configured max size", async () => {
+		const put = jest.fn();
+		const service = new ArtifactService({
+			getStore: () =>
+				({
+					get: jest.fn(),
+					put,
+					delete: jest.fn(),
+					openDownload: jest.fn(),
+				}) as any,
+			getOptions: () => ({ maxSizeBytes: 4 }),
+		} as any);
+
+		await expect(
+			service.uploadArtifact("user-1", {
+				name: "big.bin",
+				mimeType: "application/octet-stream",
+				data: new Uint8Array([1, 2, 3, 4, 5]),
+			}),
+		).rejects.toMatchObject({
+			status: 413,
+			code: "ARTIFACT_TOO_LARGE",
+		});
+		expect(put).not.toHaveBeenCalled();
+	});
+
+	it("rejects uploads with a disallowed mime type", async () => {
+		const put = jest.fn();
+		const service = new ArtifactService({
+			getStore: () =>
+				({
+					get: jest.fn(),
+					put,
+					delete: jest.fn(),
+					openDownload: jest.fn(),
+				}) as any,
+			getOptions: () => ({ allowedMimeTypes: ["application/pdf", "image/*"] }),
+		} as any);
+
+		await expect(
+			service.uploadArtifact("user-1", {
+				name: "script.sh",
+				mimeType: "text/x-shellscript",
+				data: new Uint8Array([1]),
+			}),
+		).rejects.toMatchObject({
+			status: 415,
+			code: "ARTIFACT_TYPE_NOT_ALLOWED",
+		});
+		expect(put).not.toHaveBeenCalled();
+	});
+
+	it("allows uploads matching a mime wildcard within the size limit", async () => {
+		const put = jest.fn(async (input) => ({
+			artifactId: "art-1",
+			status: "ready" as const,
+			name: input.name,
+			mimeType: input.mimeType,
+			size: input.data.length,
+			storageKey: "art-1.bin",
+			createdAt: 100,
+		}));
+		const service = new ArtifactService({
+			getStore: () =>
+				({
+					get: jest.fn(),
+					put,
+					delete: jest.fn(),
+					openDownload: jest.fn(),
+				}) as any,
+			getOptions: () => ({
+				maxSizeBytes: 10,
+				allowedMimeTypes: ["image/*"],
+			}),
+		} as any);
+
+		await expect(
+			service.uploadArtifact("user-1", {
+				name: "pic.png",
+				mimeType: "image/png",
+				data: new Uint8Array([1, 2, 3]),
+			}),
+		).resolves.toMatchObject({ artifactId: "art-1" });
+		expect(put).toHaveBeenCalled();
+	});
+
 	it("returns artifact metadata when the user owns the artifact", async () => {
 		const get = jest.fn(async () => ({
 			artifactId: "art-1",

@@ -88,10 +88,40 @@ export class ArtifactService {
 		await this.getStore().delete(artifactId);
 	}
 
+	private assertUploadAllowed(input: Omit<ArtifactPutInput, "userId">): void {
+		const { maxSizeBytes, allowedMimeTypes } =
+			this.artifactModule?.getOptions?.() ?? {};
+
+		if (maxSizeBytes !== undefined && input.data.byteLength > maxSizeBytes) {
+			throw new AinHttpError(
+				StatusCodes.REQUEST_TOO_LONG,
+				`Artifact exceeds the maximum upload size of ${maxSizeBytes} bytes`,
+				"ARTIFACT_TOO_LARGE",
+			);
+		}
+
+		if (
+			allowedMimeTypes &&
+			!allowedMimeTypes.some(
+				(allowed) =>
+					allowed === input.mimeType ||
+					(allowed.endsWith("/*") &&
+						input.mimeType.startsWith(allowed.slice(0, -1))),
+			)
+		) {
+			throw new AinHttpError(
+				StatusCodes.UNSUPPORTED_MEDIA_TYPE,
+				`Artifact mime type '${input.mimeType}' is not allowed`,
+				"ARTIFACT_TYPE_NOT_ALLOWED",
+			);
+		}
+	}
+
 	public async uploadArtifact(
 		userId: string,
 		input: Omit<ArtifactPutInput, "userId">,
 	): Promise<ArtifactObject> {
+		this.assertUploadAllowed(input);
 		return this.getStore().put({
 			...input,
 			userId,
