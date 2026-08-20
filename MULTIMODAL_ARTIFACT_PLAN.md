@@ -96,7 +96,7 @@ Completed groundwork so far:
 Not completed yet:
 
 - full multipart `MessageObject` migration across all runtime paths (inference is still normalized to text-first)
-- removal of the compatibility `text_chunk` stream event (breaking; wait until downstream consumers use canonical events)
+- removal of the compatibility `text_chunk` stream event (breaking; see the two-precondition note in the Stream Event Redesign section)
 - multipart form-data upload middleware (deferred until base64 JSON upload becomes a real limit)
 - preview extraction pipeline beyond `LocalArtifactStore`'s synchronous text preview (async PDF/document extraction)
 - `S3ArtifactStore` / `AzureBlobArtifactStore` implementations
@@ -525,6 +525,20 @@ Implemented event set:
 - `message_complete`
 - `error`
 - `text_chunk` (compatibility-only; to be removed once consumers migrate)
+
+`text_chunk` removal note (found 2026-08-20): the event is not only an outbound
+compatibility payload — internal code also consumes it as the text-accumulation
+signal. `workflow-execution.service`, `workflow-task-runner.service`,
+`a2a.service`, and `intents/fulfill.service` all branch on
+`event.event === "text_chunk"` to collect streamed text, and there are 10+ emit
+sites (fulfill, aggregate, query PII path, workflow-response-composer,
+document-advice, tool-calling, a2a). Removal therefore has two preconditions:
+
+1. external consumers (enterprise app, A2A peers) migrate to canonical events
+2. internal consumption sites switch to `part_delta` / `message_complete`
+
+Precondition 2 does not depend on external consumers and can be done now as a
+standalone refactor, which makes the eventual breaking removal much cheaper.
 
 Additional events that exist outside this plan's original scope (workflow and
 document features merged from main):
