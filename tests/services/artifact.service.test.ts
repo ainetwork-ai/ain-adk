@@ -289,6 +289,82 @@ describe("ArtifactService", () => {
 		expect(del).not.toHaveBeenCalled();
 	});
 
+	it("deletes a thread's artifacts owned by (or unowned for) the user", async () => {
+		const del = jest.fn(async () => {});
+		const service = new ArtifactService({
+			getStore: () =>
+				({
+					get: jest.fn(),
+					put: jest.fn(),
+					delete: del,
+					openDownload: jest.fn(),
+					listByThread: async () => [
+						{ artifactId: "art-mine", userId: "user-1", threadId: "thread-1" },
+						{ artifactId: "art-unowned", threadId: "thread-1" },
+						{
+							artifactId: "art-other",
+							userId: "other-user",
+							threadId: "thread-1",
+						},
+					],
+				}) as any,
+		} as any);
+
+		await service.deleteThreadArtifacts("user-1", "thread-1");
+
+		expect(del.mock.calls.map((c) => c[0]).sort()).toEqual([
+			"art-mine",
+			"art-unowned",
+		]);
+	});
+
+	it("skips thread artifact cleanup when the store cannot list by thread", async () => {
+		const del = jest.fn();
+		const service = new ArtifactService({
+			getStore: () =>
+				({
+					get: jest.fn(),
+					put: jest.fn(),
+					delete: del,
+					openDownload: jest.fn(),
+				}) as any,
+		} as any);
+
+		await expect(
+			service.deleteThreadArtifacts("user-1", "thread-1"),
+		).resolves.toBeUndefined();
+		expect(del).not.toHaveBeenCalled();
+	});
+
+	it("never throws from thread artifact cleanup", async () => {
+		const service = new ArtifactService({
+			getStore: () =>
+				({
+					get: jest.fn(),
+					put: jest.fn(),
+					delete: jest.fn(async () => {
+						throw new Error("disk error");
+					}),
+					openDownload: jest.fn(),
+					listByThread: async () => [
+						{ artifactId: "art-1", userId: "user-1", threadId: "thread-1" },
+					],
+				}) as any,
+		} as any);
+
+		await expect(
+			service.deleteThreadArtifacts("user-1", "thread-1"),
+		).resolves.toBeUndefined();
+	});
+
+	it("no-ops thread artifact cleanup without an artifact module", async () => {
+		const service = new ArtifactService(undefined);
+
+		await expect(
+			service.deleteThreadArtifacts("user-1", "thread-1"),
+		).resolves.toBeUndefined();
+	});
+
 	it("resolves query artifact parts with store metadata", async () => {
 		const get = jest.fn(async () => ({
 			artifactId: "art-1",

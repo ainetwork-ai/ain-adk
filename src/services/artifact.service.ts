@@ -10,6 +10,7 @@ import type {
 	QueryArtifactInputPart,
 	QueryMessageInput,
 } from "@/types/message-input";
+import { loggers } from "@/utils/logger.js";
 
 export class ArtifactService {
 	private artifactModule?: ArtifactModule;
@@ -78,6 +79,36 @@ export class ArtifactService {
 	): Promise<ArtifactDownloadResult> {
 		await this.getArtifact(userId, artifactId);
 		return this.getStore().openDownload(artifactId);
+	}
+
+	/**
+	 * Best-effort cleanup of a deleted thread's artifacts. Never throws:
+	 * thread deletion must not fail because binaries could not be removed.
+	 * No-ops when no artifact module is configured or the store does not
+	 * implement `listByThread`.
+	 */
+	public async deleteThreadArtifacts(
+		userId: string,
+		threadId: string,
+	): Promise<void> {
+		try {
+			const store = this.artifactModule?.getStore();
+			if (!store?.listByThread) {
+				return;
+			}
+
+			const artifacts = await store.listByThread(threadId);
+			await Promise.all(
+				artifacts
+					.filter((artifact) => !artifact.userId || artifact.userId === userId)
+					.map((artifact) => store.delete(artifact.artifactId)),
+			);
+		} catch (error) {
+			loggers.agent.warn("Failed to clean up thread artifacts", {
+				threadId,
+				error,
+			});
+		}
 	}
 
 	public async deleteArtifact(

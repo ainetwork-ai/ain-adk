@@ -9,4 +9,6 @@ export interface IArtifactStore {
 	get(artifactId: string): Promise<ArtifactObject | undefined>;
 	delete(artifactId: string): Promise<void>;
 	openDownload(artifactId: string): Promise<ArtifactDownloadResult>;
+	/** Optional: enables thread-deletion artifact cleanup when implemented. */
+	listByThread?(threadId: string): Promise<ArtifactObject[]>;
 }
