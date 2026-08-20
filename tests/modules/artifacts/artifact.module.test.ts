@@ -14,4 +14,21 @@ describe("ArtifactModule", () => {
 
 		expect(module.getStore()).toBe(store);
 	});
+
+	it("returns configured upload options, defaulting to empty", () => {
+		const store: IArtifactStore = {
+			put: jest.fn(),
+			get: jest.fn(),
+			delete: jest.fn(),
+			openDownload: jest.fn(),
+		};
+
+		expect(new ArtifactModule(store).getOptions()).toEqual({});
+		expect(
+			new ArtifactModule(store, {
+				maxSizeBytes: 1024,
+				allowedMimeTypes: ["application/pdf"],
+			}).getOptions(),
+		).toEqual({ maxSizeBytes: 1024, allowedMimeTypes: ["application/pdf"] });
+	});
 });

@@ -92,11 +92,12 @@ Completed groundwork so far:
 - exported `LocalArtifactStore` from the public module surface and added focused store tests
 - added `DELETE /api/artifacts/:id` with ownership checks, completing the optional artifact CRUD surface
 - re-synced this plan with the post-main-merge codebase: implemented part/event names, document modality, unified intent trigger service, current workflow structure, and settled Phase 0 decisions
+- added upload limit validation via `ArtifactModuleOptions` (`maxSizeBytes` → `ARTIFACT_TOO_LARGE` 413, `allowedMimeTypes` with `type/*` wildcards → `ARTIFACT_TYPE_NOT_ALLOWED` 415); unlimited when unconfigured
 
 Not completed yet:
 
 - full multipart `MessageObject` migration across all runtime paths (inference is still normalized to text-first)
-- removal of the compatibility `text_chunk` stream event (breaking; wait until downstream consumers use canonical events)
+- removal of the compatibility `text_chunk` stream event (breaking; see the two-precondition note in the Stream Event Redesign section)
 - multipart form-data upload middleware (deferred until base64 JSON upload becomes a real limit)
 - preview extraction pipeline beyond `LocalArtifactStore`'s synchronous text preview (async PDF/document extraction)
 - `S3ArtifactStore` / `AzureBlobArtifactStore` implementations
@@ -526,6 +527,20 @@ Implemented event set:
 - `error`
 - `text_chunk` (compatibility-only; to be removed once consumers migrate)
 
+`text_chunk` removal note (found 2026-08-20): the event is not only an outbound
+compatibility payload — internal code also consumes it as the text-accumulation
+signal. `workflow-execution.service`, `workflow-task-runner.service`,
+`a2a.service`, and `intents/fulfill.service` all branch on
+`event.event === "text_chunk"` to collect streamed text, and there are 10+ emit
+sites (fulfill, aggregate, query PII path, workflow-response-composer,
+document-advice, tool-calling, a2a). Removal therefore has two preconditions:
+
+1. external consumers (enterprise app, A2A peers) migrate to canonical events
+2. internal consumption sites switch to `part_delta` / `message_complete`
+
+Precondition 2 does not depend on external consumers and can be done now as a
+standalone refactor, which makes the eventual breaking removal much cheaper.
+
 Additional events that exist outside this plan's original scope (workflow and
 document features merged from main):
 
@@ -718,8 +733,8 @@ This area should be part of the plan from the start because artifacts introduce 
 
 Recommended considerations:
 
-- allowed mime-type policy
-- max file size per upload
+- allowed mime-type policy (implemented: `ArtifactModuleOptions.allowedMimeTypes`, `type/*` wildcards supported)
+- max file size per upload (implemented: `ArtifactModuleOptions.maxSizeBytes`)
 - total artifact quota per user or thread
 - optional malware scanning hook
 - ownership checks on artifact metadata and download access
@@ -820,7 +835,7 @@ All of these are now settled in code:
 - canonical `MessageObject`, `MessageContentPart`, `ArtifactObject`, and `ArtifactRef` shapes → `src/types/memory.ts`, `src/types/artifact.ts`
 - stream event vocabulary → `src/types/stream.ts` (see Stream Event Redesign above)
 - artifact lifecycle states (`uploaded`/`processing`/`ready`/`failed`) and preview lifecycle states (`pending`/`ready`/`failed`)
-- error code vocabulary (`ARTIFACT_STORE_NOT_CONFIGURED`, `ARTIFACT_NOT_FOUND`, `ARTIFACT_ACCESS_DENIED`, `ARTIFACT_NOT_READY`, `INVALID_ARTIFACT_UPLOAD`, ...)
+- error code vocabulary (`ARTIFACT_STORE_NOT_CONFIGURED`, `ARTIFACT_NOT_FOUND`, `ARTIFACT_ACCESS_DENIED`, `ARTIFACT_NOT_READY`, `ARTIFACT_TOO_LARGE`, `ARTIFACT_TYPE_NOT_ALLOWED`, `INVALID_ARTIFACT_UPLOAD`, ...)
 - first-milestone workflow stance: text-only
 - query output returns both canonical `message` and compatibility `content`
 
