@@ -80,6 +80,14 @@ export class ArtifactService {
 		return this.getStore().openDownload(artifactId);
 	}
 
+	public async deleteArtifact(
+		userId: string,
+		artifactId: string,
+	): Promise<void> {
+		await this.getArtifact(userId, artifactId);
+		await this.getStore().delete(artifactId);
+	}
+
 	public async uploadArtifact(
 		userId: string,
 		input: Omit<ArtifactPutInput, "userId">,

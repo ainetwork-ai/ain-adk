@@ -49,11 +49,18 @@ pnpm dev        # Run TypeScript directly with tsx
      - Abstract `BaseModel` class for provider-agnostic implementation
      - Support for streaming and non-streaming responses
      - Unified tool/function conversion interface
+     - Optional canonical multipart `input` bridge alongside legacy `query: string`
    - **MemoryModule** (`src/modules/memory/`): Data persistence (required)
      - Thread management for conversation history
      - Intent storage and retrieval
-     - Workflow storage and retrieval
+     - Workflow template and user workflow storage
      - Agent metadata management
+     - Optional `IDocumentMemory` (enables document storage and `/api/document`)
+     - Optional `IScheduleRunMemory` (enables `/api/schedule-runs`)
+   - **ArtifactModule** (`src/modules/artifacts/`): Binary artifact storage (optional)
+     - `IArtifactStore` abstraction for pluggable storage backends
+     - `LocalArtifactStore`: filesystem implementation (binary + JSON metadata sidecar)
+     - Enables `/api/artifacts` upload/metadata/download/delete routes when configured
    - **MCPModule** (`src/modules/mcp/`): Model Context Protocol client connections (optional)
      - Tool discovery and execution from MCP servers
      - Protocol implementation via stdio
@@ -61,6 +68,7 @@ pnpm dev        # Run TypeScript directly with tsx
      - RESTful API for inter-agent communication
      - Agent discovery via well-known endpoints
      - Task delegation with context passing
+     - Multipart/artifact-reference exchange (no raw binary forwarding)
 
 3. **Configuration Layer** (`src/config/`)
    - `agent.ts`: Global agent instance access
@@ -69,24 +77,24 @@ pnpm dev        # Run TypeScript directly with tsx
    - `manifest.ts`: Agent manifest storage
 
 4. **DI Container** (`src/container/`)
-   - `index.ts`: Main Container class with convenience methods
-   - `services.ts`: ServiceContainer for service singletons
-     - ThreadService, IntentTriggerService, IntentFulfillService, AggregateService
-     - SingleIntentTriggerService, MultiIntentTriggerService
-     - QueryService, A2AService
-   - `controllers.ts`: ControllerContainer for controller singletons
-     - QueryController, IntentController
-     - ModelApiController, AgentApiController, ThreadApiController, IntentApiController, WorkflowApiController
+   - `index.ts`: single Container class exposing lazy singleton getters for all
+     services and controllers (e.g. `getQueryService()`, `getArtifactApiController()`)
+   - `container.reset()` clears singletons between tests
 
 5. **Service Layer** (`src/services/`)
    - `query.service.ts`: Query processing with intent detection and fulfillment
    - `thread.service.ts`: Thread management operations
    - `a2a.service.ts`: A2A protocol operations
-   - `intents/trigger.service.ts`: Intent triggering router (single/multi mode)
-   - `intents/single-trigger.service.ts`: Single intent triggering without query decomposition
-   - `intents/multi-trigger.service.ts`: Multi-intent triggering with query decomposition
+   - `artifact.service.ts`: Artifact metadata/upload/download/delete with ownership checks
+   - `pii.service.ts`: PII filtering (mask/reject modes)
+   - `tool-calling.service.ts`: Unified tool execution across MCP/A2A connectors
+   - `document-advice.service.ts`: Document advice generation
+   - `intents/trigger.service.ts`: Intent triggering (single/multi strategy chosen by `DISABLE_MULTI_INTENTS`)
    - `intents/fulfill.service.ts`: Intent fulfillment with tool execution
    - `intents/aggregate.service.ts`: Intelligent response aggregation for multi-intent results
+   - `user-workflow.service.ts`, `user-workflow-coordinator.service.ts`: User workflow CRUD and coordination
+   - `workflow-execution.service.ts` (+ `workflow-graph/`, `workflow-table/`, `workflow-response-composer`, `workflow-variable-*`): workflow definition execution and response block rendering
+   - `scheduler.service.ts`, `job-runner.service.ts`: Cron-scheduled workflow runs
 
 6. **Controller Layer** (`src/controllers/`)
    - `query.controller.ts`: Query endpoint handlers (both streaming and non-streaming)
@@ -95,7 +103,10 @@ pnpm dev        # Run TypeScript directly with tsx
    - `api/model.api.controller.ts`: Model management API
    - `api/agent.api.controller.ts`: Agent management API
    - `api/intent.api.controller.ts`: Intent management API
-   - `api/workflow.api.controller.ts`: Workflow management API
+   - `api/artifact.api.controller.ts`: Artifact upload/metadata/download/delete API
+   - `api/document.api.controller.ts`: Document management API
+   - `api/workflow-template.api.controller.ts`: Workflow template API
+   - `api/user-workflow.api.controller.ts`: User workflow API
 
 7. **Tool Abstraction**
    - `ConnectorTool` type for protocol-agnostic tool representation
@@ -104,10 +115,16 @@ pnpm dev        # Run TypeScript directly with tsx
 
 8. **Type System** (`src/types/`)
    - `agent.ts`: Agent manifest and configuration types
-   - `memory.ts`: Thread, Intent, Workflow, and message types (includes FulfillmentResult)
+   - `memory.ts`: Thread, Intent, Workflow, and message types; canonical multipart
+     `MessageContentPart` union (`text`/`artifact`/`data`/`tool-call`/`tool-result`/`thought`/`document`)
+     with `schemaVersion: 2` messages and legacy read compatibility
+   - `message-input.ts`: Structured query input (`input.parts`), execution input boundaries
+   - `artifact.ts`: `ArtifactObject`, `ArtifactRef`, store input/output types
+   - `document.ts`: Document storage types
    - `stream.ts`: Streaming event and chunk types
-   - `tool.ts`: Tool interfaces and response types
-   - `auth.ts`: Authentication scheme interfaces
+   - `connector.ts`: Tool/connector interfaces and response types
+   - `auth.ts` / `authz.ts`: Authentication and authorization types
+   - `schedule.ts`: Schedule run types
    - `mcp.ts`: MCP-specific types
 
 ### Key Patterns
@@ -120,7 +137,7 @@ pnpm dev        # Run TypeScript directly with tsx
 3. **Tool Execution**: Tools are executed through a unified interface regardless of source (MCP/A2A)
 4. **Streaming Support**: Dual implementation pattern for query processing (streaming and non-streaming)
 5. **Logging**: Service-specific loggers with structured logging
-   - Available loggers: `agent`, `intent`, `intentStream`, `mcp`, `a2a`, `model`, `server`, `fol`
+   - Available loggers: `agent`, `intent`, `intentStream`, `mcp`, `a2a`, `model`, `server`, `fol`, `http`
 6. **Error Handling**:
    - Global error middleware for uncaught errors
    - Custom `AinHttpError` for HTTP-specific errors
@@ -148,12 +165,14 @@ pnpm dev        # Run TypeScript directly with tsx
    - Register modules via `setModules()` in AINAgent initialization
 
 4. **API Endpoints**
-   - Standard query endpoints: `/query`
-   - API for agent management: `/api`
+   - Standard query endpoints: `/query`, `/query/stream` (accept legacy `message: string` or structured `input.parts`)
+   - API for agent management: `/api` (`/api/model`, `/api/agent`, `/api/threads`, `/api/intent`, `/api/workflow-template`, `/api/user-workflow`)
+   - Conditional APIs: `/api/artifacts` (requires ArtifactModule), `/api/document` (requires IDocumentMemory), `/api/schedule-runs` (requires IScheduleRunMemory)
    - A2A endpoints: `/a2a` (only available in A2A server mode)
 
 5. **Testing**
    - Use Jest for unit tests
+   - Tests live in the top-level `tests/` directory (not `src/`) so they are excluded from build output
    - Test files should use `.test.ts` extension
    - Mock external dependencies appropriately
    - Use `container.reset()` to clear singleton instances between tests
@@ -171,7 +190,9 @@ The project uses environment variables for configuration. Key variables include:
 
 ### Intent System Architecture
 
-The library supports two intent triggering modes:
+The library supports two intent triggering modes, both implemented inside the
+single `IntentTriggerService` (`src/services/intents/trigger.service.ts`),
+which selects a strategy based on `DISABLE_MULTI_INTENTS`:
 
 1. **Multi-Intent Mode (Default)**
    - Decomposes queries into multiple subqueries
@@ -179,34 +200,43 @@ The library supports two intent triggering modes:
    - Collects all intent responses
    - Uses `AggregateService` to determine if responses need unification
    - LLM-based aggregation creates a cohesive final response if needed
-   - Services: `MultiIntentTriggerService`, `AggregateService`
 
 2. **Single-Intent Mode** (`DISABLE_MULTI_INTENTS=true`)
    - No query decomposition
    - Identifies single most relevant intent
    - Streams response directly without aggregation
    - Simplified prompts for faster processing
-   - Service: `SingleIntentTriggerService`
-
-The `IntentTriggerService` acts as a router, delegating to the appropriate service based on the environment variable.
 
 ### Workflow System
 
-The library provides built-in workflow management:
+Workflows are split into immutable templates and user-owned instances:
 
-- **Workflow Memory Interface**: Abstract methods in `BaseMemoryModule`
-  - `createWorkflow(workflow)`: Create new workflow
-  - `updateWorkflow(id, workflow)`: Update existing workflow
-  - `getWorkflow(id)`: Retrieve workflow by ID
-  - `listWorkflows(userId?)`: List workflows (optionally filtered by userId)
-  - `deleteWorkflow(id)`: Delete workflow
-- **Workflow API**: RESTful endpoints via `WorkflowApiController`
-  - `GET /api/workflows`: List workflows
-  - `GET /api/workflows/:id`: Get workflow details
-  - `POST /api/workflows`: Create new workflow
-  - `POST /api/workflows/update/:id`: Update workflow
-  - `POST /api/workflows/delete/:id`: Delete workflow
+- **WorkflowTemplate**: admin/system-defined blueprint with a structured
+  `definition` (tasks → response blocks: heading/text/graph/table) and a
+  variable schema
+- **UserWorkflow**: user-owned copy of a template with resolved variable
+  values, optional cron `schedule` + `timezone` for scheduled execution
+- **Execution**: `WorkflowExecutionService` runs tasks (optionally delegated
+  to A2A agents), then composes response blocks; `SchedulerService` +
+  `JobRunnerService` handle cron-based runs recorded via `IScheduleRunMemory`
+- **APIs**: `/api/workflow-template`, `/api/user-workflow`, `/api/schedule-runs`
 - **Display Query Support**: Queries can include optional `displayQuery` parameter for workflow visualization
+- Workflow content is text-first for now; execution boundaries use typed
+  `WorkflowExecutionInput` reserved for future structured input
+
+### Multi-Modal / Artifact Layer
+
+See `MULTIMODAL_ARTIFACT_PLAN.md` for the full migration plan and progress.
+
+- Messages are canonical multipart (`schemaVersion: 2`, `parts[]`); legacy
+  `content`-based records are normalized at read boundaries
+- `/query` accepts structured `input.parts` (text + artifact references) and
+  returns a canonical `message` plus compatibility `content`
+- Streaming emits canonical events (`message_start`, `part_delta`,
+  `message_complete`, `artifact_ready`, `tool_start`, `tool_output`) alongside
+  the compatibility `text_chunk`
+- Artifact binaries live in the optional `ArtifactModule` store, separate from
+  thread memory; messages store only artifact references
 
 ### Build Considerations
 

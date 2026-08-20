@@ -114,6 +114,32 @@ describe("ArtifactApiController", () => {
 		expect(next).not.toHaveBeenCalled();
 	});
 
+	it("deletes artifacts and responds with 204", async () => {
+		const deleteArtifact = jest.fn(async () => {});
+		const controller = new ArtifactApiController({
+			uploadArtifact: jest.fn(),
+			getArtifact: jest.fn(),
+			openDownload: jest.fn(),
+			deleteArtifact,
+		} as any);
+
+		const send = jest.fn();
+		const status = jest.fn().mockReturnValue({ send });
+		const req = { params: { id: "art-1" } } as unknown as Request;
+		const res = {
+			locals: { userId: "user-1" },
+			status,
+		} as unknown as Response;
+		const next = jest.fn() as NextFunction;
+
+		await controller.handleDeleteArtifact(req, res, next);
+
+		expect(deleteArtifact).toHaveBeenCalledWith("user-1", "art-1");
+		expect(status).toHaveBeenCalledWith(204);
+		expect(send).toHaveBeenCalled();
+		expect(next).not.toHaveBeenCalled();
+	});
+
 	it("streams artifact downloads with headers", async () => {
 		const controller = new ArtifactApiController({
 			uploadArtifact: jest.fn(),

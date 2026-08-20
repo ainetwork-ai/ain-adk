@@ -130,6 +130,21 @@ export class ArtifactApiController {
 		}
 	};
 
+	public handleDeleteArtifact = async (
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	) => {
+		try {
+			const { id: artifactId } = req.params as { id: string };
+			const userId = res.locals.userId || "";
+			await this.artifactService.deleteArtifact(userId, artifactId);
+			res.status(StatusCodes.NO_CONTENT).send();
+		} catch (error) {
+			next(error);
+		}
+	};
+
 	public handleDownloadArtifact = async (
 		req: Request,
 		res: Response,
