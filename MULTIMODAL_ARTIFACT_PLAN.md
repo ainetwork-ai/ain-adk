@@ -94,6 +94,7 @@ Completed groundwork so far:
 - re-synced this plan with the post-main-merge codebase: implemented part/event names, document modality, unified intent trigger service, current workflow structure, and settled Phase 0 decisions
 - added upload limit validation via `ArtifactModuleOptions` (`maxSizeBytes` → `ARTIFACT_TOO_LARGE` 413, `allowedMimeTypes` with `type/*` wildcards → `ARTIFACT_TYPE_NOT_ALLOWED` 415); unlimited when unconfigured
 - added thread-deletion artifact cleanup: optional `IArtifactStore.listByThread` (implemented by `LocalArtifactStore`), best-effort `ArtifactService.deleteThreadArtifacts` (never fails the thread deletion), wired into the thread delete API
+- converted MCP tool binary outputs (image/audio/resource-blob blocks) into stored artifacts with `artifact_ready` events; `MCPModule.useTool` is now an AsyncGenerator symmetric with A2A, and base64 payloads never reach model context (omission notes when no store is configured)
 
 Not completed yet:
 
@@ -103,7 +104,6 @@ Not completed yet:
 - preview extraction pipeline beyond `LocalArtifactStore`'s synchronous text preview (async PDF/document extraction)
 - `S3ArtifactStore` / `AzureBlobArtifactStore` implementations
 - provider-side adoption of the canonical `input` bridge (lives in ain-adk-providers)
-- MCP tool binary outputs → artifact conversion (tool image results are currently stringified into model context)
 - artifact lifecycle/cleanup: thread deletion does not touch artifacts, so orphaned binaries accumulate (see Lifecycle and Cleanup — now practically relevant since a real store implementation exists)
 
 ---

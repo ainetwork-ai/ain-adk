@@ -156,7 +156,9 @@ describe("ToolCallingService", () => {
 			streamOf([textChunk("final answer")]),
 		]);
 		const mcp = {
-			useTool: jest.fn(async () => "mcp result"),
+			useTool: jest.fn(async function* () {
+				return "mcp result";
+			}),
 		} as unknown as MCPModule;
 		const svc = new ToolCallingService(makeModelModule(model), undefined, mcp);
 		const messages: unknown[] = [];
@@ -191,6 +193,47 @@ describe("ToolCallingService", () => {
 		expect(mcp.useTool).toHaveBeenCalledTimes(1);
 	});
 
+	it("forwards artifact_ready events from MCP tools and keeps the text result", async () => {
+		const model = makeModel([
+			streamOf([toolCallChunk(0, "call_1", "gen", '{"q":"foo"}')]),
+			streamOf([textChunk("final answer")]),
+		]);
+		const mcp = {
+			useTool: jest.fn(function* () {
+				yield {
+					event: "artifact_ready" as const,
+					data: { kind: "artifact" as const, artifactId: "art-9" },
+				};
+				return "mcp result with artifact art-9";
+			}),
+		} as unknown as MCPModule;
+		const svc = new ToolCallingService(makeModelModule(model), undefined, mcp);
+
+		const { events } = await drain(
+			svc.run({
+				messages: [],
+				tools: [mcpTool("gen")],
+				query: "q",
+				thread: makeThread(),
+			}),
+		);
+
+		expect(events).toContainEqual({
+			event: "artifact_ready",
+			data: { kind: "artifact", artifactId: "art-9" },
+		});
+		expect(model.appendToolResult).toHaveBeenCalledWith(expect.anything(), {
+			toolCallId: "call_1",
+			toolName: "gen",
+			content: "mcp result with artifact art-9",
+		});
+		expect(mcp.useTool).toHaveBeenCalledWith(
+			expect.objectContaining({ toolName: "gen" }),
+			{ q: "foo" },
+			{ userId: "user-1", threadId: "thread-1" },
+		);
+	});
+
 	it("preserves streamed text alongside tool calls in the assistant turn", async () => {
 		const model = makeModel([
 			streamOf([
@@ -200,7 +243,9 @@ describe("ToolCallingService", () => {
 			streamOf([textChunk("done")]),
 		]);
 		const mcp = {
-			useTool: jest.fn(async () => "ok"),
+			useTool: jest.fn(async function* () {
+				return "ok";
+			}),
 		} as unknown as MCPModule;
 		const svc = new ToolCallingService(makeModelModule(model), undefined, mcp);
 
@@ -228,7 +273,9 @@ describe("ToolCallingService", () => {
 			streamOf([textChunk("aggregated")]),
 		]);
 		const mcp = {
-			useTool: jest.fn(async (tool: ConnectorTool) => `result:${tool.toolName}`),
+			useTool: jest.fn(async function* (tool: ConnectorTool) {
+				return `result:${tool.toolName}`;
+			}),
 		} as unknown as MCPModule;
 		const svc = new ToolCallingService(makeModelModule(model), undefined, mcp);
 
@@ -320,7 +367,9 @@ describe("ToolCallingService", () => {
 		);
 		const model = makeModel(looping);
 		const mcp = {
-			useTool: jest.fn(async () => "x"),
+			useTool: jest.fn(async function* () {
+				return "x";
+			}),
 		} as unknown as MCPModule;
 		const svc = new ToolCallingService(makeModelModule(model), undefined, mcp);
 
@@ -352,7 +401,9 @@ describe("ToolCallingService", () => {
 			{ name: "search" },
 		]);
 		const mcp = {
-			useTool: jest.fn(async () => "ok"),
+			useTool: jest.fn(async function* () {
+				return "ok";
+			}),
 		} as unknown as MCPModule;
 		const svc = new ToolCallingService(makeModelModule(model), undefined, mcp);
 
@@ -384,7 +435,9 @@ describe("ToolCallingService", () => {
 			order.push("tool");
 		});
 		const mcp = {
-			useTool: jest.fn(async () => "ok"),
+			useTool: jest.fn(async function* () {
+				return "ok";
+			}),
 		} as unknown as MCPModule;
 		const svc = new ToolCallingService(makeModelModule(model), undefined, mcp);
 
@@ -406,7 +459,9 @@ describe("ToolCallingService", () => {
 			streamOf([textChunk("done")]),
 		]);
 		const mcp = {
-			useTool: jest.fn(async () => "ok"),
+			useTool: jest.fn(async function* () {
+				return "ok";
+			}),
 		} as unknown as MCPModule;
 		const svc = new ToolCallingService(makeModelModule(model), undefined, mcp);
 
