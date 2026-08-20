@@ -103,6 +103,7 @@ Not completed yet:
 - `S3ArtifactStore` / `AzureBlobArtifactStore` implementations
 - provider-side adoption of the canonical `input` bridge (lives in ain-adk-providers)
 - MCP tool binary outputs → artifact conversion (tool image results are currently stringified into model context)
+- artifact lifecycle/cleanup: thread deletion does not touch artifacts, so orphaned binaries accumulate (see Lifecycle and Cleanup — now practically relevant since a real store implementation exists)
 
 ---
 
@@ -498,16 +499,18 @@ The selected strategy should be consistent with the existing auth middleware and
 
 Because artifact flows introduce more failure modes, error responses should become more structured.
 
-Recommended direction:
+Implemented:
 
-- preserve a simple `message` field for compatibility
-- add optional stable error codes such as:
+- a simple `message` field is preserved for compatibility
+- stable error codes are in place:
   - `ARTIFACT_STORE_NOT_CONFIGURED`
   - `ARTIFACT_NOT_FOUND`
   - `ARTIFACT_ACCESS_DENIED`
+  - `ARTIFACT_NOT_READY`
   - `ARTIFACT_TOO_LARGE`
   - `ARTIFACT_TYPE_NOT_ALLOWED`
-- ensure upload, download, and query validation errors are distinguishable
+  - `INVALID_ARTIFACT_UPLOAD`
+- upload, download, and query validation errors are distinguishable
 
 ---
 
@@ -740,7 +743,7 @@ Recommended considerations:
 - ownership checks on artifact metadata and download access
 - safe handling of signed URL expiry
 - log redaction for artifact metadata if file names are sensitive
-- validation of cross-user artifact references before query execution
+- validation of cross-user artifact references before query execution (implemented: `ArtifactService.resolveQueryInputArtifacts` enforces ownership and ready-state)
 
 These do not all need to be implemented in the MVP, but the extension points should be designed up front.
 
@@ -1013,6 +1016,9 @@ Completed groundwork in this phase:
 - added query-time artifact reference validation and metadata enrichment before inference
 - added `ARTIFACT_NOT_READY` handling for artifact references that are not yet usable
 - added focused tests covering resolved query artifact metadata and stream-path validation failures
+- added `LocalArtifactStore` as the first concrete store implementation
+- added `DELETE /api/artifacts/:id` with ownership checks
+- added upload size/mime-type limit validation via `ArtifactModuleOptions`
 
 ## Phase 11. A2A Expansion
 
@@ -1094,17 +1100,21 @@ Important note:
 
 To reduce scope while still establishing the new foundation, the initial milestone should support:
 
-- multipart `MessageObject`
-- text plus uploaded file reference input
-- artifact store abstraction
-- optional artifact-store configuration
-- optional preview extraction pipeline
-- artifact metadata in thread/message history
-- download-capable artifact responses
-- stream support for `artifact_ready`
-- A2A artifact references, not full raw binary transport
-- authenticated artifact access baseline
-- workflow remains text-only, with future structured-input compatibility considered in service boundaries
+- multipart `MessageObject` — done
+- text plus uploaded file reference input — done
+- artifact store abstraction — done
+- optional artifact-store configuration — done (`LocalArtifactStore` as first implementation)
+- optional preview extraction pipeline — partial (synchronous text-preview only; async extraction pending)
+- artifact metadata in thread/message history — done
+- download-capable artifact responses — done
+- stream support for `artifact_ready` — done
+- A2A artifact references, not full raw binary transport — done
+- authenticated artifact access baseline — done (plus upload size/mime limits)
+- workflow remains text-only, with future structured-input compatibility considered in service boundaries — done
+
+Status: the MVP milestone is effectively reached except async preview
+extraction. Remaining work is post-MVP (see "Not completed yet" in the
+Progress Snapshot).
 
 Defer for later:
 
