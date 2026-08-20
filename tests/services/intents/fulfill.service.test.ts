@@ -277,7 +277,9 @@ describe("IntentFulfillService", () => {
 		let streamCallCount = 0;
 		const appendAssistantToolCallTurn = jest.fn();
 		const appendToolResult = jest.fn();
-		const useTool = jest.fn(async () => "tool result text");
+		const useTool = jest.fn(async function* () {
+			return "tool result text";
+		});
 		const modelModule = {
 			getModel: () => ({
 				generateMessages: () => [],
@@ -411,6 +413,7 @@ describe("IntentFulfillService", () => {
 		expect(useTool).toHaveBeenCalledWith(
 			expect.objectContaining({ toolName: "search" }),
 			{ query: "hello" },
+			expect.objectContaining({ threadId: expect.any(String) }),
 		);
 		expect(appendAssistantToolCallTurn).toHaveBeenCalledWith(
 			[],

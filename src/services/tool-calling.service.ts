@@ -242,7 +242,10 @@ export class ToolCallingService {
 				toolName,
 				toolArgs: protocolArgs,
 			});
-			return await this.mcpModule.useTool(selectedTool, protocolArgs);
+			return yield* this.mcpModule.useTool(selectedTool, protocolArgs, {
+				userId: thread.userId,
+				threadId: thread.threadId,
+			});
 		}
 
 		if (

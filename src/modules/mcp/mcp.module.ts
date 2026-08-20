@@ -3,14 +3,79 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { WebSocketClientTransport } from "@modelcontextprotocol/sdk/client/websocket.js";
+import { getArtifactModule } from "@/config/modules.js";
 import {
 	CONNECTOR_PROTOCOL_TYPE,
 	type ConnectorTool,
 } from "@/types/connector.js";
 import type { MCPConfig } from "@/types/mcp.js";
+import type { ArtifactContentPart } from "@/types/memory.js";
+import type { StreamEvent } from "@/types/stream.js";
 import { loggers } from "@/utils/logger.js";
 import { withAdkThinkingArg } from "@/utils/tool-args.js";
+import type { IArtifactStore } from "../artifacts/base.artifact.js";
 import { MCPConnector } from "./mcp.connector.js";
+
+function safeGetArtifactStore(): IArtifactStore | undefined {
+	try {
+		return getArtifactModule()?.getStore();
+	} catch {
+		// Modules not initialized (standalone module usage): no artifact storage.
+		return undefined;
+	}
+}
+
+type BinaryBlock = { data: string; mimeType: string; name: string };
+
+/** Recognizes MCP binary content blocks: image/audio base64 and resource blobs. */
+function extractBinaryBlock(
+	block: unknown,
+	toolName: string,
+	index: number,
+): BinaryBlock | undefined {
+	if (!block || typeof block !== "object") {
+		return undefined;
+	}
+	const candidate = block as {
+		type?: string;
+		data?: unknown;
+		mimeType?: unknown;
+		resource?: { uri?: unknown; mimeType?: unknown; blob?: unknown };
+	};
+
+	if (
+		(candidate.type === "image" || candidate.type === "audio") &&
+		typeof candidate.data === "string" &&
+		typeof candidate.mimeType === "string"
+	) {
+		const subtype = candidate.mimeType.split("/")[1]?.split("+")[0] || "bin";
+		return {
+			data: candidate.data,
+			mimeType: candidate.mimeType,
+			name: `${toolName}-output-${index}.${subtype}`,
+		};
+	}
+
+	if (
+		candidate.type === "resource" &&
+		typeof candidate.resource?.blob === "string"
+	) {
+		const uri =
+			typeof candidate.resource.uri === "string" ? candidate.resource.uri : "";
+		return {
+			data: candidate.resource.blob,
+			mimeType:
+				typeof candidate.resource.mimeType === "string"
+					? candidate.resource.mimeType
+					: "application/octet-stream",
+			name:
+				uri.split("/").filter(Boolean).pop() ||
+				`${toolName}-output-${index}.bin`,
+		};
+	}
+
+	return undefined;
+}
 
 /**
  * Module for managing Model Context Protocol (MCP) server connections.
@@ -122,15 +187,21 @@ export class MCPModule {
 	/**
 	 * Executes a tool on its corresponding MCP server.
 	 *
+	 * Binary content blocks (image/audio/resource-blob) are stored through the
+	 * configured artifact store and yielded as `artifact_ready` events; the
+	 * serialized text result carries artifact references instead of base64
+	 * payloads. Without an artifact store, binary payloads are omitted.
+	 *
 	 * @param tool - The MCPTool instance to execute
 	 * @param _args - Arguments to pass to the tool
-	 * @returns Promise resolving to the tool's execution result
-	 * @throws Error if the MCP server for the tool is not found
+	 * @param context - Ownership/linkage metadata for stored artifacts
+	 * @returns AsyncGenerator yielding stream events and returning the text result
 	 */
-	async useTool(
+	async *useTool(
 		tool: ConnectorTool,
 		_args?: Record<string, unknown>,
-	): Promise<string> {
+		context?: { userId?: string; threadId?: string },
+	): AsyncGenerator<StreamEvent, string, unknown> {
 		const { connectorName, toolName } = tool;
 		const connector = this.mcpConnectors.get(connectorName);
 		const client = connector?.client;
@@ -156,15 +227,89 @@ export class MCPModule {
 					? { timeout: requestTimeoutMs, resetTimeoutOnProgress: true }
 					: undefined,
 			);
-			const toolResult =
+			const { content, events } = await this.replaceBinaryBlocks(
+				toolName,
+				result.content,
+				context,
+			);
+			for (const event of events) {
+				yield event;
+			}
+			return (
 				`[Bot Called Tool ${toolName} with args ${JSON.stringify(_args)}]\n` +
-				JSON.stringify(result.content, null, 2);
-			return toolResult;
+				JSON.stringify(content, null, 2)
+			);
 		} catch (error) {
 			loggers.mcp.error("Failed to call tool", { error });
 			const toolResult = `[Bot Called Tool ${toolName} with args ${JSON.stringify(_args)}]\n${typeof error === "string" ? error : JSON.stringify(error, null, 2)}`;
 			return toolResult;
 		}
+	}
+
+	/**
+	 * Replaces binary content blocks with artifact references (when a store is
+	 * configured) or omission notes, so base64 payloads never reach model
+	 * context. Returns the sanitized content plus artifact_ready events.
+	 */
+	private async replaceBinaryBlocks(
+		toolName: string,
+		content: unknown,
+		context?: { userId?: string; threadId?: string },
+	): Promise<{ content: unknown; events: StreamEvent[] }> {
+		if (!Array.isArray(content)) {
+			return { content, events: [] };
+		}
+
+		const store = safeGetArtifactStore();
+		const events: StreamEvent[] = [];
+		const blocks = await Promise.all(
+			content.map(async (block, index) => {
+				const binary = extractBinaryBlock(block, toolName, index);
+				if (!binary) {
+					return block;
+				}
+
+				const bytes = Buffer.from(binary.data, "base64");
+				if (store) {
+					try {
+						const artifact = await store.put({
+							name: binary.name,
+							mimeType: binary.mimeType,
+							data: bytes,
+							userId: context?.userId,
+							threadId: context?.threadId,
+						});
+						const part: ArtifactContentPart = {
+							kind: "artifact",
+							artifactId: artifact.artifactId,
+							name: artifact.name,
+							mimeType: artifact.mimeType,
+							size: artifact.size,
+							downloadUrl: `/api/artifacts/${artifact.artifactId}/download`,
+						};
+						events.push({ event: "artifact_ready", data: part });
+						return { type: (block as { type?: string }).type, artifact: part };
+					} catch (error) {
+						loggers.mcp.warn("Failed to store tool binary output", {
+							toolName,
+							error,
+						});
+						return {
+							type: (block as { type?: string }).type,
+							mimeType: binary.mimeType,
+							note: `binary content omitted (${bytes.byteLength} bytes; failed to store artifact)`,
+						};
+					}
+				}
+
+				return {
+					type: (block as { type?: string }).type,
+					mimeType: binary.mimeType,
+					note: `binary content omitted (${bytes.byteLength} bytes; artifact storage not configured)`,
+				};
+			}),
+		);
+		return { content: blocks, events };
 	}
 
 	/**
