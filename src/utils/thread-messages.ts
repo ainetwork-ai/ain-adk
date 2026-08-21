@@ -11,9 +11,10 @@ export function createTextMessage(
 	role: MessageRole,
 	content: string,
 	metadata?: Record<string, unknown>,
+	messageId?: string,
 ): MessageObject {
 	return {
-		messageId: randomUUID(),
+		messageId: messageId ?? randomUUID(),
 		role,
 		timestamp: Date.now(),
 		content: { type: "text", parts: [content] },
@@ -41,12 +42,14 @@ export async function appendTextMessageToThread(
 	role: MessageRole,
 	content: string,
 	metadata?: Record<string, unknown>,
-): Promise<void> {
-	const message = createTextMessage(role, content, metadata);
+	messageId?: string,
+): Promise<MessageObject> {
+	const message = createTextMessage(role, content, metadata, messageId);
 	thread.messages.push(message);
 	await memoryModule
 		.getThreadMemory()
 		?.addMessagesToThread(thread.userId, thread.threadId, [message]);
+	return message;
 }
 
 /**
@@ -59,9 +62,10 @@ export function createRichMessage(
 	role: MessageRole,
 	parts: MessagePart[],
 	metadata?: Record<string, unknown>,
+	messageId?: string,
 ): MessageObject {
 	return {
-		messageId: randomUUID(),
+		messageId: messageId ?? randomUUID(),
 		role,
 		timestamp: Date.now(),
 		content: { type: "rich", parts },
@@ -75,10 +79,12 @@ export async function appendRichMessageToThread(
 	role: MessageRole,
 	parts: MessagePart[],
 	metadata?: Record<string, unknown>,
-): Promise<void> {
-	const message = createRichMessage(role, parts, metadata);
+	messageId?: string,
+): Promise<MessageObject> {
+	const message = createRichMessage(role, parts, metadata, messageId);
 	thread.messages.push(message);
 	await memoryModule
 		.getThreadMemory()
 		?.addMessagesToThread(thread.userId, thread.threadId, [message]);
+	return message;
 }

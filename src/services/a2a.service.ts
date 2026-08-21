@@ -201,7 +201,7 @@ export class A2AService implements AgentExecutor {
 					return;
 				}
 
-				if (event.event === "text_chunk") {
+				if (event.event === "part_delta" && event.data.part.kind === "text") {
 					finalResponseText += event.data.delta;
 				} else if (event.event === "message_complete") {
 					finalResponseText = serializeMessageForModelFallback(

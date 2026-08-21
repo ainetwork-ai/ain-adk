@@ -66,6 +66,62 @@ describe("A2AService", () => {
 		});
 	});
 
+	it("accumulates fallback text from canonical part_delta when message_complete is absent", async () => {
+		const a2aService = new A2AService({
+			handleQuery: async function* () {
+				yield {
+					event: "message_start" as const,
+					data: { messageId: "msg-3", role: MessageRole.MODEL },
+				};
+				yield {
+					event: "part_delta" as const,
+					data: {
+						messageId: "msg-3",
+						partIndex: 0,
+						part: { kind: "text" as const },
+						delta: "partial ",
+					},
+				};
+				yield {
+					event: "part_delta" as const,
+					data: {
+						messageId: "msg-3",
+						partIndex: 0,
+						part: { kind: "text" as const },
+						delta: "answer",
+					},
+				};
+				return undefined;
+			},
+		} as any);
+
+		const publish = jest.fn();
+		await a2aService.execute(
+			{
+				userMessage: {
+					contextId: "thread-1",
+					metadata: {
+						agentId: "agent-1",
+						type: ThreadType.CHAT,
+					},
+					parts: [{ kind: "text", text: "hello" }],
+				},
+			} as any,
+			{ publish } as any,
+		);
+
+		expect(publish.mock.calls[1][0]).toMatchObject({
+			kind: "status-update",
+			status: {
+				state: "completed",
+				message: {
+					parts: [{ kind: "text", text: "partial answer" }],
+				},
+			},
+			final: true,
+		});
+	});
+
 	it("maps inbound file parts to structured input and publishes artifact updates", async () => {
 		const finalMessage = {
 			messageId: "msg-2",
