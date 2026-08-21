@@ -106,6 +106,7 @@ Not completed yet:
 - `S3ArtifactStore` / `AzureBlobArtifactStore` implementations
 - provider-side adoption of the canonical `input` bridge (lives in ain-adk-providers)
 - deferred/background artifact cleanup jobs (synchronous thread-deletion cleanup is implemented; stores without `listByThread` and orphaned-artifact grace periods remain policy gaps — see Lifecycle and Cleanup)
+- RAG / retrieval layer (future milestone — direction recorded in the RAG / Retrieval Layer section; depends on the async extraction pipeline and provider embedding support)
 
 ---
 
@@ -740,6 +741,71 @@ Notes:
 - preview extraction may be synchronous for small text files and asynchronous for PDFs or large documents
 - the artifact status model should support eventual readiness
 - the SDK should avoid blocking the entire thread if preview extraction is delayed
+
+---
+
+## RAG / Retrieval Layer
+
+Status: direction agreed (2026-08-21), future milestone — not part of the
+current multimodal milestone. Recorded here so the ingestion pipeline and
+module design stay compatible with it.
+
+Why: preview text and byte delivery cover files that fit in context. Files
+beyond context size (large PDFs, datasets, accumulated documents) need
+chunk + embed + retrieve so the model sees only the relevant slices.
+
+### Architecture direction
+
+Follow the same optional-module pattern as `ArtifactModule`:
+
+- optional `RetrievalModule` wrapping a pluggable `IVectorIndex`
+  (`upsert(chunks)`, `search(query, filter, topK)`, `deleteBySource(...)`)
+- backend implementations are deployment choices (local/naive first;
+  MongoDB Atlas vector search, pgvector, etc. live outside this repo like
+  future artifact stores)
+- embeddings come through the model layer: providers gain an embedding
+  contract (e.g. `BaseEmbeddingModel` or an `embed()` capability on
+  `ModelModule`) in ain-adk-providers — the ADK never bundles its own
+  embedding model
+- absent module = today's behavior, exactly like a missing artifact module
+
+### Ingestion
+
+Extends the artifact processing pipeline above at step 4 (extraction):
+
+- sources: artifact preview/extracted text and document bodies
+  (both modalities feed one index)
+- chunk → embed → upsert with metadata
+  `{ userId, source: artifactId | documentId, threadId?, mimeType }`
+- ingestion is asynchronous and best-effort, mirroring preview extraction;
+  index staleness must never block uploads or queries
+- deleting an artifact/document (including thread-deletion cleanup) also
+  calls `deleteBySource` — same best-effort semantics as artifact cleanup
+
+### Query path
+
+MVP is tool-mediated, not auto-injected:
+
+- expose a built-in `search_knowledge` tool through the existing
+  `ToolCallingService` so the model decides when to retrieve; results flow
+  through the already-canonical tool-result events
+- retrieval is always filtered by the requesting `userId` (same ownership
+  stance as artifact access)
+- automatic context injection (retrieve-before-trigger) is explicitly
+  deferred — it changes intent-triggering behavior and deserves its own
+  evaluation
+
+### Deferred with the rest of the layer
+
+- reranking, hybrid (keyword + vector) search
+- cross-agent retrieval over A2A
+- retrieval-aware aggregation prompts
+
+### Dependencies
+
+- async preview/extraction pipeline (ingestion's front door — extraction
+  quality bounds retrieval quality)
+- embedding support in ain-adk-providers
 
 ---
 
