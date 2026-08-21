@@ -104,7 +104,7 @@ Not completed yet:
 - preview extraction pipeline beyond `LocalArtifactStore`'s synchronous text preview (async PDF/document extraction)
 - `S3ArtifactStore` / `AzureBlobArtifactStore` implementations
 - provider-side adoption of the canonical `input` bridge (lives in ain-adk-providers)
-- artifact lifecycle/cleanup: thread deletion does not touch artifacts, so orphaned binaries accumulate (see Lifecycle and Cleanup — now practically relevant since a real store implementation exists)
+- deferred/background artifact cleanup jobs (synchronous thread-deletion cleanup is implemented; stores without `listByThread` and orphaned-artifact grace periods remain policy gaps — see Lifecycle and Cleanup)
 
 ---
 
@@ -761,11 +761,18 @@ Recommended decisions to make before implementation:
 - whether generated artifacts and uploaded artifacts share the same retention policy
 - whether cleanup is synchronous or delegated to background jobs
 
-Suggested baseline:
+Implemented baseline (2026-08-21):
 
-- deleting a thread removes message-to-artifact linkage immediately
-- actual binary deletion can be deferred through cleanup jobs
-- artifacts referenced by multiple messages or workflows should not be deleted blindly
+- deleting a thread synchronously deletes its linked artifacts (owned by or
+  unowned for the requesting user) via best-effort `deleteThreadArtifacts`;
+  cleanup failures never fail the thread deletion
+- stores that do not implement the optional `listByThread` skip cleanup
+
+Still open:
+
+- deferred/background cleanup jobs for large stores or failed deletions
+- orphaned-artifact grace periods and retention policy for uploaded vs generated artifacts
+- artifacts referenced across threads/workflows are deleted with their linked thread today (single-thread linkage model); reference counting would be needed to change that
 
 ---
 
