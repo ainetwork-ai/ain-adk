@@ -95,6 +95,7 @@ Completed groundwork so far:
 - added upload limit validation via `ArtifactModuleOptions` (`maxSizeBytes` → `ARTIFACT_TOO_LARGE` 413, `allowedMimeTypes` with `type/*` wildcards → `ARTIFACT_TYPE_NOT_ALLOWED` 415); unlimited when unconfigured
 - added thread-deletion artifact cleanup: optional `IArtifactStore.listByThread` (implemented by `LocalArtifactStore`), best-effort `ArtifactService.deleteThreadArtifacts` (never fails the thread deletion), wired into the thread delete API
 - converted MCP tool binary outputs (image/audio/resource-blob blocks) into stored artifacts with `artifact_ready` events; `MCPModule.useTool` is now an AsyncGenerator symmetric with A2A, and base64 payloads never reach model context (omission notes when no store is configured)
+- switched internal `text_chunk` consumers to canonical events: a2a fallback accumulation and workflow non-stream accumulators read `part_delta`, and workflow streams now emit `message_start`/`part_delta`/`message_complete` with the persisted message identity (see the text_chunk removal note in Stream Event Redesign)
 
 Not completed yet:
 
@@ -531,19 +532,30 @@ Implemented event set:
 - `error`
 - `text_chunk` (compatibility-only; to be removed once consumers migrate)
 
-`text_chunk` removal note (found 2026-08-20): the event is not only an outbound
-compatibility payload — internal code also consumes it as the text-accumulation
-signal. `workflow-execution.service`, `workflow-task-runner.service`,
-`a2a.service`, and `intents/fulfill.service` all branch on
-`event.event === "text_chunk"` to collect streamed text, and there are 10+ emit
-sites (fulfill, aggregate, query PII path, workflow-response-composer,
-document-advice, tool-calling, a2a). Removal therefore has two preconditions:
+`text_chunk` removal note (found 2026-08-20, internal switch done 2026-08-21):
+internal `text_chunk` usage splits into two roles.
 
-1. external consumers (enterprise app, A2A peers) migrate to canonical events
-2. internal consumption sites switch to `part_delta` / `message_complete`
+Converted — consumers of canonical-bearing streams now read `part_delta` /
+`message_complete` instead of `text_chunk`:
 
-Precondition 2 does not depend on external consumers and can be done now as a
-standalone refactor, which makes the eventual breaking removal much cheaper.
+- `a2a.service` fallback text accumulation
+- `workflow-execution.service` non-stream accumulators (`executeWorkflow`,
+  `fillDocumentSlot`)
+- workflow streams now emit canonical `message_start` / `part_delta` /
+  `message_complete` (shared renderer wrapper mirroring the fulfill adapter),
+  so external workflow-stream consumers finally have a canonical migration path
+
+Remaining by design — `text_chunk` as the *internal delta primitive* between
+message-agnostic producers (tool-calling, workflow-response-composer,
+document-advice, aggregate) and their canonical wrappers/conversion boundaries
+(`fulfill.service` final-stream adapter, `workflow-task-runner` → `task_output`,
+`workflow-execution` response wrapper). These links never need to reach the
+wire, so they do not block external removal.
+
+Removal precondition left: external consumers (enterprise app, A2A peers)
+migrate to canonical events. After that, removal = stop *forwarding*
+`text_chunk` at the fulfill/workflow/query-PII boundaries — no internal
+consumer depends on it anymore.
 
 Additional events that exist outside this plan's original scope (workflow and
 document features merged from main):

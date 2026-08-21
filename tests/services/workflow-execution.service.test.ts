@@ -155,6 +155,9 @@ describe("WorkflowExecutionService", () => {
 			"task_result",
 			"thinking_process",
 			"text_chunk",
+			"message_start",
+			"part_delta",
+			"message_complete",
 		]);
 		expect(
 			events.find(
@@ -163,6 +166,121 @@ describe("WorkflowExecutionService", () => {
 					event.data.delta === "unexpected early text",
 			),
 		).toBeUndefined();
+	});
+
+	it("emits canonical message events around the workflow response", async () => {
+		const workflow = {
+			workflowId: "workflow-1",
+			userId: "user-1",
+			title: "Daily Report",
+			content: "Daily Report",
+			active: true,
+			definition: {
+				tasks: [
+					{ taskId: "task-1", title: "Collect data", prompt: "Collect data" },
+				],
+				response: {
+					blocks: [
+						{ blockId: "block-1", type: "heading" as const, text: "Summary" },
+					],
+				},
+			},
+		};
+		const userWorkflowService = {
+			getWorkflow: jest.fn(async () => workflow),
+			updateWorkflow: jest.fn(async () => undefined),
+		} as unknown as UserWorkflowService;
+		const workflowVariableResolver = {
+			resolveForExecution: jest.fn(() => ({
+				query: workflow.content,
+				displayQuery: workflow.title,
+				definition: workflow.definition,
+			})),
+		} as unknown as WorkflowVariableResolver;
+		const addMessagesToThread = jest.fn(async () => undefined);
+		const memoryModule = {
+			getThreadMemory: () => ({
+				createThread: jest.fn(async () => ({
+					type: ThreadType.WORKFLOW,
+					userId: workflow.userId,
+					threadId: "thread-1",
+					title: workflow.title,
+					workflowId: workflow.workflowId,
+				})),
+				addMessagesToThread,
+			}),
+			getDocumentMemory: () => undefined,
+		} as unknown as MemoryModule;
+
+		const service = new WorkflowExecutionService(
+			userWorkflowService,
+			workflowVariableResolver,
+			{} as ModelModule,
+			memoryModule,
+			{} as ToolCallingService,
+		);
+
+		(service as any).workflowTaskRunner = {
+			executeTask: async function* () {
+				return {
+					taskId: "task-1",
+					title: "Collect data",
+					status: "completed",
+					content: "task result body",
+					startedAt: 1,
+					completedAt: 2,
+				} satisfies WorkflowTaskResult;
+			},
+		};
+		(service as any).workflowResponseComposer = {
+			renderResponseBlock: async function* () {
+				yield {
+					event: "text_chunk",
+					data: { delta: "## Summary\n\n" },
+				} satisfies StreamEvent;
+				return {
+					blockId: "block-1",
+					type: "heading",
+					content: "## Summary\n\n",
+				};
+			},
+		};
+
+		const events = await collectEvents(
+			service.executeWorkflowStream(workflow.workflowId),
+		);
+
+		const messageStart = events.find((e) => e.event === "message_start") as any;
+		const partDelta = events.find((e) => e.event === "part_delta") as any;
+		const messageComplete = events.find(
+			(e) => e.event === "message_complete",
+		) as any;
+
+		expect(messageStart).toBeDefined();
+		expect(partDelta).toMatchObject({
+			data: {
+				messageId: messageStart.data.messageId,
+				partIndex: 0,
+				part: { kind: "text" },
+				delta: "## Summary\n\n",
+			},
+		});
+		expect(messageComplete).toMatchObject({
+			data: {
+				message: {
+					messageId: messageStart.data.messageId,
+					schemaVersion: 2,
+					parts: [{ kind: "text", text: "## Summary\n\n" }],
+				},
+			},
+		});
+		expect(addMessagesToThread).toHaveBeenCalledWith("user-1", "thread-1", [
+			expect.objectContaining({ messageId: messageStart.data.messageId }),
+		]);
+
+		// canonical events come after the compat text_chunk of the same delta
+		const eventNames = events.map((e) => e.event);
+		expect(eventNames).toContain("text_chunk");
 	});
 
 	it("creates a document and appends a rich reference message when document memory is available", async () => {

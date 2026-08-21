@@ -8,6 +8,7 @@ import {
 	DocumentSource,
 } from "@/types/document.js";
 import {
+	type MessageObject,
 	MessageRole,
 	type ThreadMetadata,
 	type ThreadObject,
@@ -22,6 +23,7 @@ import type { SlotFillInitiator } from "@/types/schedule.js";
 import type { StreamEvent } from "@/types/stream.js";
 import { renderDocument } from "@/utils/document-render.js";
 import { loggers } from "@/utils/logger.js";
+import { normalizeMessageObject } from "@/utils/message.js";
 import {
 	appendRichMessageToThread,
 	appendTextMessageToThread,
@@ -34,6 +36,12 @@ import { WorkflowTableService } from "./workflow-table.service.js";
 import { WorkflowTaskRunner } from "./workflow-task-runner.service.js";
 import { WorkflowVariableExtractionService } from "./workflow-variable-extraction.service.js";
 import type { WorkflowVariableResolver } from "./workflow-variable-resolver.service.js";
+
+/** Canonical message identity shared between streaming deltas and persistence. */
+type WorkflowMessageState = {
+	messageId: string;
+	started: boolean;
+};
 
 type WorkflowExecutionResult = {
 	content: string;
@@ -89,7 +97,10 @@ export class WorkflowExecutionService {
 		for await (const event of stream) {
 			if (event.event === "thread_id") {
 				threadId = event.data.threadId;
-			} else if (event.event === "text_chunk") {
+			} else if (
+				event.event === "part_delta" &&
+				event.data.part.kind === "text"
+			) {
 				content += event.data.delta;
 			}
 		}
@@ -143,16 +154,22 @@ export class WorkflowExecutionService {
 			},
 		};
 
+		const messageState: WorkflowMessageState = {
+			messageId: randomUUID(),
+			started: false,
+		};
 		const { finalContent, renderedBlocks, executionError } =
 			yield* this.renderStructuredDefinition(
 				definition,
 				thread,
 				workflowId,
 				signal,
+				messageState,
 			);
 
 		const responseContent =
 			finalContent || (executionError ? `오류: ${executionError.message}` : "");
+		let savedMessage: MessageObject | undefined;
 		try {
 			const documentMemory = this.memoryModule.getDocumentMemory();
 			if (documentMemory && !executionError && finalContent) {
@@ -174,7 +191,7 @@ export class WorkflowExecutionService {
 					createdAt: now,
 					updatedAt: now,
 				});
-				await appendRichMessageToThread(
+				savedMessage = await appendRichMessageToThread(
 					this.memoryModule,
 					thread,
 					MessageRole.MODEL,
@@ -184,11 +201,12 @@ export class WorkflowExecutionService {
 						workflowRun: true,
 						documentId,
 					},
+					messageState.messageId,
 				);
 			} else {
 				// No document memory (or execution failed): keep the legacy
 				// inline text message with structured blocks in metadata.
-				await appendTextMessageToThread(
+				savedMessage = await appendTextMessageToThread(
 					this.memoryModule,
 					thread,
 					MessageRole.MODEL,
@@ -199,6 +217,7 @@ export class WorkflowExecutionService {
 						responseBlocks: renderedBlocks,
 						...(executionError ? { error: executionError.message } : {}),
 					},
+					messageState.messageId,
 				);
 			}
 		} catch (saveError) {
@@ -207,6 +226,22 @@ export class WorkflowExecutionService {
 				threadId: thread.threadId,
 				error: saveError,
 			});
+		}
+
+		if (savedMessage) {
+			if (!messageState.started) {
+				yield {
+					event: "message_start",
+					data: {
+						messageId: messageState.messageId,
+						role: MessageRole.MODEL,
+					},
+				};
+			}
+			yield {
+				event: "message_complete",
+				data: { message: normalizeMessageObject(savedMessage) },
+			};
 		}
 
 		try {
@@ -318,6 +353,10 @@ export class WorkflowExecutionService {
 		thread: ThreadObject,
 		workflowId: string,
 		signal?: AbortSignal,
+		messageState: WorkflowMessageState = {
+			messageId: randomUUID(),
+			started: false,
+		},
 	): AsyncGenerator<
 		StreamEvent,
 		{
@@ -478,8 +517,31 @@ export class WorkflowExecutionService {
 				while (!result.done) {
 					if (result.value.event === "text_chunk") {
 						finalContent += result.value.data.delta;
+						yield result.value;
+						// Canonical wrapper around the composer's text_chunk primitive,
+						// mirroring the fulfill-service final-stream adapter.
+						if (!messageState.started) {
+							messageState.started = true;
+							yield {
+								event: "message_start",
+								data: {
+									messageId: messageState.messageId,
+									role: MessageRole.MODEL,
+								},
+							};
+						}
+						yield {
+							event: "part_delta",
+							data: {
+								messageId: messageState.messageId,
+								partIndex: 0,
+								part: { kind: "text" },
+								delta: result.value.data.delta,
+							},
+						};
+					} else {
+						yield result.value;
 					}
-					yield result.value;
 					result = await stream.next();
 				}
 				renderedBlocks.push(result.value);
@@ -657,7 +719,7 @@ export class WorkflowExecutionService {
 			options,
 			signal,
 		)) {
-			if (event.event === "text_chunk") {
+			if (event.event === "part_delta" && event.data.part.kind === "text") {
 				content += event.data.delta;
 			}
 		}
