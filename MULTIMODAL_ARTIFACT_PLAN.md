@@ -105,6 +105,7 @@ Not completed yet:
 - preview extraction pipeline beyond `LocalArtifactStore`'s synchronous text preview (async PDF/document extraction)
 - `S3ArtifactStore` / `AzureBlobArtifactStore` implementations
 - provider-side adoption of the canonical `input` bridge (lives in ain-adk-providers)
+- artifact byte delivery loader (`resolveArtifactContent` on model-call params) — design settled in the Model Layer Redesign section; implement together with provider adoption so native vision/file input becomes possible
 - deferred/background artifact cleanup jobs (synchronous thread-deletion cleanup is implemented; stores without `listByThread` and orphaned-artifact grace periods remain policy gaps — see Lifecycle and Cleanup)
 
 ---
@@ -600,6 +601,48 @@ Provider behavior guidance:
 - If a provider supports file/image/data natively, map parts directly
 - If not, degrade unsupported parts into text summaries or `previewText`
 - Keep provider-specific conversion logic inside model implementations, not in services
+
+### Artifact Byte Delivery to Providers
+
+Status: design settled (2026-08-21), not yet implemented. Implement alongside
+provider canonical-input adoption in ain-adk-providers.
+
+Problem: `ArtifactContentPart` is reference-only (id, name, mimeType, size,
+downloadUrl, previewText). A provider that supports native vision/file input
+has no way to obtain the actual bytes, so even canonical-input adopters can
+only reason over preview text and metadata labels.
+
+Decision: **lazy loader callback on the model-call params.**
+
+- add an optional `resolveArtifactContent?: (artifactId: string) =>
+  Promise<ArtifactDownloadResult>` to `ModelGenerateMessagesParams` (and the
+  structured append bridge if tool results need it)
+- services construct the loader from `ArtifactService`, bound to the
+  requesting user, so the existing ownership and ready-state checks apply to
+  every load
+- providers that support native modalities iterate the input's artifact parts
+  and decide per part — by mimeType and size — whether to load bytes and map
+  them to provider-native content blocks; anything they skip falls back to the
+  existing previewText/metadata serialization
+- `ArtifactContentPart` stays reference-only: bytes never enter canonical
+  messages, thread persistence, or logs
+
+Rejected alternatives:
+
+- inlining bytes into message parts — risks persisting binaries into thread
+  memory and bloats every message copy
+- provider self-fetch via `downloadUrl` — the URL is an authenticated proxy
+  route relative to this server; in-process HTTP loopback plus auth headers is
+  the wrong shape
+- injecting `IArtifactStore` into provider implementations — couples providers
+  to storage and bypasses ownership checks
+
+Operational guardrails:
+
+- providers should enforce their own per-part and per-request byte budgets;
+  the SDK may later add a global `maxInlineBytes` option if needed
+- loaded bytes must never be logged or attached to persisted messages
+- loader failures degrade to the fallback serialization, never fail the query
 
 This is one of the highest-impact breaking changes in the plan.
 
