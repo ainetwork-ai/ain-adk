@@ -384,15 +384,16 @@ describe("WorkflowExecutionService", () => {
 			threadId: "thread-1",
 		});
 
-		// Find the rich reference message appended for the document.
-		const richCall = addMessagesToThread.mock.calls.find(
-			(call: any[]) => call[2]?.[0]?.content?.type === "rich",
+		// Find the canonical document-reference message appended for the document.
+		const richCall = addMessagesToThread.mock.calls.find((call: any[]) =>
+			call[2]?.[0]?.parts?.some((part: any) => part.kind === "document"),
 		);
 		expect(richCall).toBeDefined();
 		const richMessage = (richCall as any[])[2][0];
-		expect(richMessage.content.parts).toEqual([
+		expect(richMessage.schemaVersion).toBe(2);
+		expect(richMessage.parts).toEqual([
 			{
-				type: "document",
+				kind: "document",
 				documentId: createdDoc.documentId,
 				title: "Daily Report",
 			},
