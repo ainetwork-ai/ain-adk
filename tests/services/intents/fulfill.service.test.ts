@@ -273,6 +273,129 @@ describe("IntentFulfillService", () => {
 		});
 	});
 
+	it("persists tool-generated artifact parts into the final response message", async () => {
+		let streamCallCount = 0;
+		const artifactPart = {
+			kind: "artifact" as const,
+			artifactId: "art-9",
+			name: "chart.png",
+			mimeType: "image/png",
+			size: 2048,
+			downloadUrl: "/api/artifacts/art-9/download",
+		};
+		const useTool = jest.fn(async function* () {
+			yield { event: "artifact_ready" as const, data: artifactPart };
+			return "generated chart, see artifact art-9";
+		});
+		const addMessagesToThread = jest.fn(async () => {});
+		const modelModule = {
+			getModel: () => ({
+				generateMessages: () => [],
+				convertToolsToFunctions: () => [],
+				appendAssistantToolCallTurn: jest.fn(),
+				appendToolResult: jest.fn(),
+				fetchStreamWithContextMessage: async () => {
+					const isToolRequest = streamCallCount === 0;
+					streamCallCount += 1;
+
+					return {
+						async *[Symbol.asyncIterator]() {
+							if (isToolRequest) {
+								yield {
+									delta: {
+										tool_calls: [
+											{
+												index: 0,
+												id: "tool-call-1",
+												function: {
+													name: "gen_chart",
+													arguments: "{}",
+												},
+											},
+										],
+									},
+								};
+								return;
+							}
+
+							yield { delta: { content: "here is your chart" } };
+						},
+					};
+				},
+			}),
+			getModelOptions: () => undefined,
+		};
+		const toolCallingService = new ToolCallingService(
+			modelModule as any,
+			undefined,
+			{
+				getTools: () => [
+					{
+						toolName: "gen_chart",
+						connectorName: "test-mcp",
+						protocol: CONNECTOR_PROTOCOL_TYPE.MCP,
+					},
+				],
+				useTool,
+			} as any,
+		);
+
+		const service = new IntentFulfillService(
+			modelModule as any,
+			{
+				getAgentMemory: () => ({
+					getAgentPrompt: async () => "",
+				}),
+				getThreadMemory: () => ({
+					addMessagesToThread,
+				}),
+			} as any,
+			toolCallingService,
+		);
+
+		const stream = service.intentFulfill(
+			[{ subquery: "make a chart" }],
+			{
+				userId: "user-1",
+				threadId: "thread-1",
+				type: ThreadType.CHAT,
+				title: "Thread",
+				messages: [],
+			},
+			"make a chart",
+			false,
+		);
+
+		const events = [];
+		let finalMessage: any;
+		while (true) {
+			const result = await stream.next();
+			if (result.done) {
+				finalMessage = result.value;
+				break;
+			}
+			events.push(result.value);
+		}
+
+		expect(events).toContainEqual({
+			event: "artifact_ready",
+			data: artifactPart,
+		});
+		expect(finalMessage.parts).toEqual([
+			{ kind: "text", text: "here is your chart" },
+			artifactPart,
+		]);
+		const completeEvent: any = events.find(
+			(event) => event.event === "message_complete",
+		);
+		expect(completeEvent.data.message.parts).toContainEqual(artifactPart);
+		expect(addMessagesToThread).toHaveBeenCalledWith("user-1", "thread-1", [
+			expect.objectContaining({
+				parts: expect.arrayContaining([artifactPart]),
+			}),
+		]);
+	});
+
 	it("emits canonical tool events for MCP tool execution while preserving provider append fallback", async () => {
 		let streamCallCount = 0;
 		const appendAssistantToolCallTurn = jest.fn();

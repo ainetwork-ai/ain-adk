@@ -3,6 +3,7 @@ import { getManifest } from "@/config/manifest";
 import type { MemoryModule, ModelModule } from "@/modules";
 import type { OnIntentFallback } from "@/types/agent";
 import {
+	type ArtifactContentPart,
 	type CanonicalMessageObject,
 	type FulfillmentResult,
 	type Intent,
@@ -30,7 +31,19 @@ type FinalStreamState = {
 	finalResponseText: string;
 	collectionName?: string;
 	finalMessageStarted: boolean;
+	/** Tool-generated artifact references, persisted into the final message. */
+	artifactParts: ArtifactContentPart[];
 };
+
+function collectArtifactPart(
+	state: FinalStreamState,
+	part: ArtifactContentPart,
+): void {
+	if (state.artifactParts.some((p) => p.artifactId === part.artifactId)) {
+		return;
+	}
+	state.artifactParts.push(part);
+}
 
 function createFulfillmentResult(params: {
 	subquery: string;
@@ -242,6 +255,7 @@ export class IntentFulfillService {
 			finalResponseText: "",
 			collectionName: undefined,
 			finalMessageStarted: false,
+			artifactParts: [],
 		};
 
 		if (intents.length <= 1) {
@@ -272,6 +286,10 @@ export class IntentFulfillService {
 				? { collectionName: state.collectionName }
 				: undefined,
 		});
+		// Tool-generated artifacts must survive beyond the live stream: keep
+		// their references on the persisted message so thread reloads,
+		// non-stream /query responses, and A2A artifact-updates all see them.
+		finalMessage.parts.push(...state.artifactParts);
 
 		try {
 			const threadMemory = this.memoryModule.getThreadMemory();
@@ -440,6 +458,8 @@ export class IntentFulfillService {
 				state.finalResponseText += event.data.delta;
 			} else if (event.event === "collection_name") {
 				state.collectionName = event.data.name;
+			} else if (event.event === "artifact_ready") {
+				collectArtifactPart(state, event.data);
 			}
 			yield* this.emitFinalResponseEvent(event, state);
 		}
@@ -461,6 +481,11 @@ export class IntentFulfillService {
 			} else if (event.event === "collection_name") {
 				state.collectionName = event.data.name;
 			} else if (event.event === "thinking_process") {
+				yield event;
+			} else if (event.event === "artifact_ready") {
+				// Artifacts from intermediate intents still belong to the final
+				// response: forward them live and keep them for persistence.
+				collectArtifactPart(state, event.data);
 				yield event;
 			}
 		}

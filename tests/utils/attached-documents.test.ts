@@ -115,7 +115,7 @@ describe("injectAttachedDocuments", () => {
 		expect(thread.messages).toHaveLength(1);
 		const injected = thread.messages[0];
 		expect(injected.role).toBe(MessageRole.USER);
-		const text = injected.content.parts[0] as string;
+		const text = (injected as any).parts[0].text as string;
 		expect(text).toContain("[첨부 문서 1] 제목: 파빌리온 2026-07-12");
 		expect(text).toContain("총매출 100만원"); // slot resolved via renderDocument
 		expect(text).toContain("재고를 확인하세요."); // advice
@@ -149,7 +149,7 @@ describe("injectAttachedDocuments", () => {
 
 		await injectAttachedDocuments(memoryModule, thread, ["gone-1", "gone-2"]);
 
-		const text = thread.messages[0].content.parts[0] as string;
+		const text = (thread.messages[0] as any).parts[0].text as string;
 		expect(text).toContain("[첨부 문서 1] 'gone-1' — 문서를 찾을 수 없음");
 		expect(text).toContain("[첨부 문서 2] 'gone-2' — 문서를 찾을 수 없음");
 	});
@@ -171,7 +171,7 @@ describe("injectAttachedDocuments", () => {
 
 		await injectAttachedDocuments(memoryModule, thread, ["doc-1"], filterText);
 
-		const text = thread.messages[0].content.parts[0] as string;
+		const text = (thread.messages[0] as any).parts[0].text as string;
 		expect(text).toContain("***");
 		expect(text).not.toContain("100만원");
 		expect(filterText).toHaveBeenCalledTimes(2); // body + advice

@@ -96,6 +96,8 @@ Completed groundwork so far:
 - added thread-deletion artifact cleanup: optional `IArtifactStore.listByThread` (implemented by `LocalArtifactStore`), best-effort `ArtifactService.deleteThreadArtifacts` (never fails the thread deletion), wired into the thread delete API
 - converted MCP tool binary outputs (image/audio/resource-blob blocks) into stored artifacts with `artifact_ready` events; `MCPModule.useTool` is now an AsyncGenerator symmetric with A2A, and base64 payloads never reach model context (omission notes when no store is configured)
 - switched internal `text_chunk` consumers to canonical events: a2a fallback accumulation and workflow non-stream accumulators read `part_delta`, and workflow streams now emit `message_start`/`part_delta`/`message_complete` with the persisted message identity (see the text_chunk removal note in Stream Event Redesign)
+- end-to-end verification (2026-08-24) found and fixed the last output-path break: tool-generated `artifact_ready` parts are now accumulated into `FinalStreamState` and persisted on the final response message (deduped by artifactId, intermediate-intent artifacts included), so thread reloads, non-stream `/query`, `message_complete`, and A2A `artifact-update` all carry tool-generated artifacts
+- converted the remaining legacy-format write helpers (`utils/thread-messages`) to canonical `schemaVersion: 2` writes — workflow final messages, document reference messages, and `QueryService.addTextMessage` now write canonical parts, completing "new writes converge on canonical"
 
 Not completed yet:
 
