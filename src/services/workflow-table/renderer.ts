@@ -9,6 +9,7 @@ import {
 	type ResolvedColumnFormat,
 	type WorkflowTableRenderResult,
 } from "@/services/workflow-table/shared.js";
+import { buildSourceCountNotice } from "@/services/workflow-table/source-count.js";
 import type {
 	WorkflowRenderedTableData,
 	WorkflowTableBlock,
@@ -35,9 +36,18 @@ export class WorkflowTableRenderer {
 		rows: RecordTableRow[],
 		totalRow: RecordTableRow | undefined,
 		warnings: string[],
+		sourceCount?: number,
 	): WorkflowTableRenderResult {
+		const table = this.renderMarkdownRecords(definition, rows, totalRow);
+		// The notice belongs in the markdown body, not in `warnings`: every
+		// render path (chat message, document, table copy, export) carries the
+		// body as-is, so no renderer has to learn about it.
+		const notice = block.sourceCountNotice
+			? buildSourceCountNotice(sourceCount, rows.length)
+			: undefined;
+
 		return {
-			content: this.renderMarkdownRecords(definition, rows, totalRow),
+			content: notice ? `${notice}\n\n${table}` : table,
 			data: this.buildRecordRenderedData(
 				block,
 				definition,

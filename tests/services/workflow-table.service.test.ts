@@ -1149,4 +1149,50 @@ describe("WorkflowTableService", () => {
 			expect(rendered.content).toContain("| 비중 | 33.33 | 66.67 | 100 |");
 		});
 	});
+
+	describe("source count notice", () => {
+		const twoRows = JSON.stringify([
+			{ store: "A", grossSales: 100, refunds: 10 },
+			{ store: "B", grossSales: 200, refunds: 20 },
+		]);
+
+		it("prints nothing when the block did not opt in", () => {
+			const withNotice = service.renderTable(recordBlock, twoRows, 50);
+			const without = service.renderTable(recordBlock, twoRows);
+
+			expect(withNotice.content).toBe(without.content);
+			expect(withNotice.content.startsWith("|")).toBe(true);
+		});
+
+		it("prints the counts above the table when opted in and rows are missing", () => {
+			const rendered = service.renderTable(
+				{ ...recordBlock, sourceCountNotice: true },
+				twoRows,
+				50,
+			);
+
+			expect(rendered.content.startsWith("총 50건 중 2건 표시\n\n|")).toBe(true);
+			// 표 본문은 그대로다 — 안내는 앞에 한 줄 붙을 뿐이다.
+			expect(rendered.content).toContain("| A | 100 | 10 | 90 |");
+		});
+
+		it("still prints the counts when the table already holds every row", () => {
+			const rendered = service.renderTable(
+				{ ...recordBlock, sourceCountNotice: true },
+				twoRows,
+				2,
+			);
+
+			expect(rendered.content.startsWith("총 2건 중 2건 표시\n\n|")).toBe(true);
+		});
+
+		it("prints nothing when no count was parsed", () => {
+			const rendered = service.renderTable(
+				{ ...recordBlock, sourceCountNotice: true },
+				twoRows,
+			);
+
+			expect(rendered.content.startsWith("|")).toBe(true);
+		});
+	});
 });

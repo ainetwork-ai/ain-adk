@@ -288,6 +288,15 @@ export interface WorkflowTableBlock {
 	formulas?: string[];
 	sourceTaskIds?: string[];
 	prompt?: string;
+	/**
+	 * When the source task result states a row count ("총 N건"), print
+	 * `총 N건 중 M건 표시` above the table — including when the two agree, so a
+	 * complete table says so rather than staying silent. An empty table that
+	 * lost nothing reads `조회된 데이터가 없습니다` instead. Off unless set, so
+	 * tables render byte-identically for definitions that don't ask for it.
+	 * Records layout only.
+	 */
+	sourceCountNotice?: boolean;
 	columnFormats?: Record<string, WorkflowTableColumnFormat>;
 	/** Matrix-only: per-row format overrides, merged field-by-field over columnFormats. */
 	rowFormats?: Record<string, WorkflowTableColumnFormat>;

@@ -31,7 +31,16 @@ export class WorkflowTableService {
 		return this.definitionBuilder.buildExtractionPrompt(block, resultsText);
 	}
 
-	renderTable(block: WorkflowTableBlock, rawContent: string) {
+	/**
+	 * @param sourceCount Row count the source task claimed, when known. Only
+	 * used by blocks that opted into `sourceCountNotice`; optional so existing
+	 * callers are unaffected.
+	 */
+	renderTable(
+		block: WorkflowTableBlock,
+		rawContent: string,
+		sourceCount?: number,
+	) {
 		if (!this.isDeterministicTableBlock(block)) {
 			throw new Error(
 				"Workflow table blocks must use the simplified deterministic DSL.",
@@ -58,6 +67,7 @@ export class WorkflowTableService {
 			rows,
 			totalRow,
 			warnings,
+			sourceCount,
 		);
 	}
 }

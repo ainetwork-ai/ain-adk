@@ -1,5 +1,6 @@
 import type { ModelModule } from "@/modules";
 import { WorkflowGraphService } from "@/services/workflow-graph.service.js";
+import { parseClaimedRowCount } from "@/services/workflow-table/source-count.js";
 import { WorkflowTableService } from "@/services/workflow-table.service.js";
 import type {
 	WorkflowGraphBlock,
@@ -134,7 +135,13 @@ export class WorkflowResponseComposer {
 		});
 		const response = await model.fetch(messages, modelOptions);
 		const rawContent = response.content || "{}";
-		const rendered = this.workflowTableService.renderTable(block, rawContent);
+		const rendered = this.workflowTableService.renderTable(
+			block,
+			rawContent,
+			block.sourceCountNotice
+				? parseClaimedRowCount(sourceResults.map((result) => result.content))
+				: undefined,
+		);
 		yield { event: "text_chunk", data: { delta: rendered.content } };
 		return rendered;
 	}

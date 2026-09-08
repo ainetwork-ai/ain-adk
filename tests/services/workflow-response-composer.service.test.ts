@@ -197,4 +197,61 @@ describe("WorkflowResponseComposer", () => {
 		expect(result.content).toContain("```mermaid");
 		expect(result.data?.mermaid).toContain('"A" : 100');
 	});
+
+	describe("source count notice", () => {
+		const claimingResults: Record<string, WorkflowTaskResult> = {
+			"task-1": {
+				taskId: "task-1",
+				title: "Collect sales",
+				status: "completed",
+				content: "총 50건 조회되었습니다. 아래는 일부입니다.",
+				startedAt: 1,
+				completedAt: 2,
+			},
+		};
+		const tableBlock = {
+			blockId: "sales",
+			type: "table" as const,
+			layout: "records" as const,
+			columns: ["store", "sales"],
+			sourceTaskIds: ["task-1"],
+		};
+
+		function composerReturning(json: string) {
+			const modelModule = {
+				getModel: () => ({
+					generateMessages: jest.fn(({ query }) => [{ role: "user", query }]),
+					fetch: jest.fn(async () => ({ content: json })),
+				}),
+				getModelOptions: () => ({}),
+			} as unknown as ModelModule;
+			return new WorkflowResponseComposer(modelModule);
+		}
+
+		const extracted = JSON.stringify([{ store: "A", sales: 1 }]);
+
+		it("reads the claimed count from the source task result", async () => {
+			const { result } = await collectGenerator(
+				composerReturning(extracted).renderResponseBlock(
+					{ ...tableBlock, sourceCountNotice: true },
+					claimingResults,
+					[],
+				),
+			);
+
+			expect(result.content.startsWith("총 50건 중 1건 표시")).toBe(true);
+		});
+
+		it("leaves the table untouched when the block did not opt in", async () => {
+			const { result } = await collectGenerator(
+				composerReturning(extracted).renderResponseBlock(
+					tableBlock,
+					claimingResults,
+					[],
+				),
+			);
+
+			expect(result.content.startsWith("|")).toBe(true);
+		});
+	});
 });
