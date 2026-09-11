@@ -44,6 +44,13 @@ export const createUserWorkflowApiRouter = (): Router => {
 		checkUserWorkflowMemory,
 		controller.handleExecuteWorkflowStream,
 	);
+	// Accepts a workflow template id too, and persists nothing. For screens that
+	// have no per-user workflow copy (shared dashboard cards).
+	router.post(
+		"/:id/run/stream",
+		checkUserWorkflowMemory,
+		controller.handleRunWorkflowStream,
+	);
 	router.post(
 		"/update/:id",
 		checkUserWorkflowMemory,

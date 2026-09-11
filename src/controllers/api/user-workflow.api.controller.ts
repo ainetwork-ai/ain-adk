@@ -197,6 +197,47 @@ export class UserWorkflowApiController {
 		}
 	};
 
+	/**
+	 * Runs a workflow with caller-supplied variables and streams the result.
+	 * Nothing is persisted — no thread, no document.
+	 *
+	 * Unlike {@link handleExecuteWorkflowStream} this accepts a **workflow template
+	 * id** as well, so a screen that has no per-user copy (a shared dashboard card)
+	 * can run the shared template directly. That is the same access the document
+	 * advice path already grants via `adviceWorkflowId`; templates are readable by
+	 * every authenticated user, so running one adds no exposure. A **user** workflow
+	 * still requires ownership.
+	 */
+	public handleRunWorkflowStream = async (req: Request, res: Response) => {
+		const userId = res.locals.userId || "";
+		const { id } = req.params as { id: string };
+
+		await streamEventsToSSE(req, res, {
+			logLabel: "Workflow run stream",
+			userId,
+			logContext: { workflowId: id },
+			setup: async (signal) => {
+				// Ownership applies only when the id names a user workflow; a
+				// template id falls through to the shared-catalog path. Checked on
+				// the document already fetched rather than via
+				// getAuthorizedWorkflow, which would read it a second time — the
+				// rejection is the same 404.
+				const userWorkflow = await this.userWorkflowService.getWorkflow(id);
+				if (userWorkflow && userWorkflow.userId !== userId) {
+					throw new AinHttpError(StatusCodes.NOT_FOUND, "Workflow not found");
+				}
+				const { executionVariables } = req.body as {
+					executionVariables?: Record<string, string>;
+				};
+				return this.workflowExecutionService.runWorkflowStream(
+					id,
+					{ userId, executionVariables },
+					signal,
+				);
+			},
+		});
+	};
+
 	public handleExecuteWorkflowStream = async (req: Request, res: Response) => {
 		const userId = res.locals.userId || "";
 		const { id } = req.params as { id: string };

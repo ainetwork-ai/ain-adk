@@ -638,6 +638,88 @@ export class WorkflowExecutionService {
 	}
 
 	/**
+	 * Runs a workflow (user workflow **or** template) with caller-supplied
+	 * variables and streams the rendered result. Nothing is persisted — no
+	 * thread, no document — so the caller's screen is the only artifact.
+	 *
+	 * This is {@link generateDocumentAdviceStream} without the document. Dashboards
+	 * show a workflow's output against a selection (a period, a group of outlets)
+	 * that no document represents, and {@link executeWorkflowStream} cannot serve
+	 * them: it resolves user workflows only (a template id fails) and it persists a
+	 * chat thread per run.
+	 *
+	 * Variables resolve with document-fill semantics — there is no creation step, so
+	 * every supplied value applies regardless of its declared `resolveAt`, and values
+	 * the caller omits fall back to the workflow's stored ones.
+	 */
+	async *runWorkflowStream(
+		workflowId: string,
+		options: {
+			userId: string;
+			executionVariables?: Record<string, string>;
+		},
+		signal?: AbortSignal,
+	): AsyncGenerator<StreamEvent> {
+		const workflow = await this.getFillableWorkflow(workflowId);
+		if (!workflow) {
+			throw new Error(`User workflow or template not found: ${workflowId}`);
+		}
+
+		const { definition } = this.workflowVariableResolver.resolveForDocumentFill(
+			workflow,
+			options.executionVariables ?? {},
+		);
+		if (!definition) {
+			throw new Error(
+				`Workflow ${workflowId} has no valid structured definition; cannot run`,
+			);
+		}
+
+		const startedAt = Date.now();
+		loggers.agent.info("Running workflow ad hoc", {
+			workflowId,
+			workflowTitle: workflow.title,
+			taskCount: definition.tasks.length,
+		});
+
+		// Ephemeral, non-persisted thread: carries threadId for A2A correlation
+		// and task context, but is never written to the thread store.
+		const thread: ThreadObject = {
+			type: ThreadType.WORKFLOW,
+			userId: options.userId,
+			threadId: randomUUID(),
+			title: workflow.title,
+			workflowId,
+			messages: [],
+		};
+
+		const { finalContent, executionError } =
+			yield* this.renderStructuredDefinition(
+				definition,
+				thread,
+				workflowId,
+				signal,
+			);
+
+		if (executionError) {
+			// renderStructuredDefinition already logged the task-level failure;
+			// this ties it to the run request before the SSE layer reports it.
+			loggers.agent.error("Ad hoc workflow run failed", {
+				workflowId,
+				durationMs: Date.now() - startedAt,
+				error: executionError.message,
+			});
+			throw executionError;
+		}
+
+		loggers.agent.info("Ad hoc workflow run finished", {
+			workflowId,
+			contentLength: finalContent.length,
+			durationMs: Date.now() - startedAt,
+		});
+	}
+
+	/**
 	 * Non-streaming variant of {@link fillDocumentSlotStream}.
 	 */
 	async fillDocumentSlot(
