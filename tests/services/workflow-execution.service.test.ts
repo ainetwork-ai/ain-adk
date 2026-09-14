@@ -896,3 +896,96 @@ describe("generateDocumentAdviceStream", () => {
 		errorSpy.mockRestore();
 	});
 });
+
+function buildTemplateRunService(template: Partial<WorkflowTemplate> | null) {
+	const getTemplate = jest.fn(async () =>
+		template === null
+			? undefined
+			: ({
+					templateId: "wf-insight",
+					title: "인사이트",
+					description: "",
+					active: true,
+					content: "insight",
+					definition: minimalDefinition,
+					...template,
+				} as WorkflowTemplate),
+	);
+	const memoryModule = {
+		getWorkflowTemplateMemory: () => ({ getTemplate }),
+	} as unknown as MemoryModule;
+	// Returns a workflow on purpose: if the run path ever consults it again the
+	// assertion below fails instead of silently resolving a user workflow.
+	const getWorkflow = jest.fn(async () => ({
+		workflowId: "wf-insight",
+		userId: "someone-else",
+	}));
+	const userWorkflowService = {
+		getWorkflow,
+	} as unknown as UserWorkflowService;
+	const service = new WorkflowExecutionService(
+		userWorkflowService,
+		new WorkflowVariableResolver(),
+		{} as unknown as ModelModule,
+		memoryModule,
+		{} as unknown as ToolCallingService,
+	);
+	jest
+		.spyOn(
+			service as unknown as {
+				renderStructuredDefinition: (
+					...args: unknown[]
+				) => AsyncGenerator<StreamEvent>;
+			},
+			"renderStructuredDefinition",
+		)
+		.mockImplementation(async function* () {
+			return {
+				finalContent: "요약",
+				renderedBlocks: [],
+				executionError: undefined,
+			};
+		});
+	return { service, getTemplate, getWorkflow };
+}
+
+describe("runTemplateStream", () => {
+	let logSpies: jest.SpyInstance[] = [];
+	beforeEach(() => {
+		logSpies = (["info", "warn", "error"] as const).map((level) =>
+			jest.spyOn(loggers.agent, level).mockImplementation(() => loggers.agent),
+		);
+	});
+	afterEach(() => {
+		for (const spy of logSpies) {
+			spy.mockRestore();
+		}
+	});
+
+	// Templates only. A user workflow id must not resolve here — the screens that
+	// use this path share one catalog entry and have no per-user copy.
+	it("resolves the id as a template and never consults user workflows", async () => {
+		const { service, getTemplate, getWorkflow } =
+			buildTemplateRunService(undefined);
+		for await (const _event of service.runTemplateStream("wf-insight", {
+			userId: "u1",
+		})) {
+			// drain
+		}
+		expect(getTemplate).toHaveBeenCalledWith("wf-insight");
+		expect(getWorkflow).not.toHaveBeenCalled();
+	});
+
+	it("throws when the template is missing", async () => {
+		const { service } = buildTemplateRunService(null);
+		await expect(
+			(async () => {
+				for await (const _ of service.runTemplateStream("nope", {
+					userId: "u1",
+				})) {
+					// drain
+				}
+			})(),
+		).rejects.toThrow(/Workflow template not found: nope/);
+	});
+});

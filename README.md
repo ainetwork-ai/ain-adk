@@ -253,6 +253,8 @@ modelLogger.error('Model API error');
 - `POST /api/workflow-template` - Create workflow template
 - `POST /api/workflow-template/update/:id` - Update workflow template
 - `POST /api/workflow-template/delete/:id` - Delete workflow template
+- `POST /api/workflow-template/:id/run/stream` - Run a workflow template with streaming (SSE); persists nothing — no thread, no document
+  - Body: `{ executionVariables?: Record<string, string> }`
 - `GET /api/user-workflow` - List user workflows
 - `GET /api/user-workflow/:id` - Get user workflow details
 - `POST /api/user-workflow` - Create user workflow

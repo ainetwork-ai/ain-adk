@@ -638,6 +638,93 @@ export class WorkflowExecutionService {
 	}
 
 	/**
+	 * Runs a workflow **template** with caller-supplied variables and streams the
+	 * rendered result. Nothing is persisted — no thread, no document — so the
+	 * caller's screen is the only artifact.
+	 *
+	 * This is {@link generateDocumentAdviceStream} without the document. Dashboards
+	 * show a workflow's output against a selection (a period, a group of outlets)
+	 * that no document represents, and {@link executeWorkflowStream} cannot serve
+	 * them: it resolves user workflows only and it persists a chat thread per run.
+	 *
+	 * Templates only, deliberately: the screens that need this have no per-user
+	 * workflow copy — everyone shares one catalog entry. A user workflow id is not
+	 * accepted here, so there is no ownership question to answer.
+	 *
+	 * Variables resolve with document-fill semantics — there is no creation step, so
+	 * every supplied value applies regardless of its declared `resolveAt`, and values
+	 * the caller omits fall back to the template's stored ones.
+	 */
+	async *runTemplateStream(
+		templateId: string,
+		options: {
+			userId: string;
+			executionVariables?: Record<string, string>;
+		},
+		signal?: AbortSignal,
+	): AsyncGenerator<StreamEvent> {
+		const template = await this.memoryModule
+			.getWorkflowTemplateMemory()
+			.getTemplate(templateId);
+		if (!template) {
+			throw new Error(`Workflow template not found: ${templateId}`);
+		}
+
+		const { definition } = this.workflowVariableResolver.resolveForDocumentFill(
+			template,
+			options.executionVariables ?? {},
+		);
+		if (!definition) {
+			throw new Error(
+				`Workflow template ${templateId} has no valid structured definition; cannot run`,
+			);
+		}
+
+		const startedAt = Date.now();
+		loggers.agent.info("Running workflow template ad hoc", {
+			templateId,
+			templateTitle: template.title,
+			taskCount: definition.tasks.length,
+		});
+
+		// Ephemeral, non-persisted thread: carries threadId for A2A correlation
+		// and task context, but is never written to the thread store.
+		const thread: ThreadObject = {
+			type: ThreadType.WORKFLOW,
+			userId: options.userId,
+			threadId: randomUUID(),
+			title: template.title,
+			workflowId: templateId,
+			messages: [],
+		};
+
+		const { finalContent, executionError } =
+			yield* this.renderStructuredDefinition(
+				definition,
+				thread,
+				templateId,
+				signal,
+			);
+
+		if (executionError) {
+			// renderStructuredDefinition already logged the task-level failure;
+			// this ties it to the run request before the SSE layer reports it.
+			loggers.agent.error("Ad hoc workflow template run failed", {
+				templateId,
+				durationMs: Date.now() - startedAt,
+				error: executionError.message,
+			});
+			throw executionError;
+		}
+
+		loggers.agent.info("Ad hoc workflow template run finished", {
+			templateId,
+			contentLength: finalContent.length,
+			durationMs: Date.now() - startedAt,
+		});
+	}
+
+	/**
 	 * Non-streaming variant of {@link fillDocumentSlotStream}.
 	 */
 	async fillDocumentSlot(
