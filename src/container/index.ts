@@ -240,6 +240,7 @@ class Container {
 		if (!this._workflowTemplateApiController) {
 			this._workflowTemplateApiController = new WorkflowTemplateApiController(
 				getMemoryModule(),
+				this.getWorkflowExecutionService(),
 			);
 		}
 		return this._workflowTemplateApiController;
