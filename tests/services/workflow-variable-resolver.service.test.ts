@@ -1,6 +1,7 @@
 import { AinHttpError } from "@/types/agent";
 import type { WorkflowDefinition } from "@/types/memory";
 import { WorkflowVariableResolver } from "@/services/workflow-variable-resolver.service";
+import { resolveTemplateString } from "@/utils/template-variables";
 
 describe("WorkflowVariableResolver", () => {
 	it("keeps current table DSL definitions unchanged", () => {
@@ -465,6 +466,57 @@ describe("WorkflowVariableResolver", () => {
 			"2027-01-01",
 		]);
 		expect(tableBlock.formulas).toEqual(["2027-01-01 = 2026-12-31 - 2026-12-30"]);
+	});
+
+	it("replaces variable tokens in columnFormats and rowFormats keys", () => {
+		const resolver = new WorkflowVariableResolver();
+
+		const result = resolver.resolveForExecution({
+			title: "t",
+			content: "c",
+			timezone: "Asia/Seoul",
+			variables: {
+				year: {
+					id: "년도",
+					label: "년도",
+					type: "text",
+					resolveAt: "execution",
+				},
+			},
+			variableValues: { year: "2026" },
+			definition: {
+				tasks: [],
+				response: {
+					blocks: [
+						{
+							blockId: "sales",
+							type: "table",
+							layout: "matrix",
+							rows: ["{{년도}} 실적", "목표"],
+							columns: ["{{년도}} 매출", "{{today|YYYY}} 합계"],
+							columnFormats: {
+								"{{년도}} 매출": { kind: "currency", suffix: "원" },
+								"{{today|YYYY}} 합계": { suffix: "개" },
+							},
+							rowFormats: { "{{년도}} 실적": { suffix: "원" } },
+						},
+					],
+				},
+			},
+		});
+
+		const tableBlock = result.definition?.response.blocks[0];
+		if (!tableBlock || tableBlock.type !== "table") {
+			throw new Error("Expected a table block");
+		}
+
+		const thisYear = resolveTemplateString("{{today|YYYY}}", "Asia/Seoul");
+		expect(tableBlock.columns).toEqual(["2026 매출", `${thisYear} 합계`]);
+		expect(tableBlock.columnFormats).toEqual({
+			"2026 매출": { kind: "currency", suffix: "원" },
+			[`${thisYear} 합계`]: { suffix: "개" },
+		});
+		expect(tableBlock.rowFormats).toEqual({ "2026 실적": { suffix: "원" } });
 	});
 
 	it("expands date_parts variables through parts mappings", () => {

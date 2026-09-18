@@ -310,9 +310,11 @@ function replaceWorkflowVariablesInValue(
 	}
 
 	if (value && typeof value === "object") {
+		// Keys too: columnFormats / rowFormats are keyed by column and row
+		// names, which may carry the same tokens as `columns` / `rows`.
 		return Object.fromEntries(
 			Object.entries(value).map(([key, item]) => [
-				key,
+				applyReplacements(key, replacements, resolveAt),
 				replaceWorkflowVariablesInValue(item, replacements, resolveAt),
 			]),
 		);
@@ -667,7 +669,7 @@ function resolveTemplateValue(value: unknown, timezone?: string): unknown {
 	if (value && typeof value === "object") {
 		return Object.fromEntries(
 			Object.entries(value).map(([key, item]) => [
-				key,
+				resolveTemplateString(key, timezone),
 				resolveTemplateValue(item, timezone),
 			]),
 		);
