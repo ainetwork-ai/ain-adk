@@ -249,13 +249,26 @@ function replaceOffsetExpressions(
 
 	return input.replace(pattern, (match, _token, rawOffset: string) => {
 		const offset = Number.parseInt(rawOffset, 10);
-		const resolved = applyNumericOffset(replacement.value, offset);
+		const resolved = applyOffset(replacement.value, offset);
 		return resolved ?? match;
 	});
 }
 
-function applyNumericOffset(value: string, offset: number): string | undefined {
+function applyOffset(value: string, offset: number): string | undefined {
 	const trimmed = value.trim();
+
+	// YYYY-MM-DD (the shape date_parts values are stored in): offset is in days,
+	// Date.UTC normalizes month/year rollover.
+	const dateMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+	if (dateMatch) {
+		const [, year, month, day] = dateMatch;
+		return new Date(
+			Date.UTC(Number(year), Number(month) - 1, Number(day) + offset),
+		)
+			.toISOString()
+			.slice(0, 10);
+	}
+
 	if (!/^-?\d+$/.test(trimmed)) {
 		return undefined;
 	}

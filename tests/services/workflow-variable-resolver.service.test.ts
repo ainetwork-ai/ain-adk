@@ -419,6 +419,54 @@ describe("WorkflowVariableResolver", () => {
 		expect(tableBlock.columns).toEqual(["2026", "2025", "03월"]);
 	});
 
+	it("applies day offsets to date-valued variables with calendar rollover", () => {
+		const resolver = new WorkflowVariableResolver();
+
+		const result = resolver.resolveForExecution({
+			title: "{{대상일자+1}} 리포트",
+			content: "{{대상일자}} → {{대상일자+1}}",
+			timezone: "Asia/Seoul",
+			variables: {
+				target: {
+					id: "대상일자",
+					label: "대상일자",
+					type: "date_parts",
+					parts: { year: "년도", month: "월", day: "일" },
+					resolveAt: "execution",
+				},
+			},
+			variableValues: { target: "2026-12-31" },
+			definition: {
+				tasks: [],
+				response: {
+					blocks: [
+						{
+							blockId: "daily",
+							type: "table",
+							layout: "records",
+							columns: ["{{대상일자-1}}", "{{대상일자}}", "{{대상일자+1}}"],
+							formulas: ["{{대상일자+1}} = {{대상일자}} - {{대상일자-1}}"],
+						},
+					],
+				},
+			},
+		});
+
+		const tableBlock = result.definition?.response.blocks[0];
+		if (!tableBlock || tableBlock.type !== "table") {
+			throw new Error("Expected a table block");
+		}
+
+		expect(result.displayQuery).toBe("2027-01-01 리포트");
+		expect(result.query).toBe("2026-12-31 → 2027-01-01");
+		expect(tableBlock.columns).toEqual([
+			"2026-12-30",
+			"2026-12-31",
+			"2027-01-01",
+		]);
+		expect(tableBlock.formulas).toEqual(["2027-01-01 = 2026-12-31 - 2026-12-30"]);
+	});
+
 	it("expands date_parts variables through parts mappings", () => {
 		const resolver = new WorkflowVariableResolver();
 
