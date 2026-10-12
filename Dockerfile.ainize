@@ -1,0 +1,17 @@
+# ainize build for a library/SDK (no server of its own): install, build (tsup), typecheck, run the jest suite,
+# then serve README.md rendered as a static HTML page on $PORT. No typedoc config exists in this repo.
+FROM node:22-alpine AS build
+RUN npm i -g pnpm@10.33.0
+WORKDIR /app
+COPY . .
+RUN pnpm install --frozen-lockfile
+RUN pnpm build && npx tsc --noEmit -p tsconfig.json
+RUN pnpm test
+RUN mkdir -p /www && npx -y marked@12.0.2 -i README.md -o /tmp/readme.html \
+ && { printf '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>@ainetwork/adk</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:860px;margin:2rem auto;padding:0 16px}pre{background:#f4f4f4;padding:12px;overflow:auto}code{font-family:ui-monospace,monospace}</style></head><body>'; cat /tmp/readme.html; printf '</body></html>'; } > /www/index.html
+
+FROM busybox:1.36
+COPY --from=build /www /www
+ENV PORT=8080
+EXPOSE 8080
+CMD ["sh", "-c", "exec httpd -f -v -p 0.0.0.0:${PORT} -h /www"]
