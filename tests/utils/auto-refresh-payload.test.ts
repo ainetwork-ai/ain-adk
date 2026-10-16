@@ -34,4 +34,26 @@ describe("parseAutoRefreshPayload", () => {
 			}),
 		).toThrow(/slotIds/);
 	});
+
+	it("keeps a valid advice config and rejects a malformed one", () => {
+		expect(
+			parseAutoRefreshPayload({
+				autoRefresh: {
+					runAt: 1,
+					active: true,
+					advice: { adviceWorkflowId: "wf", executionVariables: { a: "b" } },
+				},
+			}),
+		).toEqual({
+			runAt: 1,
+			active: true,
+			slotIds: undefined,
+			advice: { adviceWorkflowId: "wf", executionVariables: { a: "b" } },
+		});
+		expect(() =>
+			parseAutoRefreshPayload({
+				autoRefresh: { runAt: 1, active: true, advice: { executionVariables: { a: 1 } } },
+			}),
+		).toThrow(/executionVariables/);
+	});
 });

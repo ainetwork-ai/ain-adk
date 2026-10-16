@@ -11,6 +11,7 @@ import type {
 } from "@/types/schedule.js";
 import { loggers } from "@/utils/logger.js";
 import { runWithRequestContext } from "@/utils/request-context.js";
+import type { DocumentAdviceService } from "./document-advice.service.js";
 import type { JobRunnerService } from "./job-runner.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
 import type { WorkflowExecutionService } from "./workflow-execution.service.js";
@@ -27,8 +28,11 @@ export class SchedulerService {
 	private workflowExecutionService: WorkflowExecutionService;
 	private jobRunner: JobRunnerService;
 	private memoryModule: MemoryModule;
+	private documentAdviceService?: DocumentAdviceService;
 	private tasks: Map<string, ScheduledTask> = new Map();
 	private pendingAutoRefresh: Map<string, number> = new Map();
+	/** Documents whose auto-refresh advice is queued or running. */
+	private pendingAdvice: Set<string> = new Set();
 	private tickTimer?: ReturnType<typeof setInterval>;
 	private static readonly TICK_INTERVAL_MS = 60_000;
 	private static readonly MAX_CONSECUTIVE_FAILURES = 3;
@@ -40,11 +44,13 @@ export class SchedulerService {
 		workflowExecutionService: WorkflowExecutionService,
 		jobRunner: JobRunnerService,
 		memoryModule: MemoryModule,
+		documentAdviceService?: DocumentAdviceService,
 	) {
 		this.userWorkflowService = userWorkflowService;
 		this.workflowExecutionService = workflowExecutionService;
 		this.jobRunner = jobRunner;
 		this.memoryModule = memoryModule;
+		this.documentAdviceService = documentAdviceService;
 	}
 
 	async start(): Promise<void> {
@@ -519,10 +525,79 @@ export class SchedulerService {
 						: undefined,
 				slotResults,
 			});
+			if (autoRefresh.advice) {
+				await this.generateAutoRefreshAdvice(documentId, autoRefresh.advice);
+			}
 		} catch (error) {
 			loggers.agent.error("Auto-refresh run bookkeeping failed", {
 				documentId,
 				error,
+			});
+		}
+	}
+
+	/**
+	 * After an auto-refresh run: (re)generate `document.advice` when every slot
+	 * has settled (resolved or failed, at least one resolved) and the stored
+	 * advice predates the newest resolved fragment — the same rule a client
+	 * applies when it opens the document, so the two never fight. A failed
+	 * advice is logged only; the slot data is already saved.
+	 */
+	private async generateAutoRefreshAdvice(
+		documentId: string,
+		advice: NonNullable<DocumentAutoRefresh["advice"]>,
+	): Promise<void> {
+		// In-memory like the job queue itself, so it can never outlive the
+		// process: GET /api/document/:id reports it as `advicePending`.
+		this.pendingAdvice.add(documentId);
+		try {
+			await this.runAutoRefreshAdvice(documentId, advice);
+		} finally {
+			this.pendingAdvice.delete(documentId);
+		}
+	}
+
+	/** True while this process has the document's auto-refresh advice queued or running. */
+	isAdvicePending(documentId: string): boolean {
+		return this.pendingAdvice.has(documentId);
+	}
+
+	private async runAutoRefreshAdvice(
+		documentId: string,
+		advice: NonNullable<DocumentAutoRefresh["advice"]>,
+	): Promise<void> {
+		const document = await this.memoryModule
+			.getDocumentMemory()
+			?.getDocument(documentId);
+		const version = document ? adviceDataVersion(document) : null;
+		if (!document || !version) return;
+		const generatedAt = document.advice?.generatedAt;
+		if (generatedAt && generatedAt >= version) return;
+
+		const outcome = await this.jobRunner.submit({
+			jobKey: `${documentId}:advice`,
+			execute: async () => {
+				const stream = advice.adviceWorkflowId
+					? this.workflowExecutionService.generateDocumentAdviceStream(
+							documentId,
+							{
+								workflowId: advice.adviceWorkflowId,
+								executionVariables: advice.executionVariables,
+							},
+						)
+					: this.documentAdviceService?.generateAdviceStream(documentId, {
+							advicePrompt: advice.advicePrompt,
+						});
+				if (!stream) throw new Error("Document advice service is not wired");
+				for await (const _event of stream) {
+					// drain — the service persists document.advice at the end
+				}
+			},
+		});
+		if (outcome.status === "failed") {
+			loggers.agent.error("Auto-refresh advice generation failed", {
+				documentId,
+				error: outcome.error,
 			});
 		}
 	}
@@ -645,4 +720,23 @@ export class SchedulerService {
 			});
 		}
 	}
+}
+
+/**
+ * Newest resolved-fragment time once every slot has settled (resolved or
+ * failed), else null — no advice over half-filled data. Mirrors the WISE
+ * client's `adviceDataVersion` (apps/wise/src/lib/log-book-advice.ts): keep
+ * the two in step or the client regenerates what the server just made.
+ */
+function adviceDataVersion(document: Document): string | null {
+	const slots = document.slots ?? [];
+	if (!slots.every((s) => s.status === "resolved" || s.status === "failed")) {
+		return null;
+	}
+	let version: string | null = null;
+	for (const s of slots) {
+		const at = s.status === "resolved" ? s.fragment?.resolvedAt : undefined;
+		if (at && (version === null || at > version)) version = at;
+	}
+	return version;
 }

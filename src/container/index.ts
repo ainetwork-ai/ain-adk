@@ -186,6 +186,7 @@ class Container {
 				this.getWorkflowExecutionService(),
 				this.getJobRunnerService(),
 				getMemoryModule(),
+				this.getDocumentAdviceService(),
 			);
 		}
 		return this._schedulerService;

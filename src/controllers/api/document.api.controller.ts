@@ -225,7 +225,13 @@ export class DocumentApiController {
 				id,
 				res.locals.authzChecked === true,
 			);
-			res.json(document);
+			// Not stored: lets a client wait for the scheduler's advice instead of
+			// generating the same advice itself.
+			res.json(
+				this.schedulerService.isAdvicePending(id)
+					? { ...document, advicePending: true }
+					: document,
+			);
 		} catch (error) {
 			next(error);
 		}

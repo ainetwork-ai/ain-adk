@@ -85,6 +85,18 @@ export interface DocumentAutoRefresh {
 	doneSlotIds?: string[];
 	/** Set when every target slot is done; a completed job never re-runs. */
 	completedAt?: number;
+	/**
+	 * Generate `document.advice` after a run once every slot has settled
+	 * (resolved or failed, at least one resolved). Same body as
+	 * `POST /documents/:id/advice/stream`; absent = no automatic advice.
+	 */
+	advice?: DocumentAutoRefreshAdvice;
+}
+
+export interface DocumentAutoRefreshAdvice {
+	advicePrompt?: string;
+	adviceWorkflowId?: string;
+	executionVariables?: Record<string, string>;
 }
 
 /**
