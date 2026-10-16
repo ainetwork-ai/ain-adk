@@ -225,13 +225,10 @@ export class DocumentApiController {
 				id,
 				res.locals.authzChecked === true,
 			);
-			// Not stored: lets a client wait for the scheduler's advice instead of
-			// generating the same advice itself.
-			res.json(
-				this.schedulerService.isAdvicePending(id)
-					? { ...document, advicePending: true }
-					: document,
-			);
+			// Not stored: what the scheduler is doing for this document right now,
+			// so a client can show it or wait instead of duplicating the work.
+			const scheduledJobs = this.schedulerService.getScheduledJobs(id);
+			res.json(scheduledJobs ? { ...document, scheduledJobs } : document);
 		} catch (error) {
 			next(error);
 		}

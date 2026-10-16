@@ -55,5 +55,10 @@ describe("parseAutoRefreshPayload", () => {
 				autoRefresh: { runAt: 1, active: true, advice: { executionVariables: { a: 1 } } },
 			}),
 		).toThrow(/executionVariables/);
+		expect(() =>
+			parseAutoRefreshPayload({
+				autoRefresh: { runAt: 1, active: true, advice: { when: "sometimes" } },
+			}),
+		).toThrow(/when/);
 	});
 });

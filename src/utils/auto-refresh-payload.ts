@@ -65,7 +65,17 @@ function parseAdvice(value: unknown): DocumentAutoRefreshAdvice | undefined {
 			"autoRefresh.advice.executionVariables must be a string record",
 		);
 	}
+	if (
+		a.when !== undefined &&
+		a.when !== "settled" &&
+		a.when !== "all_resolved"
+	) {
+		throw new Error(
+			'autoRefresh.advice.when must be "settled" or "all_resolved"',
+		);
+	}
 	return {
+		...(a.when ? { when: a.when as DocumentAutoRefreshAdvice["when"] } : {}),
 		...(a.advicePrompt ? { advicePrompt: a.advicePrompt as string } : {}),
 		...(a.adviceWorkflowId
 			? { adviceWorkflowId: a.adviceWorkflowId as string }

@@ -86,17 +86,43 @@ export interface DocumentAutoRefresh {
 	/** Set when every target slot is done; a completed job never re-runs. */
 	completedAt?: number;
 	/**
-	 * Generate `document.advice` after a run once every slot has settled
-	 * (resolved or failed, at least one resolved). Same body as
-	 * `POST /documents/:id/advice/stream`; absent = no automatic advice.
+	 * Generate `document.advice` after each run. Absent = no automatic advice.
+	 * See {@link DocumentAutoRefreshAdvice} for when it fires.
 	 */
 	advice?: DocumentAutoRefreshAdvice;
 }
 
+/**
+ * When advice is generated after an auto-refresh run.
+ *
+ * - `"settled"` (default): every slot is resolved or failed, at least one resolved.
+ * - `"all_resolved"`: every slot is resolved.
+ *
+ * Either way it is (re)generated only when the stored advice predates the
+ * newest resolved fragment (`advice.generatedAt < max(fragment.resolvedAt)`).
+ * This is the ADK's contract: a client that also generates advice itself
+ * should apply the same rule, or the two redo each other's work.
+ */
+export type DocumentAutoRefreshAdviceWhen = "settled" | "all_resolved";
+
+/** Same body as `POST /api/document/:id/advice/stream`, plus `when`. */
 export interface DocumentAutoRefreshAdvice {
 	advicePrompt?: string;
 	adviceWorkflowId?: string;
 	executionVariables?: Record<string, string>;
+	when?: DocumentAutoRefreshAdviceWhen;
+}
+
+/**
+ * Scheduler work for one document that this process has queued or running
+ * right now (in-memory, gone on restart). Returned on `GET /api/document/:id`
+ * as `scheduledJobs` when non-empty — never stored.
+ */
+export interface DocumentScheduledJobs {
+	/** Slots whose auto-refresh fill is queued or running. */
+	slotIds: string[];
+	/** Auto-refresh advice is queued or running. */
+	advice: boolean;
 }
 
 /**

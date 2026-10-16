@@ -654,19 +654,48 @@ describe("SchedulerService — auto-refresh advice", () => {
 		);
 	});
 
-	it("reports the document as advice-pending only while the advice job runs", async () => {
+	it("reports slot fills and advice as scheduledJobs only while they are queued or running", async () => {
 		const m = makeMocks();
 		m.documentMemory.getDocument.mockResolvedValue(makeDoc());
-		let pendingDuring = false;
+		let duringFill: unknown = null;
+		let duringAdvice: unknown = null;
+		m.workflowExecutionService.fillDocumentSlot.mockImplementation(async () => {
+			duringFill = m.scheduler.getScheduledJobs("doc-1");
+			return {};
+		});
 		m.workflowExecutionService.generateDocumentAdviceStream.mockImplementation(
 			async function* () {
-				pendingDuring = m.scheduler.isAdvicePending("doc-1");
+				duringAdvice = m.scheduler.getScheduledJobs("doc-1");
 			},
 		);
-		expect(m.scheduler.isAdvicePending("doc-1")).toBe(false);
+		expect(m.scheduler.getScheduledJobs("doc-1")).toBeNull();
 		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
-		expect(pendingDuring).toBe(true);
-		expect(m.scheduler.isAdvicePending("doc-1")).toBe(false);
+		expect(duringFill).toEqual({ slotIds: expect.arrayContaining(["s1"]), advice: false });
+		expect(duringAdvice).toEqual({ slotIds: [], advice: true });
+		expect(m.scheduler.getScheduledJobs("doc-1")).toBeNull();
+	});
+
+	it("records the advice outcome on the run", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(makeDoc());
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+		expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenLastCalledWith(expect.any(String), {
+			advice: { status: "success", attempts: 1 },
+		});
+	});
+
+	it('when "all_resolved", a failed slot skips advice as not_ready', async () => {
+		const m = makeMocks();
+		const doc = makeDoc({
+			slots: [resolved("s1", "2026-10-17T05:00:01Z"), { slotId: "s2", status: "failed", binding: { type: "WORKFLOW", workflowId: "wf-b" } }],
+		});
+		doc.autoRefresh = { ...doc.autoRefresh, advice: { adviceWorkflowId: "wf-advice", when: "all_resolved" } } as never;
+		m.documentMemory.getDocument.mockResolvedValue(doc);
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+		expect(m.workflowExecutionService.generateDocumentAdviceStream).not.toHaveBeenCalled();
+		expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenLastCalledWith(expect.any(String), {
+			advice: { status: "skipped", reason: "not_ready" },
+		});
 	});
 
 	it("uses the single-inference path with the template prompt when no workflow", async () => {
@@ -697,6 +726,9 @@ describe("SchedulerService — auto-refresh advice", () => {
 		);
 		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
 		expect(m.workflowExecutionService.generateDocumentAdviceStream).not.toHaveBeenCalled();
+		expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenLastCalledWith(expect.any(String), {
+			advice: { status: "skipped", reason: "up_to_date" },
+		});
 	});
 
 	it("skips when nothing resolved or no advice config", async () => {

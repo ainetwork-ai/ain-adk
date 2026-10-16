@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
 import cron, { type ScheduledTask } from "node-cron";
 import type { MemoryModule } from "@/modules/memory/memory.module.js";
-import type { Document, DocumentAutoRefresh } from "@/types/document.js";
+import type {
+	Document,
+	DocumentAutoRefresh,
+	DocumentAutoRefreshAdvice,
+	DocumentAutoRefreshAdviceWhen,
+	DocumentScheduledJobs,
+} from "@/types/document.js";
 import type { UserWorkflow } from "@/types/memory.js";
 import type {
+	ScheduleRunAdviceResult,
 	ScheduleRunExclusion,
 	ScheduleRunSlotResult,
 	ScheduleRunTargeting,
@@ -31,8 +38,9 @@ export class SchedulerService {
 	private documentAdviceService?: DocumentAdviceService;
 	private tasks: Map<string, ScheduledTask> = new Map();
 	private pendingAutoRefresh: Map<string, number> = new Map();
-	/** Documents whose auto-refresh advice is queued or running. */
-	private pendingAdvice: Set<string> = new Set();
+	/** Per document: slot fills and advice queued or running in this process. */
+	private activeJobs: Map<string, { slotIds: Set<string>; advice: boolean }> =
+		new Map();
 	private tickTimer?: ReturnType<typeof setInterval>;
 	private static readonly TICK_INTERVAL_MS = 60_000;
 	private static readonly MAX_CONSECUTIVE_FAILURES = 3;
@@ -431,6 +439,8 @@ export class SchedulerService {
 			let doneMarkingFailed = false;
 			await Promise.all(
 				targetIds.map(async (slotId) => {
+					this.trackJob(documentId, { slotId }, true);
+					// submit() never rejects — failures come back as an outcome.
 					const outcome = await this.jobRunner.submit({
 						jobKey: `${documentId}:${slotId}`,
 						execute: async () => {
@@ -443,6 +453,7 @@ export class SchedulerService {
 							);
 						},
 					});
+					this.trackJob(documentId, { slotId }, false);
 					if (outcome.status === "success") {
 						// A rejection here must not fail-fast the Promise.all and
 						// skip the aggregate run bookkeeping below. The fill itself
@@ -526,7 +537,11 @@ export class SchedulerService {
 				slotResults,
 			});
 			if (autoRefresh.advice) {
-				await this.generateAutoRefreshAdvice(documentId, autoRefresh.advice);
+				const advice = await this.generateAutoRefreshAdvice(
+					documentId,
+					autoRefresh.advice,
+				);
+				await scheduleRunMemory?.updateScheduleRun(runId, { advice });
 			}
 		} catch (error) {
 			loggers.agent.error("Auto-refresh run bookkeeping failed", {
@@ -537,68 +552,92 @@ export class SchedulerService {
 	}
 
 	/**
-	 * After an auto-refresh run: (re)generate `document.advice` when every slot
-	 * has settled (resolved or failed, at least one resolved) and the stored
-	 * advice predates the newest resolved fragment — the same rule a client
-	 * applies when it opens the document, so the two never fight. A failed
-	 * advice is logged only; the slot data is already saved.
+	 * Scheduler work for one document queued or running in this process, or
+	 * null when there is none. In-memory like the JobRunner queue itself, so it
+	 * never outlives the process.
 	 */
-	private async generateAutoRefreshAdvice(
+	getScheduledJobs(documentId: string): DocumentScheduledJobs | null {
+		const jobs = this.activeJobs.get(documentId);
+		if (!jobs) return null;
+		return { slotIds: [...jobs.slotIds], advice: jobs.advice };
+	}
+
+	private trackJob(
 		documentId: string,
-		advice: NonNullable<DocumentAutoRefresh["advice"]>,
-	): Promise<void> {
-		// In-memory like the job queue itself, so it can never outlive the
-		// process: GET /api/document/:id reports it as `advicePending`.
-		this.pendingAdvice.add(documentId);
-		try {
-			await this.runAutoRefreshAdvice(documentId, advice);
-		} finally {
-			this.pendingAdvice.delete(documentId);
+		job: { slotId: string } | "advice",
+		active: boolean,
+	): void {
+		const jobs = this.activeJobs.get(documentId) ?? {
+			slotIds: new Set<string>(),
+			advice: false,
+		};
+		if (job === "advice") jobs.advice = active;
+		else if (active) jobs.slotIds.add(job.slotId);
+		else jobs.slotIds.delete(job.slotId);
+		if (jobs.advice || jobs.slotIds.size > 0) {
+			this.activeJobs.set(documentId, jobs);
+		} else {
+			this.activeJobs.delete(documentId);
 		}
 	}
 
-	/** True while this process has the document's auto-refresh advice queued or running. */
-	isAdvicePending(documentId: string): boolean {
-		return this.pendingAdvice.has(documentId);
-	}
-
-	private async runAutoRefreshAdvice(
+	/**
+	 * After an auto-refresh run: (re)generate `document.advice` per the
+	 * {@link DocumentAutoRefreshAdvice} contract. The outcome goes on the run
+	 * record; the slot data is saved either way.
+	 */
+	private async generateAutoRefreshAdvice(
 		documentId: string,
-		advice: NonNullable<DocumentAutoRefresh["advice"]>,
-	): Promise<void> {
-		const document = await this.memoryModule
-			.getDocumentMemory()
-			?.getDocument(documentId);
-		const version = document ? adviceDataVersion(document) : null;
-		if (!document || !version) return;
-		const generatedAt = document.advice?.generatedAt;
-		if (generatedAt && generatedAt >= version) return;
+		advice: DocumentAutoRefreshAdvice,
+	): Promise<ScheduleRunAdviceResult> {
+		this.trackJob(documentId, "advice", true);
+		try {
+			const document = await this.memoryModule
+				.getDocumentMemory()
+				?.getDocument(documentId);
+			const version = document
+				? adviceDataVersion(document, advice.when ?? "settled")
+				: null;
+			if (!document || !version) {
+				return { status: "skipped", reason: "not_ready" };
+			}
+			const generatedAt = document.advice?.generatedAt;
+			if (generatedAt && generatedAt >= version) {
+				return { status: "skipped", reason: "up_to_date" };
+			}
 
-		const outcome = await this.jobRunner.submit({
-			jobKey: `${documentId}:advice`,
-			execute: async () => {
-				const stream = advice.adviceWorkflowId
-					? this.workflowExecutionService.generateDocumentAdviceStream(
-							documentId,
-							{
-								workflowId: advice.adviceWorkflowId,
-								executionVariables: advice.executionVariables,
-							},
-						)
-					: this.documentAdviceService?.generateAdviceStream(documentId, {
-							advicePrompt: advice.advicePrompt,
-						});
-				if (!stream) throw new Error("Document advice service is not wired");
-				for await (const _event of stream) {
-					// drain — the service persists document.advice at the end
-				}
-			},
-		});
-		if (outcome.status === "failed") {
-			loggers.agent.error("Auto-refresh advice generation failed", {
-				documentId,
-				error: outcome.error,
+			const outcome = await this.jobRunner.submit({
+				jobKey: `${documentId}:advice`,
+				execute: async () => {
+					const stream = advice.adviceWorkflowId
+						? this.workflowExecutionService.generateDocumentAdviceStream(
+								documentId,
+								{
+									workflowId: advice.adviceWorkflowId,
+									executionVariables: advice.executionVariables,
+								},
+							)
+						: this.documentAdviceService?.generateAdviceStream(documentId, {
+								advicePrompt: advice.advicePrompt,
+							});
+					if (!stream) throw new Error("Document advice service is not wired");
+					for await (const _event of stream) {
+						// drain — the service persists document.advice at the end
+					}
+				},
 			});
+			if (outcome.status === "skipped_overlap") {
+				return { status: "skipped", reason: "overlap" };
+			}
+			if (outcome.status === "failed") {
+				loggers.agent.error("Auto-refresh advice generation failed", {
+					documentId,
+					error: outcome.error,
+				});
+			}
+			return outcome;
+		} finally {
+			this.trackJob(documentId, "advice", false);
 		}
 	}
 
@@ -723,16 +762,20 @@ export class SchedulerService {
 }
 
 /**
- * Newest resolved-fragment time once every slot has settled (resolved or
- * failed), else null — no advice over half-filled data. Mirrors the WISE
- * client's `adviceDataVersion` (apps/wise/src/lib/log-book-advice.ts): keep
- * the two in step or the client regenerates what the server just made.
+ * The data version advice is generated for: the newest resolved-fragment
+ * time once the slots meet `when` (see {@link DocumentAutoRefreshAdviceWhen}),
+ * else null — no advice over half-filled data.
  */
-function adviceDataVersion(document: Document): string | null {
+function adviceDataVersion(
+	document: Document,
+	when: DocumentAutoRefreshAdviceWhen,
+): string | null {
 	const slots = document.slots ?? [];
-	if (!slots.every((s) => s.status === "resolved" || s.status === "failed")) {
-		return null;
-	}
+	const ready =
+		when === "all_resolved"
+			? slots.every((s) => s.status === "resolved")
+			: slots.every((s) => s.status === "resolved" || s.status === "failed");
+	if (!ready) return null;
 	let version: string | null = null;
 	for (const s of slots) {
 		const at = s.status === "resolved" ? s.fragment?.resolvedAt : undefined;
