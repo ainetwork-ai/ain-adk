@@ -34,6 +34,10 @@ function makeMocks() {
 	const workflowExecutionService = {
 		executeWorkflow: jest.fn().mockResolvedValue({ threadId: "t-1" }),
 		fillDocumentSlot: jest.fn().mockResolvedValue({}),
+		generateDocumentAdviceStream: jest.fn(async function* () {}),
+	};
+	const documentAdviceService = {
+		generateAdviceStream: jest.fn(async function* () {}),
 	};
 	const scheduleRunMemory = {
 		createScheduleRun: jest.fn().mockResolvedValue(undefined),
@@ -64,9 +68,12 @@ function makeMocks() {
 		jobRunner,
 		// biome-ignore lint/suspicious/noExplicitAny: test doubles
 		memoryModule as any,
+		// biome-ignore lint/suspicious/noExplicitAny: test doubles
+		documentAdviceService as any,
 	);
 	return {
 		scheduler,
+		documentAdviceService,
 		userWorkflowService,
 		workflowExecutionService,
 		scheduleRunMemory,
@@ -606,6 +613,136 @@ describe("SchedulerService — document auto refresh", () => {
 			"Auto-refresh run bookkeeping failed",
 			expect.objectContaining({ documentId: "doc-1" }),
 		);
+	});
+});
+
+describe("SchedulerService — auto-refresh advice", () => {
+	const resolved = (slotId: string, resolvedAt: string) => ({
+		slotId,
+		status: "resolved",
+		binding: { type: "WORKFLOW", workflowId: `wf-${slotId}` },
+		fragment: { content: "x", resolvedAt },
+	});
+	function makeDoc(overrides: Record<string, unknown> = {}) {
+		return {
+			documentId: "doc-1",
+			userId: "user-1",
+			title: "로그북",
+			format: "MARKDOWN",
+			content: "",
+			slots: [resolved("s1", "2026-10-17T05:00:01Z"), resolved("s2", "2026-10-17T05:00:02Z")],
+			source: "MANUAL",
+			version: 1,
+			createdAt: "",
+			updatedAt: "",
+			autoRefresh: {
+				runAt: Date.now() - 1000,
+				active: true,
+				advice: { adviceWorkflowId: "wf-advice", executionVariables: { 업장: "피자힐" } },
+			},
+			...overrides,
+		};
+	}
+
+	it("generates advice through the advice workflow after the run", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(makeDoc());
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+		expect(m.workflowExecutionService.generateDocumentAdviceStream).toHaveBeenCalledWith(
+			"doc-1",
+			{ workflowId: "wf-advice", executionVariables: { 업장: "피자힐" } },
+		);
+	});
+
+	it("reports slot fills and advice as scheduledJobs only while they are queued or running", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(makeDoc());
+		let duringFill: unknown = null;
+		let duringAdvice: unknown = null;
+		m.workflowExecutionService.fillDocumentSlot.mockImplementation(async () => {
+			duringFill = m.scheduler.getScheduledJobs("doc-1");
+			return {};
+		});
+		m.workflowExecutionService.generateDocumentAdviceStream.mockImplementation(
+			async function* () {
+				duringAdvice = m.scheduler.getScheduledJobs("doc-1");
+			},
+		);
+		expect(m.scheduler.getScheduledJobs("doc-1")).toBeNull();
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+		expect(duringFill).toEqual({ slotIds: expect.arrayContaining(["s1"]), advice: false });
+		expect(duringAdvice).toEqual({ slotIds: [], advice: true });
+		expect(m.scheduler.getScheduledJobs("doc-1")).toBeNull();
+	});
+
+	it("records the advice outcome on the run", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(makeDoc());
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+		expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenLastCalledWith(expect.any(String), {
+			advice: { status: "success", attempts: 1 },
+		});
+	});
+
+	it('when "all_resolved", a failed slot skips advice as not_ready', async () => {
+		const m = makeMocks();
+		const doc = makeDoc({
+			slots: [resolved("s1", "2026-10-17T05:00:01Z"), { slotId: "s2", status: "failed", binding: { type: "WORKFLOW", workflowId: "wf-b" } }],
+		});
+		doc.autoRefresh = { ...doc.autoRefresh, advice: { adviceWorkflowId: "wf-advice", when: "all_resolved" } } as never;
+		m.documentMemory.getDocument.mockResolvedValue(doc);
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+		expect(m.workflowExecutionService.generateDocumentAdviceStream).not.toHaveBeenCalled();
+		expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenLastCalledWith(expect.any(String), {
+			advice: { status: "skipped", reason: "not_ready" },
+		});
+	});
+
+	it("uses the single-inference path with the template prompt when no workflow", async () => {
+		const m = makeMocks();
+		const doc = makeDoc();
+		doc.autoRefresh = { ...doc.autoRefresh, advice: { advicePrompt: "조언해" } } as never;
+		m.documentMemory.getDocument.mockResolvedValue(doc);
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+		expect(m.documentAdviceService.generateAdviceStream).toHaveBeenCalledWith("doc-1", {
+			advicePrompt: "조언해",
+		});
+	});
+
+	it("still generates when a slot failed but another resolved", async () => {
+		const m = makeMocks();
+		const doc = makeDoc({
+			slots: [resolved("s1", "2026-10-17T05:00:01Z"), { slotId: "s2", status: "failed", binding: { type: "WORKFLOW", workflowId: "wf-b" } }],
+		});
+		m.documentMemory.getDocument.mockResolvedValue(doc);
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+		expect(m.workflowExecutionService.generateDocumentAdviceStream).toHaveBeenCalled();
+	});
+
+	it("skips when the stored advice is already newer than the data", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValue(
+			makeDoc({ advice: { content: "a", generatedAt: "2026-10-17T05:01:00Z" } }),
+		);
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+		expect(m.workflowExecutionService.generateDocumentAdviceStream).not.toHaveBeenCalled();
+		expect(m.scheduleRunMemory.updateScheduleRun).toHaveBeenLastCalledWith(expect.any(String), {
+			advice: { status: "skipped", reason: "up_to_date" },
+		});
+	});
+
+	it("skips when nothing resolved or no advice config", async () => {
+		const m = makeMocks();
+		m.documentMemory.getDocument.mockResolvedValueOnce(
+			makeDoc({ slots: [{ slotId: "s1", status: "failed", binding: { type: "WORKFLOW", workflowId: "wf-a" } }] }),
+		);
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+		m.documentMemory.getDocument.mockResolvedValue(
+			makeDoc({ autoRefresh: { runAt: Date.now() - 1000, active: true } }),
+		);
+		await m.scheduler.runAutoRefreshJob("doc-1", "once", Date.now());
+		expect(m.workflowExecutionService.generateDocumentAdviceStream).not.toHaveBeenCalled();
+		expect(m.documentAdviceService.generateAdviceStream).not.toHaveBeenCalled();
 	});
 });
 

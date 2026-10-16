@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
 import cron, { type ScheduledTask } from "node-cron";
 import type { MemoryModule } from "@/modules/memory/memory.module.js";
-import type { Document, DocumentAutoRefresh } from "@/types/document.js";
+import type {
+	Document,
+	DocumentAutoRefresh,
+	DocumentAutoRefreshAdvice,
+	DocumentAutoRefreshAdviceWhen,
+	DocumentScheduledJobs,
+} from "@/types/document.js";
 import type { UserWorkflow } from "@/types/memory.js";
 import type {
+	ScheduleRunAdviceResult,
 	ScheduleRunExclusion,
 	ScheduleRunSlotResult,
 	ScheduleRunTargeting,
@@ -11,6 +18,7 @@ import type {
 } from "@/types/schedule.js";
 import { loggers } from "@/utils/logger.js";
 import { runWithRequestContext } from "@/utils/request-context.js";
+import type { DocumentAdviceService } from "./document-advice.service.js";
 import type { JobRunnerService } from "./job-runner.service.js";
 import type { UserWorkflowService } from "./user-workflow.service.js";
 import type { WorkflowExecutionService } from "./workflow-execution.service.js";
@@ -27,8 +35,12 @@ export class SchedulerService {
 	private workflowExecutionService: WorkflowExecutionService;
 	private jobRunner: JobRunnerService;
 	private memoryModule: MemoryModule;
+	private documentAdviceService?: DocumentAdviceService;
 	private tasks: Map<string, ScheduledTask> = new Map();
 	private pendingAutoRefresh: Map<string, number> = new Map();
+	/** Per document: slot fills and advice queued or running in this process. */
+	private activeJobs: Map<string, { slotIds: Set<string>; advice: boolean }> =
+		new Map();
 	private tickTimer?: ReturnType<typeof setInterval>;
 	private static readonly TICK_INTERVAL_MS = 60_000;
 	private static readonly MAX_CONSECUTIVE_FAILURES = 3;
@@ -40,11 +52,13 @@ export class SchedulerService {
 		workflowExecutionService: WorkflowExecutionService,
 		jobRunner: JobRunnerService,
 		memoryModule: MemoryModule,
+		documentAdviceService?: DocumentAdviceService,
 	) {
 		this.userWorkflowService = userWorkflowService;
 		this.workflowExecutionService = workflowExecutionService;
 		this.jobRunner = jobRunner;
 		this.memoryModule = memoryModule;
+		this.documentAdviceService = documentAdviceService;
 	}
 
 	async start(): Promise<void> {
@@ -425,6 +439,8 @@ export class SchedulerService {
 			let doneMarkingFailed = false;
 			await Promise.all(
 				targetIds.map(async (slotId) => {
+					this.trackJob(documentId, { slotId }, true);
+					// submit() never rejects — failures come back as an outcome.
 					const outcome = await this.jobRunner.submit({
 						jobKey: `${documentId}:${slotId}`,
 						execute: async () => {
@@ -437,6 +453,7 @@ export class SchedulerService {
 							);
 						},
 					});
+					this.trackJob(documentId, { slotId }, false);
 					if (outcome.status === "success") {
 						// A rejection here must not fail-fast the Promise.all and
 						// skip the aggregate run bookkeeping below. The fill itself
@@ -519,11 +536,108 @@ export class SchedulerService {
 						: undefined,
 				slotResults,
 			});
+			if (autoRefresh.advice) {
+				const advice = await this.generateAutoRefreshAdvice(
+					documentId,
+					autoRefresh.advice,
+				);
+				await scheduleRunMemory?.updateScheduleRun(runId, { advice });
+			}
 		} catch (error) {
 			loggers.agent.error("Auto-refresh run bookkeeping failed", {
 				documentId,
 				error,
 			});
+		}
+	}
+
+	/**
+	 * Scheduler work for one document queued or running in this process, or
+	 * null when there is none. In-memory like the JobRunner queue itself, so it
+	 * never outlives the process.
+	 */
+	getScheduledJobs(documentId: string): DocumentScheduledJobs | null {
+		const jobs = this.activeJobs.get(documentId);
+		if (!jobs) return null;
+		return { slotIds: [...jobs.slotIds], advice: jobs.advice };
+	}
+
+	private trackJob(
+		documentId: string,
+		job: { slotId: string } | "advice",
+		active: boolean,
+	): void {
+		const jobs = this.activeJobs.get(documentId) ?? {
+			slotIds: new Set<string>(),
+			advice: false,
+		};
+		if (job === "advice") jobs.advice = active;
+		else if (active) jobs.slotIds.add(job.slotId);
+		else jobs.slotIds.delete(job.slotId);
+		if (jobs.advice || jobs.slotIds.size > 0) {
+			this.activeJobs.set(documentId, jobs);
+		} else {
+			this.activeJobs.delete(documentId);
+		}
+	}
+
+	/**
+	 * After an auto-refresh run: (re)generate `document.advice` per the
+	 * {@link DocumentAutoRefreshAdvice} contract. The outcome goes on the run
+	 * record; the slot data is saved either way.
+	 */
+	private async generateAutoRefreshAdvice(
+		documentId: string,
+		advice: DocumentAutoRefreshAdvice,
+	): Promise<ScheduleRunAdviceResult> {
+		this.trackJob(documentId, "advice", true);
+		try {
+			const document = await this.memoryModule
+				.getDocumentMemory()
+				?.getDocument(documentId);
+			const version = document
+				? adviceDataVersion(document, advice.when ?? "settled")
+				: null;
+			if (!document || !version) {
+				return { status: "skipped", reason: "not_ready" };
+			}
+			const generatedAt = document.advice?.generatedAt;
+			if (generatedAt && generatedAt >= version) {
+				return { status: "skipped", reason: "up_to_date" };
+			}
+
+			const outcome = await this.jobRunner.submit({
+				jobKey: `${documentId}:advice`,
+				execute: async () => {
+					const stream = advice.adviceWorkflowId
+						? this.workflowExecutionService.generateDocumentAdviceStream(
+								documentId,
+								{
+									workflowId: advice.adviceWorkflowId,
+									executionVariables: advice.executionVariables,
+								},
+							)
+						: this.documentAdviceService?.generateAdviceStream(documentId, {
+								advicePrompt: advice.advicePrompt,
+							});
+					if (!stream) throw new Error("Document advice service is not wired");
+					for await (const _event of stream) {
+						// drain — the service persists document.advice at the end
+					}
+				},
+			});
+			if (outcome.status === "skipped_overlap") {
+				return { status: "skipped", reason: "overlap" };
+			}
+			if (outcome.status === "failed") {
+				loggers.agent.error("Auto-refresh advice generation failed", {
+					documentId,
+					error: outcome.error,
+				});
+			}
+			return outcome;
+		} finally {
+			this.trackJob(documentId, "advice", false);
 		}
 	}
 
@@ -645,4 +759,27 @@ export class SchedulerService {
 			});
 		}
 	}
+}
+
+/**
+ * The data version advice is generated for: the newest resolved-fragment
+ * time once the slots meet `when` (see {@link DocumentAutoRefreshAdviceWhen}),
+ * else null — no advice over half-filled data.
+ */
+function adviceDataVersion(
+	document: Document,
+	when: DocumentAutoRefreshAdviceWhen,
+): string | null {
+	const slots = document.slots ?? [];
+	const ready =
+		when === "all_resolved"
+			? slots.every((s) => s.status === "resolved")
+			: slots.every((s) => s.status === "resolved" || s.status === "failed");
+	if (!ready) return null;
+	let version: string | null = null;
+	for (const s of slots) {
+		const at = s.status === "resolved" ? s.fragment?.resolvedAt : undefined;
+		if (at && (version === null || at > version)) version = at;
+	}
+	return version;
 }

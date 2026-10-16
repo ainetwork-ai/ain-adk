@@ -78,7 +78,18 @@ export interface ScheduleRun {
 	targeting?: ScheduleRunTargeting;
 	/** Set when the run succeeded without doing any work. */
 	noopReason?: ScheduleRunNoopReason;
+	/** Outcome of the post-run advice (SLOT_REFRESH with `autoRefresh.advice` only). */
+	advice?: ScheduleRunAdviceResult;
 }
+
+export type ScheduleRunAdviceResult =
+	| { status: "success"; attempts: number }
+	| { status: "failed"; attempts: number; error: string }
+	| {
+			status: "skipped";
+			/** not_ready: slots don't meet `when`; up_to_date: advice already newer than the data; overlap: already running. */
+			reason: "not_ready" | "up_to_date" | "overlap";
+	  };
 
 /**
  * Who initiated a document slot fill. Carried into the fill's start log so a
