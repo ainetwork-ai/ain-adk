@@ -14,7 +14,7 @@ Primary goals:
 
 ## Progress Snapshot
 
-Last updated: `2026-08-19`
+Last updated: `2026-10-19`
 
 Completed groundwork so far:
 
@@ -110,6 +110,122 @@ Not completed yet:
 - artifact byte delivery loader (`resolveArtifactContent` on model-call params) — design settled in the Model Layer Redesign section; implement together with provider adoption so native vision/file input becomes possible
 - deferred/background artifact cleanup jobs (synchronous thread-deletion cleanup is implemented; stores without `listByThread` and orphaned-artifact grace periods remain policy gaps — see Lifecycle and Cleanup)
 - RAG / retrieval layer (future milestone — direction recorded in the RAG / Retrieval Layer section; depends on the async extraction pipeline and provider embedding support)
+
+---
+
+## Next Work Plan (post main 0.8.10 sync, 2026-10-19)
+
+Sync note: `aa76298` integrated main up to `78a8552` (PR #152) as a
+single-parent commit, so git still saw `730816a` as the merge base. An
+ours-merge of `78a8552` now records that ancestry, and `0.8.10` was merged on
+top (`fb62061`). Future main syncs are plain `git merge origin/main`.
+
+What 0.8.7–0.8.10 added: template ad-hoc run (`POST
+/api/workflow-template/:id/run/stream`, no thread/document), date-variable day
+offsets, format-key token resolution, auto-refresh document advice
+(`autoRefresh.advice`, `scheduledJobs`). None of it writes legacy-format
+thread messages.
+
+### P0 — correctness gaps (fix before any v1 release)
+
+1. **Provider history is empty with canonical threads.**
+   `utils/message-content.ts` `messageToPromptText` reads only legacy
+   `content.parts`; services pass `normalizeThreadObject(...)` threads
+   (schemaVersion 2, top-level `parts`) to `generateMessages`, and
+   ain-adk-providers (azure etc.) flattens history through
+   `messageToPromptText` → every history turn becomes `""`.
+   Fix in ADK: delegate canonical messages to
+   `serializeMessageForModelFallback` (one serializer; pick one document
+   label format — `[문서: …]` vs `[Document: …]`). Add a canonical-thread
+   case to `tests/utils/message-content.test.ts`.
+2. **Duplicate canonical stream on intent → workflow dispatch.**
+   `renderStructuredDefinition` already emits `message_start`/`part_delta`
+   (own messageId) plus `text_chunk`; `fulfill.service`
+   `emitFinalResponseEvent` re-wraps every `text_chunk` under
+   `finalMessageId` and also re-yields the inner canonical events → two
+   messages with the same text on the wire. Rule: the outermost boundary owns
+   message identity; drop inner `message_start`/`part_delta`/
+   `message_complete` when re-wrapping. Dispatch tests mock the stream, so
+   add one un-mocked test.
+3. **Canonical streams that never complete.** Slot fill stream, template
+   run stream, and workflow-backed advice emit `message_start`/`part_delta`
+   but no `message_complete`; single-inference advice
+   (`document-advice.service`) emits only `text_chunk` straight to SSE. This
+   also falsifies the "text_chunk never reaches the wire from
+   message-agnostic producers" note in Stream Event Redesign — advice does.
+   Fix: one shared canonical wrapper for every SSE endpoint, then
+   `text_chunk` removal really is just "stop forwarding".
+4. **Workflow-generated tool artifacts are orphaned.** MCP binaries produced
+   inside workflow tasks are stored with an ephemeral `threadId` and are
+   never attached to the workflow message, document, or fragment; thread
+   deletion can never clean them. Minimum fix: collect `artifact_ready` in
+   `executeWorkflowStream` (persisted thread — attach to the final message
+   like `fulfill` does). For document fill / template run / advice, either
+   attach refs to the document (see G3) or skip storing and emit the
+   omission note.
+
+### Document feature vs multi-modal: can it generalize?
+
+Facts: a `Document` is mutable, versioned, server-rendered markdown
+(`content` + `{{slot:id}}` fragments + read-only `blocks`), shared by
+role-label authz, with advice and scheduled auto-refresh. An artifact is an
+immutable owner-only binary with preview text. The model only ever sees a
+document as text (`renderDocument` → injected USER message, or
+`{{document}}` variable, or advice `query`).
+
+Verdict: **keep two stores, unify the reference/attach layer.** Merging
+documents into the artifact store would lose versioning, slot fill, label
+authz and advice; treating documents as text inside the model path is
+already correct for markdown. What diverges today, and the proposed
+generalization:
+
+- **G1. `document` as a query input part.** Today documents come via the
+  sibling `documentIds` field (persisted in `metadata.documentIds`) and a
+  `kind:"document"` input part is rejected. Accept
+  `{kind:"document", documentId}` in `input.parts`, persist it as a part on
+  the USER message (like artifacts), keep `documentIds` as a legacy adapter
+  that converts into parts, and have `collectAttachedDocumentIds` read parts
+  as well as legacy metadata.
+- **G2. One attachment-resolution step.** `resolveQueryInputArtifacts`
+  (owner + ready checks) and `injectAttachedDocuments` (read-open, render,
+  PII mask, advice, in-memory USER message) run separately. Fold them into
+  one resolver keyed by part kind; access policy stays per kind
+  (artifacts owner-only, documents via `PermissionResolver`). Note the
+  document path currently has **no access check at all** — G2 is where to
+  add the authz hook.
+- **G3. Non-text inside documents — only when a real case appears.**
+  Fragments are strings; blocks are tables/mermaid. If a workflow task
+  yields an image (P0-4), add `artifacts?: ArtifactRef[]` on
+  `DocumentFragment` and reference them from markdown; document deletion
+  then cleans them like thread deletion. No other change until needed.
+- **G4. Document → artifact export (deferred).** PDF/DOCX download of a
+  document is "generate an artifact from a document", not storage
+  unification.
+- **G5. A2A.** Peers only get `[Document: …]` labels. Inline the rendered
+  body as a text part when the caller is authorized — deferred until a peer
+  needs it.
+- **G6. Lifecycle (decision, no code).** Documents intentionally outlive
+  their source thread; thread deletion does not delete them. Dangling
+  document parts already render as "문서를 찾을 수 없음".
+- RAG: unchanged — document bodies and artifact extracts feed one index.
+
+Not touched (main's concern): `DocumentSlotBindingType.QUERY` /
+`DocumentSource.QUERY` exist but are never produced or consumed.
+
+### P1 — finishing the migration
+
+- provider canonical-input adoption + `resolveArtifactContent` byte loader
+  (ain-adk-providers; P0-1 is the stopgap)
+- `text_chunk` removal after P0-3 and the enterprise app migrates
+- async preview extraction (PDF etc.)
+- un-mocked end-to-end tests: intent→workflow, slot fill stream, template run
+
+### P2 — later
+
+- `S3ArtifactStore` / `AzureBlobArtifactStore`
+- background/orphan artifact cleanup, quotas
+- RAG / retrieval layer
+- G4, G5
 
 ---
 
