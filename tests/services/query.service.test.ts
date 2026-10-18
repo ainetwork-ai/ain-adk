@@ -357,8 +357,8 @@ function makeHarness() {
 	let threadMessagesAtFulfill: string[] = [];
 	const intentFulfillService = {
 		intentFulfill: jest.fn((_intents, fulfillThread: ThreadObject) => {
-			threadMessagesAtFulfill = fulfillThread.messages.map(
-				(m) => m.content.parts[0] as string,
+			threadMessagesAtFulfill = fulfillThread.messages.map((m: any) =>
+				m.parts ? (m.parts[0]?.text ?? "") : (m.content.parts[0] as string),
 			);
 			return (async function* () {})();
 		}),
