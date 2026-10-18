@@ -44,6 +44,13 @@ export const createWorkflowTemplateApiRouter = (): Router => {
 		checkTemplateMemory,
 		controller.handleDeleteTemplate,
 	);
+	// Runs the template as-is and persists nothing — no thread, no document. For
+	// screens that have no per-user workflow copy (shared dashboard cards).
+	router.post(
+		"/:id/run/stream",
+		checkTemplateMemory,
+		controller.handleRunTemplateStream,
+	);
 
 	return router;
 };

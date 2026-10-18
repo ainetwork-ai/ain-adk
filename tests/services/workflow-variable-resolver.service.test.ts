@@ -1,6 +1,7 @@
 import { WorkflowVariableResolver } from "@/services/workflow-variable-resolver.service";
 import { AinHttpError } from "@/types/agent";
 import type { WorkflowDefinition } from "@/types/memory";
+import { resolveTemplateString } from "@/utils/template-variables";
 
 describe("WorkflowVariableResolver", () => {
 	it("resolves workflow execution input as text-first query data", () => {
@@ -441,6 +442,149 @@ describe("WorkflowVariableResolver", () => {
 
 		expect(tableBlock.rows).toEqual(["2026 실적", "2025 실적", "05월 목표"]);
 		expect(tableBlock.columns).toEqual(["2026", "2025", "03월"]);
+	});
+
+	it("applies day offsets to date-valued variables with calendar rollover", () => {
+		const resolver = new WorkflowVariableResolver();
+
+		const result = resolver.resolveForExecution({
+			title: "{{대상일자+1}} 리포트",
+			content: "{{대상일자}} → {{대상일자+1}}",
+			timezone: "Asia/Seoul",
+			variables: {
+				target: {
+					id: "대상일자",
+					label: "대상일자",
+					type: "date_parts",
+					parts: { year: "년도", month: "월", day: "일" },
+					resolveAt: "execution",
+				},
+			},
+			variableValues: { target: "2026-12-31" },
+			definition: {
+				tasks: [],
+				response: {
+					blocks: [
+						{
+							blockId: "daily",
+							type: "table",
+							layout: "records",
+							columns: ["{{대상일자-1}}", "{{대상일자}}", "{{대상일자+1}}"],
+							formulas: ["{{대상일자+1}} = {{대상일자}} - {{대상일자-1}}"],
+						},
+					],
+				},
+			},
+		});
+
+		const tableBlock = result.definition?.response.blocks[0];
+		if (!tableBlock || tableBlock.type !== "table") {
+			throw new Error("Expected a table block");
+		}
+
+		expect(result.displayQuery).toBe("2027-01-01 리포트");
+		expect(result.query).toBe("2026-12-31 → 2027-01-01");
+		expect(tableBlock.columns).toEqual([
+			"2026-12-30",
+			"2026-12-31",
+			"2027-01-01",
+		]);
+		expect(tableBlock.formulas).toEqual(["2027-01-01 = 2026-12-31 - 2026-12-30"]);
+	});
+
+	it("replaces variable tokens in columnFormats and rowFormats keys", () => {
+		const resolver = new WorkflowVariableResolver();
+
+		const result = resolver.resolveForExecution({
+			title: "t",
+			content: "c",
+			timezone: "Asia/Seoul",
+			variables: {
+				year: {
+					id: "년도",
+					label: "년도",
+					type: "text",
+					resolveAt: "execution",
+				},
+			},
+			variableValues: { year: "2026" },
+			definition: {
+				tasks: [],
+				response: {
+					blocks: [
+						{
+							blockId: "sales",
+							type: "table",
+							layout: "matrix",
+							rows: ["{{년도}} 실적", "목표"],
+							columns: ["{{년도}} 매출", "{{today|YYYY}} 합계"],
+							columnFormats: {
+								"{{년도}} 매출": { kind: "currency", suffix: "원" },
+								"{{today|YYYY}} 합계": { suffix: "개" },
+							},
+							rowFormats: { "{{년도}} 실적": { suffix: "원" } },
+						},
+					],
+				},
+			},
+		});
+
+		const tableBlock = result.definition?.response.blocks[0];
+		if (!tableBlock || tableBlock.type !== "table") {
+			throw new Error("Expected a table block");
+		}
+
+		const thisYear = resolveTemplateString("{{today|YYYY}}", "Asia/Seoul");
+		expect(tableBlock.columns).toEqual(["2026 매출", `${thisYear} 합계`]);
+		expect(tableBlock.columnFormats).toEqual({
+			"2026 매출": { kind: "currency", suffix: "원" },
+			[`${thisYear} 합계`]: { suffix: "개" },
+		});
+		expect(tableBlock.rowFormats).toEqual({ "2026 실적": { suffix: "원" } });
+	});
+
+	it("expands date_parts variables through parts mappings", () => {
+		const resolver = new WorkflowVariableResolver();
+
+		const result = resolver.resolveForExecution({
+			title: "{{년도}}년 {{월}}월 리포트",
+			content: "기간={{년도}}-{{월}} / 일자={{일}}",
+			timezone: "Asia/Seoul",
+			variables: {
+				report_date: {
+					id: "report_date",
+					label: "기준일",
+					type: "date_parts",
+					resolveAt: "execution",
+					parts: {
+						year: "년도",
+						month: "월",
+						day: "일",
+					},
+				},
+			},
+			variableValues: {
+				report_date: "2026-04-23",
+			},
+			definition: {
+				tasks: [
+					{
+						taskId: "fetch",
+						title: "조회",
+						prompt: "{{년도}}년 {{월}}월 {{일}}일 데이터 조회",
+					},
+				],
+				response: {
+					blocks: [],
+				},
+			},
+		});
+
+		expect(result.displayQuery).toBe("2026년 04월 리포트");
+		expect(result.query).toBe("기간=2026-04 / 일자=23");
+		expect(result.definition?.tasks[0].prompt).toBe(
+			"2026년 04월 23일 데이터 조회",
+		);
 	});
 
 	it("accepts dropdown as an alias for select", () => {

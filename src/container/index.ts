@@ -198,6 +198,7 @@ class Container {
 				this.getWorkflowExecutionService(),
 				this.getJobRunnerService(),
 				getMemoryModule(),
+				this.getDocumentAdviceService(),
 			);
 		}
 		return this._schedulerService;
@@ -267,6 +268,7 @@ class Container {
 		if (!this._workflowTemplateApiController) {
 			this._workflowTemplateApiController = new WorkflowTemplateApiController(
 				getMemoryModule(),
+				this.getWorkflowExecutionService(),
 			);
 		}
 		return this._workflowTemplateApiController;

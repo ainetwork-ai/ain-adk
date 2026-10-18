@@ -8,7 +8,7 @@ function buildController(templates: WorkflowTemplate[]) {
 			listTemplates: jest.fn(async () => templates),
 		}),
 	} as unknown as MemoryModule;
-	return new WorkflowTemplateApiController(memoryModule);
+	return new WorkflowTemplateApiController(memoryModule, {} as never);
 }
 
 function buildControllerWithTemplateMemory(templateMemory: {
@@ -18,7 +18,7 @@ function buildControllerWithTemplateMemory(templateMemory: {
 	const memoryModule = {
 		getWorkflowTemplateMemory: () => templateMemory,
 	} as unknown as MemoryModule;
-	return new WorkflowTemplateApiController(memoryModule);
+	return new WorkflowTemplateApiController(memoryModule, {} as never);
 }
 
 const validDefinition: WorkflowDefinition = {
@@ -176,5 +176,37 @@ describe("handleUpdateTemplate", () => {
 			definition: validDefinition,
 		});
 		expect(status).toHaveBeenCalledWith(200);
+	});
+});
+
+describe("handleRunTemplateStream", () => {
+	// The SSE layer writes its 200 headers before it runs setup, so an unknown id
+	// has to be rejected before that — otherwise the caller sees a successful
+	// response carrying an error frame instead of a 404.
+	it("rejects an unknown template with a 404 before opening the stream", async () => {
+		const getTemplate = jest.fn(async () => undefined);
+		const runTemplateStream = jest.fn();
+		const memoryModule = {
+			getWorkflowTemplateMemory: () => ({ getTemplate }),
+		} as unknown as MemoryModule;
+		const controller = new WorkflowTemplateApiController(memoryModule, {
+			runTemplateStream,
+		} as never);
+		const writeHead = jest.fn();
+		const next = jest.fn();
+
+		await controller.handleRunTemplateStream(
+			{ params: { id: "missing" }, body: {} } as never,
+			{ locals: { userId: "u1" }, writeHead } as never,
+			next,
+		);
+
+		expect(getTemplate).toHaveBeenCalledWith("missing");
+		expect(next).toHaveBeenCalledTimes(1);
+		const error = next.mock.calls[0]?.[0] as { status?: number };
+		expect(error?.status).toBe(404);
+		// Neither the stream nor the run may have started.
+		expect(writeHead).not.toHaveBeenCalled();
+		expect(runTemplateStream).not.toHaveBeenCalled();
 	});
 });

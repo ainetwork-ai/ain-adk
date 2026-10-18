@@ -1,4 +1,7 @@
-import type { DocumentAutoRefresh } from "@/types/document";
+import type {
+	DocumentAutoRefresh,
+	DocumentAutoRefreshAdvice,
+} from "@/types/document";
 
 /**
  * Parses/validates the auto-refresh endpoint body. Returns null when the
@@ -30,9 +33,53 @@ export function parseAutoRefreshPayload(
 	) {
 		throw new Error("autoRefresh.slotIds must be an array of strings");
 	}
+	const advice = parseAdvice(v.advice);
 	return {
 		runAt: v.runAt,
 		active: v.active,
 		slotIds: v.slotIds as string[] | undefined,
+		...(advice ? { advice } : {}),
+	};
+}
+
+function parseAdvice(value: unknown): DocumentAutoRefreshAdvice | undefined {
+	if (value === undefined || value === null) return undefined;
+	if (typeof value !== "object" || Array.isArray(value)) {
+		throw new Error("autoRefresh.advice must be an object");
+	}
+	const a = value as Record<string, unknown>;
+	for (const key of ["advicePrompt", "adviceWorkflowId"] as const) {
+		if (a[key] !== undefined && typeof a[key] !== "string") {
+			throw new Error(`autoRefresh.advice.${key} must be a string`);
+		}
+	}
+	const vars = a.executionVariables;
+	if (
+		vars !== undefined &&
+		(typeof vars !== "object" ||
+			vars === null ||
+			Array.isArray(vars) ||
+			Object.values(vars).some((x) => typeof x !== "string"))
+	) {
+		throw new Error(
+			"autoRefresh.advice.executionVariables must be a string record",
+		);
+	}
+	if (
+		a.when !== undefined &&
+		a.when !== "settled" &&
+		a.when !== "all_resolved"
+	) {
+		throw new Error(
+			'autoRefresh.advice.when must be "settled" or "all_resolved"',
+		);
+	}
+	return {
+		...(a.when ? { when: a.when as DocumentAutoRefreshAdvice["when"] } : {}),
+		...(a.advicePrompt ? { advicePrompt: a.advicePrompt as string } : {}),
+		...(a.adviceWorkflowId
+			? { adviceWorkflowId: a.adviceWorkflowId as string }
+			: {}),
+		...(vars ? { executionVariables: vars as Record<string, string> } : {}),
 	};
 }

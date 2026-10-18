@@ -225,7 +225,10 @@ export class DocumentApiController {
 				id,
 				res.locals.authzChecked === true,
 			);
-			res.json(document);
+			// Not stored: what the scheduler is doing for this document right now,
+			// so a client can show it or wait instead of duplicating the work.
+			const scheduledJobs = this.schedulerService.getScheduledJobs(id);
+			res.json(scheduledJobs ? { ...document, scheduledJobs } : document);
 		} catch (error) {
 			next(error);
 		}
