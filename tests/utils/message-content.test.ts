@@ -69,4 +69,24 @@ describe("messageToPromptText", () => {
 			messageToPromptText({ content: undefined } as unknown as MessageObject),
 		).toBe("");
 	});
+
+	// Regression: services hand providers normalizeThreadObject(...) threads
+	// (schemaVersion 2, top-level parts). Reading only content.parts turned
+	// every history turn into "".
+	it("flattens a canonical message through the model fallback serializer", () => {
+		const text = messageToPromptText({
+			messageId: "m2",
+			role: MessageRole.MODEL,
+			timestamp: 0,
+			schemaVersion: 2,
+			parts: [
+				{ kind: "text", text: "결과입니다." },
+				{ kind: "document", documentId: "doc-1", title: "리포트" },
+				{ kind: "artifact", artifactId: "a-1", name: "chart.png" },
+			],
+		});
+		expect(text).toBe(
+			"결과입니다.\n[Document: 리포트 (doc-1)]\n[Artifact: chart.png]",
+		);
+	});
 });

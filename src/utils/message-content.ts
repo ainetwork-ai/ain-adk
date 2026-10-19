@@ -1,4 +1,8 @@
 import type { MessageObject } from "@/types/memory";
+import {
+	isCanonicalMessageObject,
+	serializeMessageForModelFallback,
+} from "@/utils/message";
 
 /**
  * Flattens a stored message's content into prompt text.
@@ -14,10 +18,18 @@ import type { MessageObject } from "@/types/memory";
  * `injectAttachedDocuments` resolves it to fresh text once per turn, so
  * embedding a (possibly stale) copy per history entry would duplicate it.
  *
+ * Canonical (`schemaVersion: 2`) messages delegate to
+ * {@link serializeMessageForModelFallback}; the legacy reader below remains
+ * for unnormalized records.
+ *
  * Total function: returns `""` for empty, unknown or malformed content rather
  * than leaking a non-string value.
  */
 export function messageToPromptText(message: MessageObject): string {
+	if (message && isCanonicalMessageObject(message)) {
+		return serializeMessageForModelFallback(message);
+	}
+
 	const parts = message?.content?.parts;
 	if (!Array.isArray(parts)) return "";
 
