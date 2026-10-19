@@ -517,6 +517,16 @@ export class IntentFulfillService {
 				},
 			};
 		}
+		// The outermost boundary owns message identity: inner producers (e.g. an
+		// intent-mapped workflow) emit their own canonical lifecycle, which is
+		// already re-wrapped above from text_chunk under finalMessageId.
+		if (
+			event.event === "message_start" ||
+			event.event === "part_delta" ||
+			event.event === "message_complete"
+		) {
+			return;
+		}
 		yield event;
 	}
 

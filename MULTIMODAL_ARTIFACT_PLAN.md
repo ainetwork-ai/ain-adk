@@ -128,7 +128,7 @@ thread messages.
 
 ### P0 — correctness gaps (fix before any v1 release)
 
-1. **Provider history is empty with canonical threads.**
+1. ✅ **Provider history is empty with canonical threads.** (done `9e82b6a`)
    `utils/message-content.ts` `messageToPromptText` reads only legacy
    `content.parts`; services pass `normalizeThreadObject(...)` threads
    (schemaVersion 2, top-level `parts`) to `generateMessages`, and
@@ -138,7 +138,9 @@ thread messages.
    `serializeMessageForModelFallback` (one serializer; pick one document
    label format — `[문서: …]` vs `[Document: …]`). Add a canonical-thread
    case to `tests/utils/message-content.test.ts`.
-2. **Duplicate canonical stream on intent → workflow dispatch.**
+2. ✅ **Duplicate canonical stream on intent → workflow dispatch.** (done —
+   `emitFinalResponseEvent` drops inner canonical events; un-mocked test in
+   `tests/services/intent-workflow-dispatch.test.ts`)
    `renderStructuredDefinition` already emits `message_start`/`part_delta`
    (own messageId) plus `text_chunk`; `fulfill.service`
    `emitFinalResponseEvent` re-wraps every `text_chunk` under

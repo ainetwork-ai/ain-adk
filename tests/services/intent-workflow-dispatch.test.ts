@@ -1,7 +1,11 @@
+import { setManifest } from "@/config/manifest";
 import type { MemoryModule, ModelModule } from "@/modules";
 import { IntentFulfillService } from "@/services/intents/fulfill.service";
 import type { ToolCallingService } from "@/services/tool-calling.service";
-import type { WorkflowExecutionService } from "@/services/workflow-execution.service";
+import type { UserWorkflowService } from "@/services/user-workflow.service";
+import { WorkflowExecutionService } from "@/services/workflow-execution.service";
+import { WorkflowVariableExtractionService } from "@/services/workflow-variable-extraction.service";
+import { WorkflowVariableResolver } from "@/services/workflow-variable-resolver.service";
 import {
 	type ThreadObject,
 	ThreadType,
@@ -178,5 +182,109 @@ describe("getIntentStream workflow dispatch", () => {
 		expect(events).toEqual([
 			{ event: "text_chunk", data: { delta: "프롬프트 응답" } },
 		]);
+	});
+});
+
+// Un-mocked dispatch: the real workflow engine renders its own canonical
+// message_start/part_delta. The fulfill boundary owns message identity, so
+// the client must see exactly one message, not the inner one plus a re-wrap.
+describe("intent → workflow canonical stream identity", () => {
+	afterEach(() => jest.restoreAllMocks());
+
+	it("emits a single canonical message for an intent-mapped workflow", async () => {
+		setManifest({ name: "Test Agent", description: "Test agent" });
+		jest
+			.spyOn(WorkflowVariableExtractionService.prototype, "extractFromQuery")
+			.mockResolvedValue(undefined);
+		const workflowExecutionService = new WorkflowExecutionService(
+			{
+				getWorkflow: jest.fn(async () => ({
+					workflowId: "wf-1",
+					userId: "owner-1",
+					title: "주간 리포트",
+					content: "주간 리포트",
+					active: true,
+					definition: {
+						tasks: [{ taskId: "t1", title: "분석", prompt: "분석해줘" }],
+						response: {
+							blocks: [
+								{
+									blockId: "b1",
+									type: "text",
+									prompt: "요약",
+									sourceTaskIds: ["t1"],
+								},
+							],
+						},
+					},
+				})),
+			} as unknown as UserWorkflowService,
+			new WorkflowVariableResolver(),
+			{} as unknown as ModelModule,
+			{} as unknown as MemoryModule,
+			{} as unknown as ToolCallingService,
+		);
+		Object.assign(workflowExecutionService, {
+			workflowTaskRunner: {
+				executeTask: async function* () {
+					return {
+						taskId: "t1",
+						title: "분석",
+						status: "completed",
+						content: "분석 결과",
+						startedAt: 1,
+						completedAt: 2,
+					};
+				},
+			},
+			workflowResponseComposer: {
+				renderResponseBlock: async function* () {
+					yield { event: "text_chunk", data: { delta: "요약 " } };
+					yield { event: "text_chunk", data: { delta: "본문" } };
+					return { blockId: "b1", type: "text", content: "요약 본문" };
+				},
+			},
+		});
+		const fulfill = new IntentFulfillService(
+			{} as unknown as ModelModule,
+			{
+				getThreadMemory: () => ({ addMessagesToThread: jest.fn() }),
+			} as unknown as MemoryModule,
+			{} as unknown as ToolCallingService,
+			undefined,
+			undefined,
+			workflowExecutionService,
+		);
+
+		const events = await collect(
+			fulfill.intentFulfill(
+				[{ subquery: SUBQUERY, intent: { ...BASE_INTENT, workflowId: "wf-1" } }],
+				{ ...THREAD, messages: [] },
+				SUBQUERY,
+				false,
+			),
+		);
+
+		const canonical = events.filter(
+			(e) =>
+				e.event === "message_start" ||
+				e.event === "part_delta" ||
+				e.event === "message_complete",
+		);
+		const ids = new Set(
+			canonical.map((e) =>
+				e.event === "message_complete"
+					? e.data.message.messageId
+					: (e.data as { messageId: string }).messageId,
+			),
+		);
+		expect(ids.size).toBe(1);
+		expect(canonical.map((e) => e.event)).toEqual([
+			"message_start",
+			"part_delta",
+			"part_delta",
+			"message_complete",
+		]);
+		expect(events.filter((e) => e.event === "text_chunk")).toHaveLength(2);
 	});
 });
