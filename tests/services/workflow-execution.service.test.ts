@@ -154,9 +154,9 @@ describe("WorkflowExecutionService", () => {
 			"thinking_process",
 			"task_result",
 			"thinking_process",
-			"text_chunk",
 			"message_start",
 			"part_delta",
+			"text_chunk",
 			"message_complete",
 		]);
 		expect(

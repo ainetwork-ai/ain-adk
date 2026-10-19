@@ -1,6 +1,9 @@
+import { randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
+import { type ArtifactContentPart, MessageRole } from "@/types/memory";
 import type { StreamEvent } from "@/types/stream";
 import { loggers } from "./logger";
+import { createTextMessage } from "./message";
 
 export type SSEStreamOptions = {
 	logLabel: string;
@@ -18,6 +21,79 @@ export type SSEStreamOptions = {
 	onComplete?: () => Promise<void> | void;
 	setup: (signal: AbortSignal) => Promise<AsyncIterable<StreamEvent>>;
 };
+
+/**
+ * Guarantees every SSE stream carries a complete canonical message lifecycle.
+ * Producers that already emit message_start → part_delta → message_complete
+ * pass through untouched; a bare text_chunk opens a message, and a message
+ * left open at the end of the stream is completed from its deltas. Once
+ * clients stop reading text_chunk, removing it is a filter here.
+ */
+export async function* completeCanonicalMessages(
+	stream: AsyncIterable<StreamEvent>,
+): AsyncGenerator<StreamEvent> {
+	let open:
+		| {
+				messageId: string;
+				text: string;
+				artifacts: ArtifactContentPart[];
+				/** Opened here from text_chunk, so deltas are ours to emit. */
+				synthetic: boolean;
+		  }
+		| undefined;
+
+	for await (const event of stream) {
+		if (event.event === "message_start") {
+			open = {
+				messageId: event.data.messageId,
+				text: "",
+				artifacts: [],
+				synthetic: false,
+			};
+		} else if (event.event === "message_complete") {
+			open = undefined;
+		} else if (event.event === "part_delta") {
+			if (open) open.text += event.data.delta;
+		} else if (event.event === "artifact_ready") {
+			open?.artifacts.push(event.data);
+		} else if (event.event === "text_chunk" && open?.synthetic !== false) {
+			if (!open) {
+				open = {
+					messageId: randomUUID(),
+					text: "",
+					artifacts: [],
+					synthetic: true,
+				};
+				yield {
+					event: "message_start",
+					data: { messageId: open.messageId, role: MessageRole.MODEL },
+				};
+			}
+			open.text += event.data.delta;
+			yield {
+				event: "part_delta",
+				data: {
+					messageId: open.messageId,
+					partIndex: 0,
+					part: { kind: "text" },
+					delta: event.data.delta,
+				},
+			};
+		}
+		yield event;
+	}
+
+	if (open) {
+		const message = createTextMessage({
+			messageId: open.messageId,
+			role: MessageRole.MODEL,
+			timestamp: Date.now(),
+			text: open.text,
+		});
+		message.parts.push(...open.artifacts);
+		yield { event: "message_complete", data: { message } };
+	}
+}
 
 export async function streamEventsToSSE(
 	req: Request,
@@ -49,7 +125,9 @@ export async function streamEventsToSSE(
 	});
 
 	try {
-		const stream = await options.setup(abortController.signal);
+		const stream = completeCanonicalMessages(
+			await options.setup(abortController.signal),
+		);
 		for await (const event of stream) {
 			if (abortController.signal.aborted) break;
 

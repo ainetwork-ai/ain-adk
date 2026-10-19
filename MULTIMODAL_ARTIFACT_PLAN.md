@@ -149,7 +149,9 @@ thread messages.
    message identity; drop inner `message_start`/`part_delta`/
    `message_complete` when re-wrapping. Dispatch tests mock the stream, so
    add one un-mocked test.
-3. **Canonical streams that never complete.** Slot fill stream, template
+3. ✅ **Canonical streams that never complete.** (done — shared
+   `completeCanonicalMessages` wrapper in `streamEventsToSSE`; workflow
+   renderer now emits canonical events before `text_chunk`) Slot fill stream, template
    run stream, and workflow-backed advice emit `message_start`/`part_delta`
    but no `message_complete`; single-inference advice
    (`document-advice.service`) emits only `text_chunk` straight to SSE. This
@@ -674,10 +676,17 @@ document-advice, aggregate) and their canonical wrappers/conversion boundaries
 `workflow-execution` response wrapper). These links never need to reach the
 wire, so they do not block external removal.
 
+Every SSE endpoint goes through `streamEventsToSSE`, which wraps the stream
+in `completeCanonicalMessages` (`utils/sse-stream.ts`): a bare `text_chunk`
+opens a canonical message, and a message left open at stream end gets its
+`message_complete`. Producers that already own a complete lifecycle
+(`/query/stream`, user-workflow execute) pass through untouched. Producers
+emit canonical events before the compatibility `text_chunk`.
+
 Removal precondition left: external consumers (enterprise app, A2A peers)
-migrate to canonical events. After that, removal = stop *forwarding*
-`text_chunk` at the fulfill/workflow/query-PII boundaries — no internal
-consumer depends on it anymore.
+migrate to canonical events. After that, removal = drop `text_chunk` inside
+`completeCanonicalMessages` (SSE) and stop forwarding it at the A2A
+boundary — no internal consumer depends on it anymore.
 
 Additional events that exist outside this plan's original scope (workflow and
 document features merged from main):

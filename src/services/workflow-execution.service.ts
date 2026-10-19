@@ -517,9 +517,9 @@ export class WorkflowExecutionService {
 				while (!result.done) {
 					if (result.value.event === "text_chunk") {
 						finalContent += result.value.data.delta;
-						yield result.value;
 						// Canonical wrapper around the composer's text_chunk primitive,
-						// mirroring the fulfill-service final-stream adapter.
+						// mirroring the fulfill-service final-stream adapter (canonical
+						// events first, compatibility text_chunk after).
 						if (!messageState.started) {
 							messageState.started = true;
 							yield {
@@ -539,6 +539,7 @@ export class WorkflowExecutionService {
 								delta: result.value.data.delta,
 							},
 						};
+						yield result.value;
 					} else {
 						yield result.value;
 					}
