@@ -222,20 +222,72 @@ generalization:
 Not touched (main's concern): `DocumentSlotBindingType.QUERY` /
 `DocumentSource.QUERY` exist but are never produced or consumed.
 
-### P1 — finishing the migration
+### Multi-modal gap analysis (2026-10-19, after P0)
 
-- provider canonical-input adoption + `resolveArtifactContent` byte loader
-  (ain-adk-providers; P0-1 is the stopgap)
-- `text_chunk` removal after P0-3 and the enterprise app migrates
-- async preview extraction (PDF etc.)
-- un-mocked end-to-end tests: intent→workflow, slot fill stream, template run
+With P0 done, artifacts are stored, referenced, streamed, persisted and
+exchanged — but the model still cannot *understand* them. Gaps by layer:
+
+1. **Input understanding (biggest gap).** The model sees an artifact only as
+   a label or `previewText`, and `LocalArtifactStore` builds previews for
+   text-like MIME types only, so images/PDF/DOCX/XLSX are effectively
+   opaque. Two complementary fixes:
+   - (a) extraction pipeline: async PDF/Office text extraction into
+     `previewText` (`processing → ready`); works for every provider and
+     feeds RAG
+   - (b) native input: `resolveArtifactContent` loader (design settled in
+     Artifact Byte Delivery to Providers) + azure/gemini mapping `input`
+     artifact parts to image/file blocks; the only way to read images/charts
+2. **History replay.** Native input covers the current turn only; providers
+   flatten history to text, so "the image from before" is lost. Needs a
+   replay policy (e.g. last N artifacts) under a byte budget.
+3. **Tool-result vision.** MCP images (screenshots, charts) are stored but
+   the model only gets the reference; the tool-result append path needs the
+   same loader.
+4. **Generated outputs.** Only MCP tools create artifacts today. Image
+   generation, code-execution files and document export (G4) should share
+   one server-side "create artifact" path.
+5. **Binaries inside documents (G3).** P0-4 drops binaries for slot fill /
+   template run / advice; add `DocumentFragment.artifacts` (+ cleanup on
+   document deletion) once a dashboard needs chart images.
+6. **A2A file exchange is effectively broken.** Outbound `file.uri` is the
+   relative, auth-gated `/api/artifacts/:id/download` (`utils/a2a.ts`
+   `createA2AFilePart`), which peers cannot fetch. Needs absolute
+   short-lived signed URLs or inline bytes for small files; inbound peer
+   files are never imported into our store either.
+7. **PII / authz.** PII filtering covers the query text only; artifact
+   previews and future extracted text must pass through it. The document
+   attach path has no access check (G2).
+8. **Storage & governance.** S3/AzureBlob stores, per-user quotas, orphan
+   cleanup jobs, malware-scan hook (extractors parse untrusted files).
+9. **Cost & limits.** Per-request byte/token budgets with preview
+   fallback; per-provider supported MIME types and size limits.
+10. **Client.** Enterprise app: upload UI, `artifact_ready` rendering,
+    artifacts on messages, migration to canonical events (unblocks
+    `text_chunk` removal).
+11. **Real E2E.** All tests are mocked; at least one real-model check of
+    "upload image → ask → reference again next turn".
+
+### P1 — make the model understand artifacts (in order)
+
+1. security first (small, risky): document-attach authz (G2) + PII filtering
+   of artifact previews / extracted text (gap 7)
+2. native input (gap 1b): `resolveArtifactContent` in ADK + image/file block
+   mapping in ain-adk-providers (azure, gemini)
+3. PDF/Office text extraction, async, PII-filtered (gap 1a)
+4. history replay + tool-result vision policy with byte budgets (gaps 2, 3, 9)
+5. A2A signed URLs / inline small files, inbound import (gap 6)
+6. un-mocked end-to-end tests: intent→workflow, slot fill stream, template
+   run, plus one real-model multimodal check (gap 11)
+- `text_chunk` removal once the enterprise app migrates (gap 10)
 
 ### P2 — later
 
-- `S3ArtifactStore` / `AzureBlobArtifactStore`
-- background/orphan artifact cleanup, quotas
-- RAG / retrieval layer
-- G4, G5
+- `S3ArtifactStore` / `AzureBlobArtifactStore`, quotas, background/orphan
+  cleanup, malware-scan hook (gap 8)
+- generated outputs: image generation, document export G4 (gap 4)
+- G3 binaries inside documents (gap 5), when a real case appears
+- RAG / retrieval layer (builds on 1a)
+- G5
 
 ---
 
