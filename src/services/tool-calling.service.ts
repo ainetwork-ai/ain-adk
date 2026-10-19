@@ -53,6 +53,8 @@ export class ToolCallingService {
 		query: string;
 		thread: ThreadObject;
 		toolChoice?: "auto" | "required";
+		/** false: MCP binaries are omitted instead of stored (see MCPModule.useTool). */
+		storeArtifacts?: boolean;
 	}): AsyncGenerator<StreamEvent, { toolCallsExecuted: number }, unknown> {
 		const modelInstance = this.modelModule.getModel();
 		const modelOptions = this.modelModule.getModelOptions();
@@ -177,6 +179,7 @@ export class ToolCallingService {
 					protocolArgs,
 					query: params.query,
 					thread: params.thread,
+					storeArtifacts: params.storeArtifacts,
 				});
 
 				loggers.intent.debug("Tool Result", { toolResult });
@@ -231,6 +234,7 @@ export class ToolCallingService {
 		protocolArgs: Record<string, unknown>;
 		query: string;
 		thread: ThreadObject;
+		storeArtifacts?: boolean;
 	}): AsyncGenerator<StreamEvent, string, unknown> {
 		const { selectedTool, toolName, protocolArgs, query, thread } = params;
 
@@ -245,6 +249,7 @@ export class ToolCallingService {
 			return yield* this.mcpModule.useTool(selectedTool, protocolArgs, {
 				userId: thread.userId,
 				threadId: thread.threadId,
+				storeArtifacts: params.storeArtifacts,
 			});
 		}
 

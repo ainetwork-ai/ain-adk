@@ -149,9 +149,12 @@ describe("executeIntentWorkflowStream", () => {
 			ThreadObject,
 			string,
 		];
+		// Same threadId as the chat thread: MCP artifacts produced by the tasks
+		// are stamped with it, so deleting the chat thread cleans them up.
 		expect(thread).toMatchObject({
 			type: ThreadType.WORKFLOW,
 			userId: "chat-user",
+			threadId: CHAT_THREAD.threadId,
 			workflowId: "wf-1",
 			messages: [],
 		});

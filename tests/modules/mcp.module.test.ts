@@ -151,6 +151,28 @@ describe("MCPModule.useTool binary outputs", () => {
 		expect(result).toContain("artifact storage not configured");
 	});
 
+	// Runs with nothing to attach a reference to (slot fill, template run,
+	// advice) must not store: the artifact would be orphaned forever.
+	it("omits binary payloads without storing when storeArtifacts is false", async () => {
+		const put = jest.fn();
+		jest
+			.mocked(getArtifactModule)
+			.mockReturnValue({ getStore: () => ({ put }) } as any);
+
+		const module = makeModule({
+			content: [{ type: "image", data: PNG_BASE64, mimeType: "image/png" }],
+		});
+
+		const { events, result } = await drain(
+			module.useTool(TOOL, {}, { userId: "u1", storeArtifacts: false }),
+		);
+
+		expect(put).not.toHaveBeenCalled();
+		expect(events).toEqual([]);
+		expect(result).not.toContain(PNG_BASE64);
+		expect(result).toContain("not stored for this run");
+	});
+
 	it("keeps text-only results unchanged", async () => {
 		jest.mocked(getArtifactModule).mockReturnValue(undefined);
 

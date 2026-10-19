@@ -159,7 +159,13 @@ thread messages.
    message-agnostic producers" note in Stream Event Redesign — advice does.
    Fix: one shared canonical wrapper for every SSE endpoint, then
    `text_chunk` removal really is just "stop forwarding".
-4. **Workflow-generated tool artifacts are orphaned.** MCP binaries produced
+4. ✅ **Workflow-generated tool artifacts are orphaned.** (done —
+   user-workflow runs attach task artifacts to the persisted response
+   message; intent-mapped workflows reuse the chat threadId so chat-thread
+   deletion cleans them; slot fill / template run / advice pass
+   `storeArtifacts: false` down to `MCPModule.useTool`, which emits the
+   omission note instead of storing. Revisit with G3 if documents need
+   binaries.) MCP binaries produced
    inside workflow tasks are stored with an ephemeral `threadId` and are
    never attached to the workflow message, document, or fragment; thread
    deletion can never clean them. Minimum fix: collect `artifact_ready` in

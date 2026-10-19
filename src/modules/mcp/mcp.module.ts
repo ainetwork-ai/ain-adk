@@ -194,13 +194,15 @@ export class MCPModule {
 	 *
 	 * @param tool - The MCPTool instance to execute
 	 * @param _args - Arguments to pass to the tool
-	 * @param context - Ownership/linkage metadata for stored artifacts
+	 * @param context - Ownership/linkage metadata for stored artifacts.
+	 *   `storeArtifacts: false` omits binaries instead of storing them, for runs
+	 *   with nothing to attach the artifact reference to.
 	 * @returns AsyncGenerator yielding stream events and returning the text result
 	 */
 	async *useTool(
 		tool: ConnectorTool,
 		_args?: Record<string, unknown>,
-		context?: { userId?: string; threadId?: string },
+		context?: { userId?: string; threadId?: string; storeArtifacts?: boolean },
 	): AsyncGenerator<StreamEvent, string, unknown> {
 		const { connectorName, toolName } = tool;
 		const connector = this.mcpConnectors.get(connectorName);
@@ -254,13 +256,14 @@ export class MCPModule {
 	private async replaceBinaryBlocks(
 		toolName: string,
 		content: unknown,
-		context?: { userId?: string; threadId?: string },
+		context?: { userId?: string; threadId?: string; storeArtifacts?: boolean },
 	): Promise<{ content: unknown; events: StreamEvent[] }> {
 		if (!Array.isArray(content)) {
 			return { content, events: [] };
 		}
 
-		const store = safeGetArtifactStore();
+		const skipStore = context?.storeArtifacts === false;
+		const store = skipStore ? undefined : safeGetArtifactStore();
 		const events: StreamEvent[] = [];
 		const blocks = await Promise.all(
 			content.map(async (block, index) => {
@@ -305,7 +308,7 @@ export class MCPModule {
 				return {
 					type: (block as { type?: string }).type,
 					mimeType: binary.mimeType,
-					note: `binary content omitted (${bytes.byteLength} bytes; artifact storage not configured)`,
+					note: `binary content omitted (${bytes.byteLength} bytes; ${skipStore ? "artifact not stored for this run" : "artifact storage not configured"})`,
 				};
 			}),
 		);

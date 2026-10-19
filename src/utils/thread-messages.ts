@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { MemoryModule } from "@/modules";
 import type {
+	ArtifactContentPart,
 	CanonicalMessageObject,
 	MessageContentPart,
 	MessagePart,
@@ -54,8 +55,10 @@ export async function appendTextMessageToThread(
 	content: string,
 	metadata?: Record<string, unknown>,
 	messageId?: string,
+	artifactParts: ArtifactContentPart[] = [],
 ): Promise<CanonicalMessageObject> {
 	const message = createTextMessage(role, content, metadata, messageId);
+	message.parts.push(...artifactParts);
 	thread.messages.push(message);
 	await memoryModule
 		.getThreadMemory()
@@ -99,8 +102,10 @@ export async function appendRichMessageToThread(
 	parts: MessagePart[],
 	metadata?: Record<string, unknown>,
 	messageId?: string,
+	artifactParts: ArtifactContentPart[] = [],
 ): Promise<CanonicalMessageObject> {
 	const message = createRichMessage(role, parts, metadata, messageId);
+	message.parts.push(...artifactParts);
 	thread.messages.push(message);
 	await memoryModule
 		.getThreadMemory()

@@ -234,6 +234,35 @@ describe("ToolCallingService", () => {
 		);
 	});
 
+	it("passes storeArtifacts through to the MCP tool context", async () => {
+		const model = makeModel([
+			streamOf([toolCallChunk(0, "call_1", "gen", "{}")]),
+			streamOf([textChunk("done")]),
+		]);
+		const mcp = {
+			useTool: jest.fn(function* () {
+				return "ok";
+			}),
+		} as unknown as MCPModule;
+		const svc = new ToolCallingService(makeModelModule(model), undefined, mcp);
+
+		await drain(
+			svc.run({
+				messages: [],
+				tools: [mcpTool("gen")],
+				query: "q",
+				thread: makeThread(),
+				storeArtifacts: false,
+			}),
+		);
+
+		expect(mcp.useTool).toHaveBeenCalledWith(expect.anything(), {}, {
+			userId: "user-1",
+			threadId: "thread-1",
+			storeArtifacts: false,
+		});
+	});
+
 	it("preserves streamed text alongside tool calls in the assistant turn", async () => {
 		const model = makeModel([
 			streamOf([

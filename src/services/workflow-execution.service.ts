@@ -8,6 +8,7 @@ import {
 	DocumentSource,
 } from "@/types/document.js";
 import {
+	type ArtifactContentPart,
 	type MessageObject,
 	MessageRole,
 	type ThreadMetadata,
@@ -158,13 +159,13 @@ export class WorkflowExecutionService {
 			messageId: randomUUID(),
 			started: false,
 		};
-		const { finalContent, renderedBlocks, executionError } =
+		const { finalContent, renderedBlocks, artifactParts, executionError } =
 			yield* this.renderStructuredDefinition(
 				definition,
 				thread,
 				workflowId,
 				signal,
-				messageState,
+				{ messageState },
 			);
 
 		const responseContent =
@@ -202,6 +203,7 @@ export class WorkflowExecutionService {
 						documentId,
 					},
 					messageState.messageId,
+					artifactParts,
 				);
 			} else {
 				// No document memory (or execution failed): keep the legacy
@@ -218,6 +220,7 @@ export class WorkflowExecutionService {
 						...(executionError ? { error: executionError.message } : {}),
 					},
 					messageState.messageId,
+					artifactParts,
 				);
 			}
 		} catch (saveError) {
@@ -319,12 +322,13 @@ export class WorkflowExecutionService {
 			extractedVariableIds: Object.keys(extractedVariables ?? {}),
 		});
 
-		// Ephemeral, non-persisted thread: carries threadId for A2A correlation
-		// and task context, but is never written to the thread store.
+		// Ephemeral, non-persisted thread that reuses the chat threadId: tool
+		// artifacts are stamped with it (and attached to the chat's final message
+		// by fulfill), so deleting the chat thread also cleans them up.
 		const thread: ThreadObject = {
 			type: ThreadType.WORKFLOW,
 			userId: chatThread.userId,
-			threadId: randomUUID(),
+			threadId: chatThread.threadId,
 			title: workflow.title,
 			workflowId,
 			messages: [],
@@ -353,21 +357,28 @@ export class WorkflowExecutionService {
 		thread: ThreadObject,
 		workflowId: string,
 		signal?: AbortSignal,
-		messageState: WorkflowMessageState = {
-			messageId: randomUUID(),
-			started: false,
-		},
+		options: {
+			messageState?: WorkflowMessageState;
+			/** false when the run has nothing to attach artifact refs to. */
+			storeArtifacts?: boolean;
+		} = {},
 	): AsyncGenerator<
 		StreamEvent,
 		{
 			finalContent: string;
 			renderedBlocks: WorkflowRenderedBlock[];
+			artifactParts: ArtifactContentPart[];
 			executionError?: Error;
 		},
 		unknown
 	> {
+		const messageState = options.messageState ?? {
+			messageId: randomUUID(),
+			started: false,
+		};
 		const taskResults: Record<string, WorkflowTaskResult> = {};
 		const renderedBlocks: WorkflowRenderedBlock[] = [];
+		const artifactParts: ArtifactContentPart[] = [];
 		let finalContent = "";
 		let executionError: Error | undefined;
 		let firstFailedTaskId: string | undefined;
@@ -433,6 +444,7 @@ export class WorkflowExecutionService {
 					task,
 					thread,
 					taskResults,
+					{ storeArtifacts: options.storeArtifacts },
 				);
 				let result = await stream.next();
 				while (!result.done) {
@@ -448,7 +460,14 @@ export class WorkflowExecutionService {
 							},
 						);
 					} else {
-						yield result.value;
+						const event = result.value;
+						if (
+							event.event === "artifact_ready" &&
+							!artifactParts.some((p) => p.artifactId === event.data.artifactId)
+						) {
+							artifactParts.push(event.data);
+						}
+						yield event;
 					}
 					result = await stream.next();
 				}
@@ -573,7 +592,7 @@ export class WorkflowExecutionService {
 			});
 		}
 
-		return { finalContent, renderedBlocks, executionError };
+		return { finalContent, renderedBlocks, artifactParts, executionError };
 	}
 
 	/**
@@ -654,6 +673,8 @@ export class WorkflowExecutionService {
 				thread,
 				options.workflowId,
 				signal,
+				// Nothing persists an artifact reference here; storing would orphan it.
+				{ storeArtifacts: false },
 			);
 
 		if (executionError) {
@@ -767,6 +788,8 @@ export class WorkflowExecutionService {
 				thread,
 				templateId,
 				signal,
+				// Nothing persists an artifact reference here; storing would orphan it.
+				{ storeArtifacts: false },
 			);
 
 		if (executionError) {
@@ -927,6 +950,8 @@ export class WorkflowExecutionService {
 				thread,
 				workflowId,
 				signal,
+				// Nothing persists an artifact reference here; storing would orphan it.
+				{ storeArtifacts: false },
 			);
 
 		if (executionError || !finalContent) {

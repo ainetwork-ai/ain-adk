@@ -32,6 +32,7 @@ export class WorkflowTaskRunner {
 		task: WorkflowTask,
 		thread: ThreadObject,
 		taskResults: Record<string, WorkflowTaskResult>,
+		options?: { storeArtifacts?: boolean },
 	): AsyncGenerator<StreamEvent, WorkflowTaskResult, unknown> {
 		const startedAt = Date.now();
 		yield {
@@ -53,7 +54,7 @@ export class WorkflowTaskRunner {
 		try {
 			const content = task.agent
 				? yield* this.executeA2ATask(task, thread, taskResults)
-				: yield* this.executeLocalTask(task, thread, taskResults);
+				: yield* this.executeLocalTask(task, thread, taskResults, options);
 
 			taskResult = {
 				taskId: task.taskId,
@@ -97,6 +98,7 @@ export class WorkflowTaskRunner {
 		task: WorkflowTask,
 		thread: ThreadObject,
 		taskResults: Record<string, WorkflowTaskResult>,
+		options?: { storeArtifacts?: boolean },
 	): AsyncGenerator<StreamEvent, string, unknown> {
 		const model = this.modelModule.getModel();
 		const messages = model.generateMessages({
@@ -116,6 +118,7 @@ export class WorkflowTaskRunner {
 			query: task.prompt,
 			thread,
 			toolChoice: "auto",
+			storeArtifacts: options?.storeArtifacts,
 		});
 
 		let content = "";

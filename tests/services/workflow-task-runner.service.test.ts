@@ -120,6 +120,31 @@ describe("WorkflowTaskRunner", () => {
 		expect(result.content).toBe("secret task output");
 	});
 
+	it("passes storeArtifacts to tool calling for local tasks", async () => {
+		const modelModule = {
+			getModel: () => ({ generateMessages: jest.fn(() => []) }),
+		} as unknown as ModelModule;
+		const run = jest.fn(() => createEventStream([], ""));
+		const toolCallingService = {
+			getTools: jest.fn(async () => []),
+			run,
+		} as unknown as ToolCallingService;
+
+		const runner = new WorkflowTaskRunner(modelModule, toolCallingService);
+		await collectGenerator(
+			runner.executeTask(
+				{ taskId: "task-1", title: "t", prompt: "p" },
+				thread,
+				taskResults,
+				{ storeArtifacts: false },
+			),
+		);
+
+		expect(run).toHaveBeenCalledWith(
+			expect.objectContaining({ storeArtifacts: false }),
+		);
+	});
+
 	it("emits delegated task output with task-specific events while keeping final text private", async () => {
 		const modelModule = {} as ModelModule;
 		const toolCallingService = {} as ToolCallingService;
