@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getManifest } from "@/config/manifest";
 import type { MemoryModule, ModelModule } from "@/modules";
-import type { OnIntentFallback } from "@/types/agent";
+import type { OnIntentFallback, OnIntentFulfill } from "@/types/agent";
 import {
 	type FulfillmentResult,
 	type Intent,
@@ -24,6 +24,7 @@ export class IntentFulfillService {
 	private modelModule: ModelModule;
 	private memoryModule: MemoryModule;
 	private onIntentFallback?: OnIntentFallback;
+	private onIntentFulfill?: OnIntentFulfill;
 	private aggregateService: AggregateService;
 	private piiService?: PIIService;
 	private toolCallingService: ToolCallingService;
@@ -36,11 +37,13 @@ export class IntentFulfillService {
 		onIntentFallback?: OnIntentFallback,
 		piiService?: PIIService,
 		workflowExecutionService?: WorkflowExecutionService,
+		onIntentFulfill?: OnIntentFulfill,
 	) {
 		this.modelModule = modelModule;
 		this.memoryModule = memoryModule;
 		this.toolCallingService = toolCallingService;
 		this.onIntentFallback = onIntentFallback;
+		this.onIntentFulfill = onIntentFulfill;
 		this.aggregateService = new AggregateService(modelModule, memoryModule);
 		this.piiService = piiService;
 		this.workflowExecutionService = workflowExecutionService;
@@ -116,6 +119,11 @@ export class IntentFulfillService {
 		thread: ThreadObject,
 	): AsyncGenerator<StreamEvent> | undefined {
 		const { subquery = "", intent } = triggeredIntent;
+
+		if (intent && this.onIntentFulfill) {
+			const stream = this.onIntentFulfill({ triggeredIntent, thread });
+			if (stream !== undefined) return stream;
+		}
 
 		if (!intent && this.onIntentFallback) {
 			loggers.intent.info("No intent matched, calling fallback handler");

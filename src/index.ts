@@ -24,14 +24,21 @@ import type {
 } from "./modules";
 import { createA2ARouter, createApiRouter, createQueryRouter } from "./routes";
 import { createIntentRouter } from "./routes/intent.routes";
-import type { AinAgentManifest, OnIntentFallback } from "./types/agent";
+import type { QueryService } from "./services/query.service";
+import type {
+	AinAgentManifest,
+	OnIntentFallback,
+	OnIntentFulfill,
+} from "./types/agent";
 import type { AuthzConfig } from "./types/authz";
+import type { StreamEvent } from "./types/stream";
 import { interceptConsole } from "./utils/logger";
 
 export type {
 	AinAgentManifest,
 	IntentFallbackContext,
 	OnIntentFallback,
+	OnIntentFulfill,
 } from "./types/agent";
 
 import { container } from "./container";
@@ -76,6 +83,8 @@ export class AINAgent {
 
 	/** Optional fallback handler when intent matching fails */
 	public onIntentFallback?: OnIntentFallback;
+	public onIntentFulfill?: OnIntentFulfill;
+	private initialization?: Promise<void>;
 
 	/**
 	 * Creates a new AINAgent instance.
@@ -102,6 +111,8 @@ export class AINAgent {
 		},
 		options?: {
 			onIntentFallback?: OnIntentFallback;
+			onIntentFulfill?: OnIntentFulfill;
+			intentMode?: "single" | "multi";
 		},
 	) {
 		// Mirror console.log/warn/error into the log file (no-op without
@@ -127,6 +138,7 @@ export class AINAgent {
 		this.authModule = modules.authModule;
 		this.authz = modules.authz;
 		this.onIntentFallback = options?.onIntentFallback;
+		this.onIntentFulfill = options?.onIntentFulfill;
 
 		// Set global modules for easy access
 		setModules({
@@ -139,6 +151,8 @@ export class AINAgent {
 		// Set global options
 		setOptions({
 			onIntentFallback: options?.onIntentFallback,
+			onIntentFulfill: options?.onIntentFulfill,
+			intentMode: options?.intentMode,
 		});
 
 		// Set global agent reference
@@ -256,10 +270,36 @@ export class AINAgent {
 	 *
 	 * @param port - The port number to listen on
 	 */
+	/** Initialize the agent once without binding another HTTP listener. */
+	public initialize(): Promise<void> {
+		this.initialization ??= (async () => {
+			try {
+				await this.memoryModule.initialize();
+				await this.mcpModule?.connectToServers();
+			} catch (error) {
+				this.initialization = undefined;
+				throw error;
+			}
+		})();
+		return this.initialization;
+	}
+
+	/**
+	 * Run the complete ADK query lifecycle inside an authenticated host application.
+	 * The host must bind userId/thread access to its verified principal, never request-body identity.
+	 * Uses the same intent, fulfillment, aggregation and memory services as /query/stream.
+	 */
+	public async *query(
+		threadMetadata: Parameters<QueryService["handleQuery"]>[0],
+		queryData: Parameters<QueryService["handleQuery"]>[1],
+	): AsyncGenerator<StreamEvent> {
+		await this.initialize();
+		yield* container.getQueryService().handleQuery(threadMetadata, queryData);
+	}
+
 	public async start(port: number): Promise<void> {
 		const server = this.app.listen(port, async () => {
-			await this.memoryModule.initialize();
-			await this.mcpModule?.connectToServers();
+			await this.initialize();
 
 			// Start the scheduler if user workflow memory is available
 			try {

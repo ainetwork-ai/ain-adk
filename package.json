@@ -88,5 +88,18 @@
 	},
 	"publishConfig": {
 		"registry": "https://registry.npmjs.org"
+	},
+	"typesVersions": {
+		"*": {
+			"modules": [
+				"dist/esm/modules/index.d.ts"
+			],
+			"types/*": [
+				"dist/esm/types/*.d.ts"
+			],
+			"utils/*": [
+				"dist/esm/utils/*.d.ts"
+			]
+		}
 	}
 }

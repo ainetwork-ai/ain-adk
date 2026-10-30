@@ -4,7 +4,11 @@ import {
 	getMemoryModule,
 	getModelModule,
 } from "@/config/modules";
-import { getOnIntentFallback } from "@/config/options";
+import {
+	getOnIntentFallback,
+	getOnIntentFulfill,
+	getOptions,
+} from "@/config/options";
 import { AgentApiController } from "@/controllers/api/agent.api.controller";
 import { DocumentApiController } from "@/controllers/api/document.api.controller";
 import { IntentApiController } from "@/controllers/api/intent.api.controller";
@@ -74,6 +78,7 @@ class Container {
 			this._intentTriggerService = new IntentTriggerService(
 				getModelModule(),
 				getMemoryModule(),
+				getOptions().intentMode,
 			);
 		}
 		return this._intentTriggerService;
@@ -106,6 +111,7 @@ class Container {
 				getOnIntentFallback(),
 				this.getPIIService(),
 				this.getWorkflowExecutionService(),
+				getOnIntentFulfill(),
 			);
 		}
 		return this._intentFulfillService;

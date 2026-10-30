@@ -75,6 +75,26 @@ The `MemoryModule` exposes an optional `IDocumentMemory` (`getDocumentMemory()`)
 
 ### Intent System
 
+An existing authenticated host can run the **full `AINAgent` query lifecycle**
+without starting another HTTP server:
+
+```typescript
+for await (const event of agent.query(
+  { type: ThreadType.CHAT, userId: verifiedUser.id, threadId },
+  { query: userMessage },
+)) {
+  // Forward ADK intent/fulfillment events to the host's existing transport.
+}
+```
+
+`query()` initializes the agent once and uses the same intent triggering,
+fulfillment, aggregation, and memory services as `/query/stream`. The host is
+responsible for authenticating the principal and authorizing the thread before
+calling this API. `onIntentFulfill` optionally binds matched intents to a host's
+controlled execution stream; returning `undefined` preserves built-in
+fulfillment. `onIntentFallback` continues to handle unmatched queries. These
+hooks do not replace the ADK query or memory lifecycle.
+
 The library supports flexible intent triggering modes:
 
 - **Multi-Intent Mode (Default)**: Decomposes complex queries into multiple subqueries and maps each to an intent
