@@ -11,6 +11,11 @@ export type OnIntentFallback = (
 	context: IntentFallbackContext,
 ) => AsyncGenerator<StreamEvent> | undefined;
 
+/** Host-controlled fulfillment for matched intents, inside the normal ADK query lifecycle. */
+export type OnIntentFulfill = (
+	context: IntentFallbackContext,
+) => AsyncGenerator<StreamEvent> | undefined;
+
 /**
  * Agent manifest containing essential metadata and configuration.
  *

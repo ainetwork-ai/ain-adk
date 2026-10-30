@@ -19,7 +19,11 @@ export class IntentTriggerService {
 	private singleTriggerService: SingleIntentTriggerService;
 	private multiTriggerService: MultiIntentTriggerService;
 
-	constructor(modelModule: ModelModule, memoryModule: MemoryModule) {
+	constructor(
+		modelModule: ModelModule,
+		memoryModule: MemoryModule,
+		private readonly mode?: "single" | "multi",
+	) {
 		this.singleTriggerService = new SingleIntentTriggerService(
 			modelModule,
 			memoryModule,
@@ -42,7 +46,10 @@ export class IntentTriggerService {
 		query: string,
 		thread: ThreadObject | undefined,
 	): Promise<IntentTriggerResult> {
-		if (isMultiIntentDisabled()) {
+		if (
+			this.mode === "single" ||
+			(this.mode === undefined && isMultiIntentDisabled())
+		) {
 			return this.singleTriggerService.intentTriggering(query, thread);
 		}
 		return this.multiTriggerService.intentTriggering(query, thread);

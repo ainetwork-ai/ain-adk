@@ -1,7 +1,9 @@
-import type { OnIntentFallback } from "@/types/agent";
+import type { OnIntentFallback, OnIntentFulfill } from "@/types/agent";
 
 export interface AgentOptions {
 	onIntentFallback?: OnIntentFallback;
+	onIntentFulfill?: OnIntentFulfill;
+	intentMode?: "single" | "multi";
 }
 
 let _options: AgentOptions | null = null;
@@ -19,4 +21,7 @@ export function getOptions(): AgentOptions {
 
 export function getOnIntentFallback(): OnIntentFallback | undefined {
 	return getOptions().onIntentFallback;
+}
+export function getOnIntentFulfill(): OnIntentFulfill | undefined {
+	return getOptions().onIntentFulfill;
 }
